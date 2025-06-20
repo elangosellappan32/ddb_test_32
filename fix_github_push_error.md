@@ -20,26 +20,27 @@ fatal: unable to access 'https://github.com/prasannakumar32/ddb_test_32.git/': T
      ```
    - Try to push again. When prompted, enter your GitHub username and a [personal access token](https://github.com/settings/tokens).
 
-3. **Set the Correct Git User (Optional)**
-   - Check your current user:
+3. **If you want to push to a new repository:**
+   - Create a new repository on GitHub.
+   - Change the remote URL in your local repo:
      ```
-     git config --get user.name
-     git config --get user.email
+     git remote set-url origin <new-repo-url>
      ```
-   - Set your user if needed:
+   - Push your code:
      ```
-     git config --global user.name "your-username"
-     git config --global user.email "your-email@example.com"
+     git push -u origin main
      ```
 
-4. **Push Your Code**
+4. **If you see `error: remote origin already exists.`**
+   - This means the remote is already set. Use `git remote set-url origin <new-repo-url>` to update it.
+
+5. **If you want to remove the remote and add a new one:**
    ```
-   git add .
-   git commit -m "your commit message"
-   git push -u origin main
+   git remote remove origin
+   git remote add origin <new-repo-url>
    ```
 
-5. **If You Still Get Denied**
+6. **If you still get denied**
    - Fork the repository on GitHub and push to your fork.
    - Or, request access from the repository owner.
 
