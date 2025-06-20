@@ -1,0 +1,15 @@
+{
+    "keep": {
+        "days": true,
+        "amount": 14
+    },
+    "auditLog": "C:\\Users\\HP\\work\\ddb_test_v1\\backend\\logs\\.7b353d748d3169d03328d2af2593d0304ccba29c-audit.json",
+    "files": [
+        {
+            "date": 1745131268747,
+            "name": "C:\\Users\\HP\\work\\ddb_test_v1\\backend\\logs\\lapse-error-2025-04-20.log",
+            "hash": "c2ab71ab2cd657354df9dadb2e873f126bd1559fd879790b89fc9c9bcb9a73c1"
+        }
+    ],
+    "hashType": "sha256"
+}

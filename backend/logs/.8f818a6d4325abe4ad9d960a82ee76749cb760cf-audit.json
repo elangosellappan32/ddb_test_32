@@ -1,0 +1,15 @@
+{
+    "keep": {
+        "days": true,
+        "amount": 14
+    },
+    "auditLog": "C:\\Users\\HP\\work\\ddb_test_v1\\backend\\logs\\.8f818a6d4325abe4ad9d960a82ee76749cb760cf-audit.json",
+    "files": [
+        {
+            "date": 1745131268742,
+            "name": "C:\\Users\\HP\\work\\ddb_test_v1\\backend\\logs\\banking-error-2025-04-20.log",
+            "hash": "b3e9f9569481d66e319da291eea4fc14dea5d502c256faebc65ce3148840c15f"
+        }
+    ],
+    "hashType": "sha256"
+}

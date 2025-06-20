@@ -1,0 +1,15 @@
+{
+    "keep": {
+        "days": true,
+        "amount": 14
+    },
+    "auditLog": "C:\\Users\\HP\\work\\ddb_test_v1\\backend\\logs\\.695a9a67bacd722ed309661bf7f99a459e5a2b1b-audit.json",
+    "files": [
+        {
+            "date": 1745131268731,
+            "name": "C:\\Users\\HP\\work\\ddb_test_v1\\backend\\logs\\warn-2025-04-20.log",
+            "hash": "c081ab1afba3c2243a0eb9769a06a7b196bcb70695650a7e0ec3626ee9b805d6"
+        }
+    ],
+    "hashType": "sha256"
+}

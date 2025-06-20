@@ -1,0 +1,15 @@
+{
+    "keep": {
+        "days": true,
+        "amount": 14
+    },
+    "auditLog": "C:\\Users\\HP\\work\\ddb_test_v1\\backend\\logs\\.aa33e4c9b0e11b41623c061eb637c2c217b952da-audit.json",
+    "files": [
+        {
+            "date": 1745131268736,
+            "name": "C:\\Users\\HP\\work\\ddb_test_v1\\backend\\logs\\allocation-error-2025-04-20.log",
+            "hash": "178468625c87ad9a1a5475cef9d97610f90e3aeb5958abac92223c5f56393d8d"
+        }
+    ],
+    "hashType": "sha256"
+}
