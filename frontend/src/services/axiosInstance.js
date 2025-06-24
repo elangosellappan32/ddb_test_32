@@ -10,13 +10,16 @@ const axiosInstance = axios.create({
 // Add request interceptor to include auth token
 axiosInstance.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('token');
+    const token = localStorage.getItem('auth_token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
+    } else {
+      console.warn('[Axios] No auth token found in localStorage');
     }
     return config;
   },
   (error) => {
+    console.error('[Axios] Request interceptor error:', error);
     return Promise.reject(error);
   }
 );
@@ -26,9 +29,13 @@ axiosInstance.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      localStorage.removeItem('token');
+      console.warn('[Axios] Unauthorized - removing auth tokens');
+      localStorage.removeItem('auth_token');
+      localStorage.removeItem('refresh_token');
+      localStorage.removeItem('auth_user');
       window.location.href = '/login';
     }
+    console.error('[Axios] Response error:', error);
     return Promise.reject(error);
   }
 );

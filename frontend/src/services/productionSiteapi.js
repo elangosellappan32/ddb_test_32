@@ -216,18 +216,22 @@ class ProductionSiteApi {
     }
   }
 
-  async create(data, authContext) {
+  async create(data, authContext = {}) {
     try {
       console.log('[ProductionSiteAPI] Received create request with data:', data);
       
-      // Validate user context
-      if (!authContext?.user) {
-        throw new Error('User context is required to create a site');
+      // Get auth token from localStorage
+      const token = localStorage.getItem('auth_token');
+      if (!token) {
+        throw new Error('Authentication token not found. Please log in again.');
       }
       
-      const userId = authContext.user.username || authContext.user.email;
+      // Get user info from token or auth context
+      const user = authContext?.user || JSON.parse(localStorage.getItem('user') || '{}');
+      const userId = user.username || user.email;
+      
       if (!userId) {
-        throw new Error('User ID not found in auth context');
+        throw new Error('User ID not found. Please log in again.');
       }
       
       // Set environment
@@ -319,8 +323,18 @@ class ProductionSiteApi {
 
       const response = await api.post(
         API_CONFIG.ENDPOINTS.PRODUCTION.SITE.CREATE,
-        siteData
+        siteData,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        }
       );
+      
+      // Invalidate cache to ensure fresh data on next fetch
+      productionSitesCache.data = [];
+      productionSitesCache.lastUpdated = null;
 
       console.log('[ProductionSiteAPI] Production site created:', response.data);
       

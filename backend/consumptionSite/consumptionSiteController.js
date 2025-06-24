@@ -218,7 +218,27 @@ const createConsumptionSite = async (req, res) => {
         });
 
         // 6. Update user's accessible sites if user ID is provided
-        const userId = req.body.userId || (req.user && (req.user.id || req.user.userId));
+        // First check request body, then check authenticated user
+        let userId = req.body.userId || 
+                   (req.user && (req.user.userId || req.user.id || req.user.username));
+        
+        // If still no user ID, check for auth0 user ID or use the createdBy field
+        if (!userId && req.user) {
+            userId = req.user.sub || req.user.username || req.user.email;
+        }
+        
+        if (!userId) {
+            logger.warn('No user ID found in request or session while creating consumption site', {
+                body: req.body,
+                user: req.user
+            });
+        } else {
+            logger.info(`Using user ID for site access: ${userId}`, { 
+                userFields: Object.keys(req.user || {}),
+                hasUsername: Boolean(req.user?.username),
+                hasEmail: Boolean(req.user?.email)
+            });
+        }
         if (userId) {
             try {
                 const siteKey = `${newSite.companyId}_${newSite.consumptionSiteId}`;

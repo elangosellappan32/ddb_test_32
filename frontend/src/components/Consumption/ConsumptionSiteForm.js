@@ -1,203 +1,264 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import PropTypes from 'prop-types';
 import {
-  TextField,
-  Grid,
-  Button,
   Box,
+  TextField,
+  Button,
+  Grid,
+  MenuItem,
   FormControl,
   InputLabel,
   Select,
-  MenuItem,
-  Paper,
-  Typography
+  FormHelperText,
+  FormControlLabel,
+  Switch,
+  InputAdornment,
+  CircularProgress
 } from '@mui/material';
 import {
-  LocationOn,
-  Business,
-  Category,
-  BarChart
+  LocationOn as LocationIcon,
+  Business as BusinessIcon,
+  Category as CategoryIcon,
+  BarChart as ChartIcon
 } from '@mui/icons-material';
-import { useFormik } from 'formik';
-import * as Yup from 'yup';
+import { useSnackbar } from 'notistack';
 
-const industryTypes = [
-  'industrial',
-  'textile',
-  'other'
-];
+const SITE_TYPES = ['Industrial', 'Commercial', 'Residential'];
+const SITE_STATUS = ['Active', 'Inactive', 'Maintenance'];
 
-const ConsumptionSiteForm = ({ initialData, onSubmit, onCancel, loading, readOnly }) => {
-  const formik = useFormik({
-    initialValues: {
-      name: initialData?.name || '',
-      location: initialData?.location || '',
-      annualConsumption: initialData?.annualConsumption || '',
-      industryType: initialData?.industryType?.toLowerCase() || 'industrial',
-      type: initialData?.type?.toLowerCase() || 'industrial',
-    },
-    validationSchema: Yup.object({
-      name: Yup.string()
-        .required('Name is required')
-        .min(3, 'Name must be at least 3 characters')
-        .max(100, 'Name must be 100 characters or less'),      location: Yup.string()
-        .required('Location is required')
-        .min(2, 'Location must be at least 2 characters')
-        .max(200, 'Location must be 200 characters or less'),
-      annualConsumption: Yup.number()
-        .required('Annual consumption is required')
-        .min(0, 'Annual consumption must be a non-negative number'),
-      industryType: Yup.string()
-        .required('Industry type is required')
-        .oneOf(['industrial', 'textile', 'other'], 'Invalid industry type'),
-      type: Yup.string()
-        .required('Type is required')
-        .oneOf(['industrial', 'textile', 'other'], 'Invalid type'),
-    }),    onSubmit: (values) => {
-      onSubmit({
-        ...initialData,
-        ...values,
-        type: values.industryType?.toLowerCase(),
-        industryType: values.industryType?.toLowerCase(),
-        annualConsumption: parseFloat(values.annualConsumption),
-        version: initialData?.version || 1
+const INITIAL_FORM_STATE = {
+  name: '',
+  location: '',
+  type: 'Industrial',
+  status: 'Active',
+  annualConsumption: '',
+  timetolive: 0
+};
+
+const ConsumptionSiteForm = ({ 
+  initialData, 
+  onSubmit, 
+  onCancel, 
+  loading = false, 
+  permissions = {},
+  isEditing = false
+}) => {
+  const { enqueueSnackbar } = useSnackbar();
+  const [formData, setFormData] = useState(INITIAL_FORM_STATE);
+  const [errors, setErrors] = useState({});
+  const [touched, setTouched] = useState({});
+
+  // Initialize form data when initialData changes
+  useEffect(() => {
+    if (initialData) {
+      setFormData({
+        name: initialData.name || '',
+        type: initialData.type || 'Industrial',
+        location: initialData.location || '',
+        annualConsumption: initialData.annualConsumption || '',
+        status: initialData.status || 'Active',
+        timetolive: initialData.timetolive || 0,
       });
+    } else {
+      setFormData(INITIAL_FORM_STATE);
     }
-  });
+  }, [initialData]);
+
+  const handleChange = (e) => {
+    const { name, value, type, checked } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: type === 'checkbox' ? checked : value
+    }));
+    
+    // Clear error when field is edited
+    if (errors[name]) {
+      setErrors(prev => ({
+        ...prev,
+        [name]: null
+      }));
+    }
+  };
+
+  const validateForm = () => {
+    const newErrors = {};
+    
+    if (!formData.name.trim()) {
+      newErrors.name = 'Name is required';
+    }
+    
+    if (!formData.location.trim()) {
+      newErrors.location = 'Location is required';
+    }
+    
+    if (!formData.annualConsumption) {
+      newErrors.annualConsumption = 'Annual consumption is required';
+    } else if (isNaN(Number(formData.annualConsumption)) || Number(formData.annualConsumption) <= 0) {
+      newErrors.annualConsumption = 'Please enter a valid positive number';
+    }
+    
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    
+    if (!validateForm()) {
+      enqueueSnackbar('Please fix the form errors', { variant: 'error' });
+      return;
+    }
+    
+    const submissionData = {
+      ...formData,
+      annualConsumption: Number(formData.annualConsumption),
+      timetolive: formData.timetolive ? 1 : 0,
+    };
+    
+    onSubmit(submissionData);
+  };
 
   return (
-    <Paper elevation={3} sx={{ p: 4, backgroundColor: '#ffffff' }}>
-      <Typography variant="h5" sx={{ mb: 4, color: '#1976d2', fontWeight: 'bold' }}>
-        Consumption Site Details
-      </Typography>
-      
-      <form onSubmit={formik.handleSubmit}>
-        <Grid container spacing={3}>
-          <Grid item xs={12} sm={6}>
-            <Box sx={{ display: 'flex', alignItems: 'flex-end' }}>
-              <Business sx={{ color: 'action.active', mr: 1, my: 0.5 }} />
-              <TextField
-                fullWidth
-                id="name"
-                name="name"
-                label="Site Name"
-                variant="standard"
-                value={formik.values.name}
-                onChange={formik.handleChange}
-                error={formik.touched.name && Boolean(formik.errors.name)}
-                helperText={formik.touched.name && formik.errors.name}
-                disabled={loading || readOnly}
-                required
-                sx={{ '& .MuiInput-underline:before': { borderBottomColor: '#1976d2' } }}
-              />
-            </Box>
-          </Grid>
-
-          <Grid item xs={12} sm={6}>
-            <Box sx={{ display: 'flex', alignItems: 'flex-end' }}>
-              <LocationOn sx={{ color: 'action.active', mr: 1, my: 0.5 }} />
-              <TextField
-                fullWidth
-                id="location"
-                name="location"
-                label="Location"
-                variant="standard"
-                value={formik.values.location}
-                onChange={formik.handleChange}
-                error={formik.touched.location && Boolean(formik.errors.location)}
-                helperText={formik.touched.location && formik.errors.location}
-                disabled={loading || readOnly}
-                required
-                sx={{ '& .MuiInput-underline:before': { borderBottomColor: '#1976d2' } }}
-              />
-            </Box>
-          </Grid>
-
-          <Grid item xs={12} sm={6}>
-            <Box sx={{ display: 'flex', alignItems: 'flex-end' }}>
-              <BarChart sx={{ color: 'action.active', mr: 1, my: 0.5 }} />
-              <TextField
-                fullWidth
-                id="annualConsumption"
-                name="annualConsumption"
-                label="Annual Consumption (MWh)"
-                type="number"
-                variant="standard"
-                value={formik.values.annualConsumption}
-                onChange={formik.handleChange}
-                error={formik.touched.annualConsumption && Boolean(formik.errors.annualConsumption)}
-                helperText={formik.touched.annualConsumption && formik.errors.annualConsumption}
-                disabled={loading || readOnly}
-                inputProps={{ step: "0.1" }}
-                required
-                sx={{ '& .MuiInput-underline:before': { borderBottomColor: '#1976d2' } }}
-              />
-            </Box>
-          </Grid>
-
-          <Grid item xs={12} sm={6}>
-            <Box sx={{ display: 'flex', alignItems: 'flex-end' }}>
-              <Category sx={{ color: 'action.active', mr: 1, my: 0.5 }} />
-              <FormControl fullWidth required variant="standard">
-                <InputLabel id="industryType-label">Industry Type</InputLabel>
-                <Select
-                  labelId="industryType-label"
-                  id="industryType"
-                  name="industryType"
-                  value={formik.values.industryType}
-                  onChange={formik.handleChange}
-                  error={formik.touched.industryType && Boolean(formik.errors.industryType)}
-                  disabled={loading || readOnly}
-                  sx={{ '& .MuiInput-underline:before': { borderBottomColor: '#1976d2' } }}
-                >                  {industryTypes.map((type) => (
-                    <MenuItem key={type} value={type}>
-                      {type.charAt(0).toUpperCase() + type.slice(1)}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            </Box>
-          </Grid>
-
-          <Grid item xs={12}>
-            <Box sx={{ 
-              display: 'flex', 
-              justifyContent: 'flex-end', 
-              gap: 2, 
-              mt: 4 
-            }}>
-              <Button
-                onClick={onCancel}
-                disabled={loading}
-                variant="outlined"
-                sx={{
-                  borderRadius: 2,
-                  px: 4
-                }}
-              >
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                variant="contained"
-                color="primary"
-                disabled={loading || readOnly}
-                sx={{
-                  borderRadius: 2,
-                  px: 4,
-                  backgroundColor: '#1976d2',
-                  '&:hover': {
-                    backgroundColor: '#1565c0'
-                  }
-                }}
-              >
-                {initialData ? 'Update' : 'Create'}
-              </Button>
-            </Box>
-          </Grid>
+    <Box component="form" onSubmit={handleSubmit} noValidate>
+      <Grid container spacing={3}>
+        <Grid item xs={12}>
+          <TextField
+            fullWidth
+            label="Site Name"
+            name="name"
+            value={formData.name}
+            onChange={handleChange}
+            error={!!errors.name}
+            helperText={errors.name}
+            margin="normal"
+            required
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <BusinessIcon color="action" />
+                </InputAdornment>
+              ),
+            }}
+          />
         </Grid>
-      </form>
-    </Paper>
+        
+        <Grid item xs={12} sm={6}>
+          <FormControl fullWidth margin="normal" error={!!errors.type}>
+            <InputLabel>Type</InputLabel>
+            <Select
+              name="type"
+              value={formData.type}
+              onChange={handleChange}
+              label="Type"
+              required
+            >
+              {SITE_TYPES.map(type => (
+                <MenuItem key={type} value={type}>{type}</MenuItem>
+              ))}
+            </Select>
+            {errors.type && <FormHelperText>{errors.type}</FormHelperText>}
+          </FormControl>
+        </Grid>
+        
+        <Grid item xs={12} sm={6}>
+          <TextField
+            fullWidth
+            label="Location"
+            name="location"
+            value={formData.location}
+            onChange={handleChange}
+            error={!!errors.location}
+            helperText={errors.location}
+            margin="normal"
+            required
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <LocationIcon color="action" />
+                </InputAdornment>
+              ),
+            }}
+          />
+        </Grid>
+        
+        <Grid item xs={12} sm={6}>
+          <TextField
+            fullWidth
+            type="number"
+            label="Annual Consumption (MWh)"
+            name="annualConsumption"
+            value={formData.annualConsumption}
+            onChange={handleChange}
+            error={!!errors.annualConsumption}
+            helperText={errors.annualConsumption}
+            margin="normal"
+            required
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <ChartIcon color="action" />
+                </InputAdornment>
+              ),
+              endAdornment: <InputAdornment position="end">MWh</InputAdornment>,
+            }}
+          />
+        </Grid>
+        
+        <Grid item xs={12} sm={6}>
+          <FormControl fullWidth margin="normal">
+            <InputLabel>Status</InputLabel>
+            <Select
+              name="status"
+              value={formData.status}
+              onChange={handleChange}
+              label="Status"
+              required
+            >
+              {SITE_STATUS.map(status => (
+                <MenuItem key={status} value={status}>{status}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        </Grid>
+        
+        <Grid item xs={12}>
+          <FormControlLabel
+            control={
+              <Switch
+                name="timetolive"
+                checked={!!formData.timetolive}
+                onChange={(e) => {
+                  setFormData(prev => ({
+                    ...prev,
+                    timetolive: e.target.checked ? 1 : 0
+                  }));
+                }}
+              />
+            }
+            label="Enable Time to Live"
+          />
+        </Grid>
+      </Grid>
+      
+      <Box sx={{ mt: 3, display: 'flex', justifyContent: 'flex-end', gap: 2 }}>
+        <Button 
+          onClick={onCancel} 
+          disabled={loading}
+          variant="outlined"
+        >
+          Cancel
+        </Button>
+        <Button 
+          type="submit" 
+          variant="contained" 
+          color="primary"
+          disabled={loading}
+          startIcon={loading ? <CircularProgress size={20} /> : null}
+        >
+          {isEditing ? 'Update' : 'Create'} Site
+        </Button>
+      </Box>
+    </Box>
   );
 };
 
@@ -206,7 +267,8 @@ ConsumptionSiteForm.propTypes = {
   onSubmit: PropTypes.func.isRequired,
   onCancel: PropTypes.func.isRequired,
   loading: PropTypes.bool,
-  readOnly: PropTypes.bool
+  permissions: PropTypes.object,
+  isEditing: PropTypes.bool
 };
 
 export default ConsumptionSiteForm;

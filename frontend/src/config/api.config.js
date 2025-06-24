@@ -21,8 +21,8 @@ export const API_CONFIG = {
     },
     ENDPOINTS: {
         USER: {
-            BASE: '/api/user',
-            GET_ACCESSIBLE_SITES: '/api/user/accessible-sites'
+            BASE: '/user',
+            GET_ACCESSIBLE_SITES: '/user/accessible-sites'  // Removed /api prefix since it's in baseURL
         },
         SITE_ACCESS: {
             BASE: '/site-access',
@@ -161,7 +161,7 @@ export const API_HEADERS = {
 };
 
 export const getAuthHeader = () => {
-    const token = localStorage.getItem('token');
+    const token = localStorage.getItem('auth_token');
     return token ? { 'Authorization': `Bearer ${token}` } : {};
 };
 

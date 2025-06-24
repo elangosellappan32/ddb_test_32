@@ -650,7 +650,7 @@ const createDefaultUsers = async () => {
                         { S: '1_1' }, { S: '1_2' }, { S: '1_3' }, { S: '1_4' }, { S: '1_5' }
                     ]},
                     consumptionSites: { L: [
-                        { S: '1_1' }, { S: '1_2' }, { S: '1_3' }, { S: '1_4' }, { S: '1_5' }
+                        { S: '2_1' }, { S: '3_2' }
                     ]}
                 }
             },
@@ -674,7 +674,7 @@ const createDefaultUsers = async () => {
                         { S: '1_1' }, { S: '1_2' }
                     ]},
                     consumptionSites: { L: [
-                        { S: '1_1' }, { S: '1_2' }, { S: '1_3' }
+                        { S: '2_1' }, { S: '3_2' }
                     ]}
                 }
             },
@@ -698,7 +698,7 @@ const createDefaultUsers = async () => {
                         { S: '1_1' }
                     ]},
                     consumptionSites: { L: [
-                        { S: '1_1' }, { S: '1_2' }
+                        { S: '2_1' }, { S: '3_2' }
                     ]}
                 }
             },
@@ -720,10 +720,12 @@ const createDefaultUsers = async () => {
                 companyId: '5',  // Add companyId for SMR Energy
                 accessibleSites: {
                     productionSites: { L: [
-                        { S: '5_1' }
+                        { S: '5_3' }
                     ]},
                     consumptionSites: { L: [
-                        { S: '2_1' }, { S: '3_2' }, { S: '5_1' }
+                        
+                        { S: '2_1' }, { S: '3_2' }, { S: '5_3' }
+
                     ]}
                 }
             },
@@ -745,10 +747,10 @@ const createDefaultUsers = async () => {
                 companyId: '5',  // Add companyId for SMR Energy
                 accessibleSites: {
                     productionSites: { L: [
-                        { S: '5_1' }
+                        { S: '5_3' }
                     ]},
                     consumptionSites: { L: [
-                        { S: '2_1' }, { S: '3_2' }
+                        { S: '2_1' }, { S: '3_2' },
                     ]}
                 }
             },
@@ -770,10 +772,10 @@ const createDefaultUsers = async () => {
                 companyId: '5',  // Add companyId for SMR Energy
                 accessibleSites: {
                     productionSites: { L: [
-                        { S: '5_1' }
+                        { S: '5_3' }
                     ]},
                     consumptionSites: { L: [
-                        { S: '2_1' }, { S: '3_2' }
+                        { S: '2_1' },
                     ]}
                 }
             },

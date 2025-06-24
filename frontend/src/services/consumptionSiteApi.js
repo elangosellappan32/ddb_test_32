@@ -206,37 +206,46 @@ class ConsumptionSiteApi {
     }
   }
 
-  async create(data, authContext) {
+  async create(data, authContext = {}) {
     try {
-      // Handle company ID from auth context if not provided in data
+      // Get auth token from localStorage
+      const token = localStorage.getItem('auth_token');
+      if (!token) {
+        throw new Error('Authentication token not found. Please log in again.');
+      }
+      
+      // Get user info from token or auth context
+      const user = authContext?.user || JSON.parse(localStorage.getItem('user') || '{}');
+      
+      // Handle company ID from multiple sources
       let companyId = data.companyId;
       const isDevelopment = process.env.NODE_ENV === 'development' || window.location.hostname === 'localhost';
       
       if (!companyId) {
-        if (authContext?.user?.companyId) {
-          companyId = authContext.user.companyId;
+        // Try to get companyId from multiple possible locations
+        if (user?.companyId) {
+          companyId = user.companyId;
+        } else if (user?.metadata?.companyId) {
+          companyId = user.metadata.companyId;
         } else if (isDevelopment) {
           companyId = '1';
           console.log('[ConsumptionSiteAPI] No company ID provided, using default in development:', companyId);
         } else {
           throw new Error('Company ID is required to create a consumption site');
         }
-      } else {
-        companyId = String(companyId);
-        
-        if (!isDevelopment && authContext?.user?.companyId && authContext.user.companyId !== companyId) {
-          console.warn('[ConsumptionSiteAPI] User company ID does not match provided company ID:', {
-            userCompanyId: authContext.user.companyId,
-            providedCompanyId: companyId,
-            user: authContext.user
-          });
-          
-          if (!isDevelopment) {
-            throw new Error('You do not have permission to create sites for this company');
-          }
-          
-          console.warn('[ConsumptionSiteAPI] Allowing company ID mismatch in development mode');
-        }
+      }
+      
+      // Ensure companyId is a string
+      companyId = String(companyId);
+      
+      // In production, verify the user has permission to create for this company
+      if (!isDevelopment && user?.companyId && user.companyId !== companyId) {
+        console.warn('[ConsumptionSiteAPI] User company ID does not match provided company ID:', {
+          userCompanyId: user.companyId,
+          providedCompanyId: companyId,
+          user: user
+        });
+        throw new Error('You do not have permission to create sites for this company');
       }
 
       // Prepare the site data with proper formatting
@@ -258,8 +267,17 @@ class ConsumptionSiteApi {
 
       const response = await api.post(
         API_CONFIG.ENDPOINTS.CONSUMPTION.SITE.CREATE,
-        siteData
+        siteData,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        }
       );
+      
+      // Invalidate cache to ensure fresh data on next fetch
+      this.invalidateCache();
 
       console.log('[ConsumptionSiteAPI] Consumption site created:', response.data);
       

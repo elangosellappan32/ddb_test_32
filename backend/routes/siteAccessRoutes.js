@@ -97,8 +97,8 @@ router.post('/update-site-access', authenticateToken, async (req, res) => {
 
     // Validate required fields
     if (!userId || !siteId || !siteType) {
-      const errorMsg = 'Missing required fields: userId, siteId, and siteType are required';
-      logger.warn(`[SiteAccess] [${requestId}] ${errorMsg}`, { userId, hasSiteId: !!siteId, hasSiteType: !!siteType });
+      const errorMsg = 'Missing required fields: siteId, and siteType are required';
+      logger.warn(`[SiteAccess] [${requestId}] ${errorMsg}`, {  hasSiteId: !!siteId, hasSiteType: !!siteType });
       return res.status(400).json({
         success: false,
         message: errorMsg,

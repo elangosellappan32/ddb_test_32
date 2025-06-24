@@ -27,7 +27,25 @@ const authenticateToken = async (req, res, next) => {
             });
         }
 
+        // Verify and decode the JWT token
         const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key');
+        
+        // Log token verification details
+        logger.debug('[Auth] Token verified successfully:', {
+            username: decoded.username,
+            userId: decoded.userId,
+            role: decoded.role,
+            tokenType: decoded.tokenType
+        });
+        
+        if (!decoded.username) {
+            logger.error('[Auth] No username in token');
+            return res.status(403).json({ 
+                success: false,
+                message: 'Invalid token: missing username',
+                code: 'INVALID_TOKEN'
+            });
+        }
         
         // Get fresh user data from database
         const user = await authDal.getUserByUsername(decoded.username);
@@ -38,6 +56,12 @@ const authenticateToken = async (req, res, next) => {
                 message: 'User not found',
                 code: 'USER_NOT_FOUND'
             });
+        }
+        
+        // Ensure user object has a valid userId
+        if (!user.userId) {
+            logger.warn(`[Auth] No userId found for user: ${user.username}, using username as fallback`);
+            user.userId = user.username;
         }
 
         // If user has a roleId, get fresh role data
@@ -67,6 +91,7 @@ const authenticateToken = async (req, res, next) => {
 
         // Attach user and role info to request
         req.user = {
+            userId: user.userId || user.username, // Use userId if available, fallback to username
             username: decoded.username,
             email: decoded.emailId || user.email,
             role: decoded.role || user.role,

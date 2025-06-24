@@ -4,7 +4,7 @@ const dynamodb = new AWS.DynamoDB.DocumentClient();
 class IdGenerator {
   /**
    * Generate a new sequential ID for a site
-   * @param {string} companyId - The company ID
+   * @param {string} companyId - The company ID (kept for backward compatibility)
    * @param {string} siteType - Either 'production' or 'consumption'
    * @returns {Promise<number>} The next available ID
    */
@@ -13,27 +13,27 @@ class IdGenerator {
     const idField = siteType === 'production' ? 'productionSiteId' : 'consumptionSiteId';
     
     try {
-      // Query to get the highest current ID for this company and site type
+      // Scan the entire table to find the highest ID
       const params = {
         TableName: tableName,
-        IndexName: 'CompanyIdIndex',
-        KeyConditionExpression: 'companyId = :companyId',
-        ExpressionAttributeValues: {
-          ':companyId': companyId,
-        },
         ProjectionExpression: idField,
-        ScanIndexForward: false, // Get items in descending order
-        Limit: 1 // Only need the highest ID
+        FilterExpression: 'attribute_exists(' + idField + ')'
       };
 
-      const result = await dynamodb.query(params).promise();
+      const result = await dynamodb.scan(params).promise();
       
       if (result.Items && result.Items.length > 0) {
+        // Find the maximum ID across all items
+        const maxId = result.Items.reduce((max, item) => {
+          const currentId = parseInt(item[idField]) || 0;
+          return currentId > max ? currentId : max;
+        }, 0);
+        
         // Return the highest ID + 1
-        return (parseInt(result.Items[0][idField]) || 0) + 1;
+        return maxId + 1;
       }
       
-      // No sites found for this company, start with 1
+      // No sites found, start with 1
       return 1;
     } catch (error) {
       console.error(`Error getting next ${siteType} site ID for company ${companyId}:`, error);

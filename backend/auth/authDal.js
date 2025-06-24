@@ -68,6 +68,13 @@ class AuthDAL {
                              user.role === 'user' ? 'ROLE-2' : 'ROLE-3';
             }
             
+            // Ensure userId is set (use username as fallback)
+            if (!user.userId) {
+                user.userId = user.username;
+                logger.debug(`[AuthDAL] Set userId to username for user: ${user.username}`);
+            }
+            
+            logger.debug(`[AuthDAL] Retrieved user: ${user.username} with userId: ${user.userId}`);
             return user;
         } catch (error) {
             logger.error('DAL Error - getUserByUsername:', error);
@@ -105,6 +112,56 @@ class AuthDAL {
             };
         } catch (error) {
             logger.error('DAL Error - getRoleById:', error);
+            throw error;
+        }
+    }
+
+    async getUserFromUserTable(username) {
+        try {
+            const command = new GetCommand({
+                TableName: this.userTable,
+                Key: { username },
+                // Explicitly request all attributes to ensure we get everything
+                ProjectionExpression: 'username, email, password, role, roleId, metadata, companyId, isActive, createdAt, updatedAt, lastLogin, userId'
+            });
+
+            const response = await this.docClient.send(command);
+            if (!response.Item) {
+                logger.warn(`User not found: ${username}`);
+                return null;
+            }
+
+            const userItem = response.Item;
+            
+            // Ensure we have all required fields with defaults
+            const userData = {
+                username: userItem.username,
+                email: userItem.email,
+                password: userItem.password,
+                role: userItem.role || 'user',
+                roleId: userItem.roleId || null,
+                metadata: userItem.metadata || {},
+                userId: userItem.userId || userItem.username, // Use existing userId or fallback to username
+                companyId: userItem.companyId || null,
+                isActive: userItem.isActive !== false, // Default to true if not set
+                createdAt: userItem.createdAt || new Date().toISOString(),
+                updatedAt: userItem.updatedAt || new Date().toISOString(),
+                lastLogin: userItem.lastLogin || null
+            };
+
+            logger.debug(`Retrieved user data for ${username}`, { 
+                hasUserId: !!userItem.userId,
+                hasCompanyId: !!userItem.companyId,
+                role: userData.role
+            });
+
+            return userData;
+        } catch (error) {
+            logger.error('DAL Error - getUserFromUserTable:', { 
+                error: error.message,
+                username,
+                stack: error.stack
+            });
             throw error;
         }
     }
@@ -338,4 +395,5 @@ class AuthDAL {
     }
 }
 
+// Export the AuthDAL class
 module.exports = AuthDAL;

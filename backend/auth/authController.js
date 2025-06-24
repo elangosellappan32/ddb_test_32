@@ -10,6 +10,7 @@ class AuthController {
     generateTokens(userData) {
         const accessToken = jwt.sign(
             {
+                userId: userData.userId || userData.username, // Use userId if available, fallback to username
                 username: userData.username,
                 role: userData.role,
                 permissions: userData.permissions,
@@ -48,12 +49,26 @@ class AuthController {
                 ? ['CREATE', 'READ', 'UPDATE', 'DELETE']
                 : ['READ']);
 
+            // Ensure userId is set (use username as fallback)
+            const userId = userData.userId || username;
+            logger.debug(`[AuthController] Logging in user: ${username} with userId: ${userId}`);
+            
             const userInfo = {
+                userId, // Use the userId from the database or fallback to username
                 username,
                 role: userData.role,
                 permissions,
-                emailId: userData.email
+                emailId: userData.email,
+                companyId: userData.companyId, // Include companyId if available
+                metadata: userData.metadata || {}
             };
+            
+            logger.debug('[AuthController] User info for token generation:', {
+                userId: userInfo.userId,
+                username: userInfo.username,
+                role: userInfo.role,
+                hasCompanyId: !!userInfo.companyId
+            });
 
             const { accessToken, refreshToken } = this.generateTokens(userInfo);
 

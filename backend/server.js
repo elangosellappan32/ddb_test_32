@@ -22,7 +22,7 @@ const bankingRoutes = require('./banking/bankingRoutes');
 const lapseRoutes = require('./lapse/lapseRoutes');
 const captiveRoutes = require('./captive/captiveRoutes');
 const companyRoutes = require('./company/companyRoutes');
-
+const siteAccessRoutes = require('./routes/siteAccessRoutes');
 const app = express();
 const PORT = process.env.PORT || 3333;
 
@@ -57,6 +57,7 @@ app.use('/api/banking', bankingRoutes);
 app.use('/api/lapse', lapseRoutes);
 app.use('/api/captive', captiveRoutes);
 app.use('/api/company', companyRoutes);
+app.use('/api/site-access', siteAccessRoutes);
 
 // Error handling
 app.use(errorHandler);

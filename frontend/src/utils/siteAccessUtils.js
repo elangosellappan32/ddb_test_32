@@ -234,20 +234,67 @@ export const updateUserSiteAccess = async (user, siteData, siteType) => {
             siteData: requestData.siteData
         });
 
-        // Make the API call with the correct endpoint
-        const response = await api.post('/api/site-access/update-site-access', requestData);
+        // Get the authentication token - using the same key as in authService.js
+        const authToken = localStorage.getItem('auth_token');
+        
+        // Debug logging
+        console.log('[SiteAccess] Making API call to update site access:', {
+            endpoint: '/site-access/update-site-access',
+            userId,
+            companyId,
+            siteType,
+            originalSiteId: siteId,
+            formattedSiteId,
+            hasToken: !!authToken,
+            tokenLength: authToken ? authToken.length : 0,
+            localStorageKeys: Object.keys(localStorage),
+            authTokenKey: 'auth_token',
+            allAuthKeys: Object.keys(localStorage).filter(key => key.includes('token') || key.includes('auth'))
+        });
 
-        if (!response.data) {
-            const error = new Error('Invalid response from server');
-            console.error('[SiteAccess] API error:', error);
+        if (!authToken) {
+            const error = new Error('No authentication token found. Please log in again.');
+            console.error('[SiteAccess] Authentication error:', error, {
+                localStorage: Object.keys(localStorage).filter(key => key.includes('token') || key.includes('auth')),
+                hasToken: !!authToken,
+                tokenLength: authToken ? authToken.length : 0,
+                allAuthKeys: Object.keys(localStorage).filter(key => key.includes('token') || key.includes('auth'))
+            });
             throw error;
         }
 
-        console.log(`[SiteAccess] Successfully updated ${siteType} site access for user ${userId}`, {
-            response: response.data
-        });
-        
-        return response.data;
+        // Make the API call with the correct endpoint
+        try {
+            const response = await api.post('/site-access/update-site-access', requestData, {
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${authToken}`
+                }
+            });
+
+            if (!response.data) {
+                const error = new Error('Invalid response from server');
+                console.error('[SiteAccess] API error:', error);
+                throw error;
+            }
+
+            console.log(`[SiteAccess] Successfully updated ${siteType} site access for user ${userId}`, {
+                response: response.data
+            });
+            
+            return response.data;
+        } catch (error) {
+            console.error('[SiteAccess] API request failed:', {
+                error: error.response?.data || error.message,
+                status: error.response?.status,
+                config: {
+                    url: error.config?.url,
+                    method: error.config?.method,
+                    headers: error.config?.headers
+                }
+            });
+            throw error;
+        }
 
     } catch (error) {
         // Log detailed error information

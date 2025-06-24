@@ -17,20 +17,37 @@ const TableName = TableNames.PRODUCTION_SITES;
 
 const getLastProductionSiteId = async (companyId) => {
     try {
+        // First, try to get the highest existing ID
         const { Items } = await docClient.send(new QueryCommand({
             TableName,
             KeyConditionExpression: 'companyId = :companyId',
             ExpressionAttributeValues: {
                 ':companyId': companyId
-            }
+            },
+            // Sort in descending order by productionSiteId to get the highest ID first
+            ScanIndexForward: false,
+            Limit: 1
         }));
 
         if (!Items || Items.length === 0) {
             return 0;
         }
 
-        const lastId = Math.max(...Items.map(item => Number(item.productionSiteId)));
-        return lastId;
+        // Get the highest ID
+        const lastId = Items[0]?.productionSiteId;
+        if (!lastId && lastId !== 0) {
+            logger.warn(`[ProductionSiteDAL] Invalid productionSiteId found: ${lastId} for company ${companyId}`);
+            return 0;
+        }
+
+        const numericId = Number(lastId);
+        if (isNaN(numericId)) {
+            logger.error(`[ProductionSiteDAL] Non-numeric productionSiteId found: ${lastId} for company ${companyId}`);
+            throw new Error('Invalid production site ID format');
+        }
+
+        logger.debug(`[ProductionSiteDAL] Last production site ID for company ${companyId}: ${numericId}`);
+        return numericId;
     } catch (error) {
         logger.error('[ProductionSiteDAL] Get Last ProductionSiteId Error:', error);
         throw error;
@@ -38,47 +55,73 @@ const getLastProductionSiteId = async (companyId) => {
 };
 
 const create = async (item) => {
-    try {
-        const now = new Date().toISOString();
-        const lastId = await getLastProductionSiteId(item.companyId);
-        const newId = lastId + 1;
+    let retryCount = 0;
+    const maxRetries = 3;
+    let lastError;
+    
+    while (retryCount < maxRetries) {
+        try {
+            const now = new Date().toISOString();
+            const lastId = await getLastProductionSiteId(item.companyId);
+            const newId = lastId + 1;
+            
+            // Log the ID generation for debugging
+            logger.debug(`[ProductionSiteDAL] Generating new production site ID. Last ID: ${lastId}, New ID: ${newId} for company ${item.companyId}`);
+            
+            // Add a small delay to help prevent race conditions
+            if (retryCount > 0) {
+                await new Promise(resolve => setTimeout(resolve, 100 * retryCount));
+            }
+            
+            // Normalize the annualProduction field
+            const annualProduction = item.annualProduction_L || item.annualProduction || 0;
 
-        // Normalize the annualProduction field
-        const annualProduction = item.annualProduction_L || item.annualProduction || 0;
+            const newItem = {
+                companyId: item.companyId,
+                productionSiteId: newId,
+                name: item.name,
+                location: item.location,
+                type: item.type,
+                banking: new Decimal(item.banking || 0).toString(),
+                capacity_MW: new Decimal(item.capacity_MW || 0).toString(),
+                annualProduction_L: new Decimal(annualProduction).toString(),
+                htscNo: item.htscNo ? String(item.htscNo).trim() : '',
+                injectionVoltage_KV: new Decimal(item.injectionVoltage_KV || 0).toString(),
+                status: item.status,
+                version: 1,
+                createdat: now,
+                updatedat: now,
+                timetolive: 0
+            };
 
-        const newItem = {
-            companyId: item.companyId,
-            productionSiteId: newId,
-            name: item.name,
-            location: item.location,
-            type: item.type,
-            banking: new Decimal(item.banking || 0).toString(),
-            capacity_MW: new Decimal(item.capacity_MW || 0).toString(),
-            annualProduction_L: new Decimal(annualProduction).toString(), // Store as annualProduction_L
-            htscNo: item.htscNo ? String(item.htscNo).trim() : '', // Keep as string
-            injectionVoltage_KV: new Decimal(item.injectionVoltage_KV || 0).toString(),
-            status: item.status,
-            version: 1,
-            createdat: now,
-            updatedat: now,
-            timetolive: 0
-        };
+            await docClient.send(new PutCommand({
+                TableName,
+                Item: newItem,
+                ConditionExpression: 'attribute_not_exists(companyId) AND attribute_not_exists(productionSiteId)'
+            }));
 
-        await docClient.send(new PutCommand({
-            TableName,
-            Item: newItem,
-            ConditionExpression: 'attribute_not_exists(companyId) AND attribute_not_exists(productionSiteId)'
-        }));
-
-        // Add the siteKey to the response
-        return {
-            ...newItem,
-            siteKey: `${newItem.companyId}_${newItem.productionSiteId}`
-        };
-    } catch (error) {
-        logger.error('[ProductionSiteDAL] Create Error:', error);
-        throw error;
+            // Add the siteKey to the response
+            return {
+                ...newItem,
+                siteKey: `${newItem.companyId}_${newItem.productionSiteId}`
+            };
+        } catch (error) {
+            lastError = error;
+            if (error.name === 'ConditionalCheckFailedException' && retryCount < maxRetries - 1) {
+                // Another process might have created a record with the same ID, retry
+                retryCount++;
+                logger.warn(`[ProductionSiteDAL] Race condition detected, retry ${retryCount}/${maxRetries}`);
+                continue;
+            }
+            throw error;
+        }
     }
+    
+    // If we've exhausted all retries, throw the last error
+    logger.error(`[ProductionSiteDAL] Failed to create production site after ${maxRetries} attempts`);
+    throw lastError || new Error('Failed to create production site');
+
+
 };
 
 const getItem = async (companyId, productionSiteId) => {
@@ -181,11 +224,12 @@ const updateItem = async (companyId, productionSiteId, updates) => {
 
 const cleanupRelatedData = async (companyId, productionSiteId) => {
     const cleanupStats = { deletedUnits: 0, deletedCharges: 0 };
+    let currentSiteId = `${companyId}_${productionSiteId}`; // Default format
     
     // Create site ID in multiple formats for compatibility
     const siteIdFormats = [
         // Original format
-        `${companyId}_${productionSiteId}`,
+        currentSiteId,
         // String format
         `${String(companyId)}_${String(productionSiteId)}`,
         // Number format if possible
@@ -200,6 +244,7 @@ const cleanupRelatedData = async (companyId, productionSiteId) => {
         let chargeItems = [];
         
         for (const siteId of siteIdFormats) {
+            currentSiteId = siteId; // Track the current site ID being processed
             if (unitItems.length === 0) {
                 try {
                     const units = await docClient.send(new QueryCommand({
@@ -260,10 +305,10 @@ const cleanupRelatedData = async (companyId, productionSiteId) => {
             cleanupStats.deletedCharges = chargeItems.length;
         }
 
-        logger.info(`[ProductionSiteDAL] Cleanup completed for site ${siteId}:`, cleanupStats);
+        logger.info(`[ProductionSiteDAL] Cleanup completed for site ${currentSiteId}:`, cleanupStats);
         return cleanupStats;
     } catch (error) {
-        logger.error(`[ProductionSiteDAL] Failed to cleanup site ${siteId}:`, error);
+        logger.error(`[ProductionSiteDAL] Failed to cleanup site ${currentSiteId}:`, error);
         throw error;
     }
 };

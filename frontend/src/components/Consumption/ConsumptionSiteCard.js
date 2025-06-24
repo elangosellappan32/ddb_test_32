@@ -18,14 +18,14 @@ import {
   Category as CategoryIcon,
   Delete as DeleteIcon,
   Edit as EditIcon,
-  Visibility as VisibilityIcon,
-  FiberManualRecord as StatusDotIcon,
   Cached as RefreshIcon,
-  Error as ErrorIcon,
   Factory as IndustrialIcon,
   ShoppingCart as CommercialIcon,
   Home as HomeIcon,
-  LocalLaundryService as TextileIcon
+  LocalLaundryService as TextileIcon,
+  Error as ErrorIcon,
+  Visibility as VisibilityIcon,
+  FiberManualRecord as StatusDotIcon
 } from '@mui/icons-material';
 import { formatDistanceToNow } from 'date-fns';
 
@@ -190,6 +190,16 @@ const ConsumptionSiteCard = ({
       }
     }
   };
+  
+  // Format consumption value for display
+  const formatConsumption = (value) => {
+    if (value >= 1000000) {
+      return `${(value / 1000000).toFixed(1)}M`;
+    } else if (value >= 1000) {
+      return `${(value / 1000).toFixed(1)}K`;
+    }
+    return value.toString();
+  };
 
   const handleView = (e) => {
     e?.stopPropagation();
@@ -204,15 +214,6 @@ const ConsumptionSiteCard = ({
   const handleDelete = (e) => {
     e?.stopPropagation();
     if (onDelete) onDelete();
-  };
-
-  const formatConsumption = (value) => {
-    if (value >= 1000000) {
-      return `${(value / 1000000).toFixed(1)}M`;
-    } else if (value >= 1000) {
-      return `${(value / 1000).toFixed(1)}K`;
-    }
-    return value.toString();
   };
 
   return (
