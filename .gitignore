@@ -19,3 +19,24 @@ npm-debug.log*
 # OS specific files
 .DS_Store
 Thumbs.db
+# Dependencies
+node_modules/
+.env
+
+# Build outputs
+dist/
+build/
+
+# Logs
+*.log
+npm-debug.log*
+
+# IDE specific files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS specific files
+.DS_Store
+Thumbs.db
