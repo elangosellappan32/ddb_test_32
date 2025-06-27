@@ -469,21 +469,21 @@ const createDefaultCaptiveData = async () => {
     const captiveData = [
         {
             generatorCompanyId: 1,  // STRIO KAIZEN HITECH RESEARCH LABS PVT LTD
-            shareholderCompanyId: 1, // POLYSPIN EXPORTS LTD
+            shareholderCompanyId: 2, // POLYSPIN EXPORTS LTD
             consumptionSiteId: '1',
             effectiveFrom: '2024-01-02',
             shareholdingPercentage: 27
         },
         {
             generatorCompanyId: 1,  // STRIO KAIZEN HITECH RESEARCH LABS PVT LTD
-            shareholderCompanyId: 2, // PEL TEXTILES
+            shareholderCompanyId: 3, // PEL TEXTILES
             consumptionSiteId: '2',
             effectiveFrom: '2024-01-02',
             shareholdingPercentage: 12
         },
         {
             generatorCompanyId: 1,  // STRIO KAIZEN HITECH RESEARCH LABS PVT LTD
-            shareholderCompanyId: 3, // A RAMAR AND SONS
+            shareholderCompanyId: 4, // A RAMAR AND SONS
             consumptionSiteId: '3',
             effectiveFrom: '2024-01-02',
             shareholdingPercentage: 61

@@ -121,11 +121,34 @@ export const AuthProvider = ({ children }) => {
     // Function to check if user has access to a specific site
     const hasSiteAccess = useCallback((siteId, siteType = 'production') => {
         if (!user) return false;
-        if (user.isAdmin) return true;
+        if (user.isAdmin || user.role === 'admin' || user.roleName === 'ADMIN') {
+            return true;
+        }
         
-        const sites = getAccessibleSites();
-        const siteArray = siteType === 'production' ? sites.productionSites : sites.consumptionSites;
-        return siteArray.includes(siteId);
+        try {
+            const sites = getAccessibleSites();
+            const siteArray = siteType === 'production' ? sites.productionSites : sites.consumptionSites;
+            
+            // Convert siteId to string for comparison if it's a number
+            const siteIdStr = String(siteId);
+            
+            // Check if the siteId is in the siteArray
+            const hasAccess = siteArray.some(site => {
+                // Handle both string and number comparisons
+                return String(site) === siteIdStr || 
+                       (site && site.S && String(site.S) === siteIdStr) ||
+                       (site && site.M && site.M.S && String(site.M.S.S) === siteIdStr);
+            });
+            
+            if (!hasAccess) {
+                console.warn(`Access denied to site ${siteIdStr} of type ${siteType}. Accessible sites:`, siteArray);
+            }
+            
+            return hasAccess;
+        } catch (error) {
+            console.error('Error checking site access:', { error, siteId, siteType });
+            return false;
+        }
     }, [user, getAccessibleSites]);
 
     if (!isInitialized) {

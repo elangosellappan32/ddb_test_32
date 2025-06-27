@@ -15,22 +15,52 @@ export const hasAccessToSite = (user, siteId, siteType) => {
     if (!user || !siteId || !siteType) return false;
 
     // Admin users have access to all sites
-    if (user.role === 'admin' || user.roleName === 'ADMIN') {
+    if (user.role === 'admin' || user.roleName === 'ADMIN' || user.isAdmin) {
         return true;
     }
 
     // Check if user has accessible sites configuration
-    if (!user.accessibleSites) return false;
+    if (!user.accessibleSites) {
+        console.warn('No accessibleSites found in user object');
+        return false;
+    }
 
-    const sitesList = siteType === 'production' 
-        ? user.accessibleSites.productionSites?.L 
-        : user.accessibleSites.consumptionSites?.L;
+    try {
+        const sitesList = siteType === 'production' 
+            ? user.accessibleSites.productionSites?.L 
+            : user.accessibleSites.consumptionSites?.L;
 
-    // Validate sites list structure
-    if (!Array.isArray(sitesList)) return false;
+        // Validate sites list structure
+        if (!Array.isArray(sitesList)) {
+            console.warn('Invalid sites list structure:', sitesList);
+            return false;
+        }
 
-    // Check if site exists in user's accessible sites
-    return sitesList.some(site => site.S === siteId);
+        // Convert siteId to string for comparison
+        const siteIdStr = String(siteId);
+
+        // Check if site exists in user's accessible sites
+        const hasAccess = sitesList.some(site => {
+            // Handle different possible site ID formats
+            return (
+                site === siteIdStr ||
+                site?.S === siteIdStr ||
+                (site?.M?.S?.S === siteIdStr) ||
+                (site?.siteId === siteId) ||
+                (site?.productionSiteId === siteId) ||
+                (site?.consumptionSiteId === siteId)
+            );
+        });
+
+        if (!hasAccess) {
+            console.warn(`Access denied to site ${siteIdStr} of type ${siteType}. Accessible sites:`, sitesList);
+        }
+
+        return hasAccess;
+    } catch (error) {
+        console.error('Error checking site access:', { error, siteId, siteType });
+        return false;
+    }
 };
 
 /**

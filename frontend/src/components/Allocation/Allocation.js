@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useContext } from 'react';
 import { format } from 'date-fns';
 import {
   Box,
@@ -43,10 +43,12 @@ import ConsumptionUnitsTable from './ConsumptionUnitsTable';
 import AllocationDetailsTable from './AllocationDetailsTable';
 import AllocationSummary from './AllocationSummary';
 import { formatAllocationMonth, ALL_PERIODS } from '../../utils/allocationUtils';
+import { useAuth } from '../../context/AuthContext';
 import { calculateAllocations } from '../../utils/allocationCalculator';
 
 const Allocation = () => {
   const { enqueueSnackbar } = useSnackbar();
+  const { hasSiteAccess } = useAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
@@ -99,12 +101,18 @@ const Allocation = () => {
       console.log('[fetchShareholdings] Raw response:', response);
       console.log(`[fetchShareholdings] Processed ${shareholdings.length} shareholdings`);
       
-      // Filter out invalid entries
-      const validShareholdings = shareholdings.filter(item => 
-        item && 
-        item.shareholderCompanyId && 
-        (item.shareholdingPercentage > 0 || item.percentage > 0)
-      );
+      // Filter out invalid entries and check site access
+      const validShareholdings = shareholdings.filter(item => {
+        if (!item || !item.shareholderCompanyId) return false;
+        
+        // Check if user has access to this site
+        const hasAccess = hasSiteAccess(
+          item.generatorCompanyId || item.companyId, 
+          'production'
+        );
+        
+        return hasAccess && (item.shareholdingPercentage > 0 || item.percentage > 0);
+      });
       
       console.log(`[fetchShareholdings] Found ${validShareholdings.length} valid shareholdings`);
       
@@ -547,15 +555,18 @@ const Allocation = () => {
       // Process banking data for the entire financial year
       const allBankingData = bankingData
         .filter(unit => {
-          const isValid = unit && unit.sk && financialYearMonths.includes(unit.sk);
-          if (!isValid && unit) {
-            console.log('Filtered out banking unit (invalid or wrong period):', {
-              sk: unit.sk,
-              financialYearMonths,
-              unit
-            });
+          // Check if unit is valid and in the correct period
+          if (!unit || !unit.pk || !unit.sk || !financialYearMonths.includes(unit.sk)) {
+            if (unit) {
+              console.log('Filtered out banking unit (invalid or wrong period):', {
+                sk: unit.sk,
+                financialYearMonths,
+                unit
+              });
+            }
+            return false;
           }
-          return isValid;
+          return true;
         })
         .map(unit => {
           try {
@@ -591,9 +602,74 @@ const Allocation = () => {
         
       console.log('Processed banking data:', allBankingData.length, 'valid records');
 
+      // Filter and process banking data for accessible sites
+      const accessibleBankingData = allBankingData
+        .map(unit => {
+          try {
+            // Skip if unit is invalid
+            if (!unit || !unit.pk) {
+              console.debug('Skipping invalid banking unit:', unit);
+              return null;
+            }
+            
+            // Get site info from the map
+            const siteInfo = siteNameMap[unit.pk];
+            
+            // Skip if site info is not found (unknown site)
+            if (!siteInfo) {
+              console.debug('Skipping unknown site for unit:', unit.pk);
+              return null;
+            }
+            
+            // Extract production site ID safely
+            const productionSiteId = String(siteInfo.productionSiteId || '').trim();
+            const companyId = String(siteInfo.companyId || '').trim();
+            
+            // Skip if site ID is invalid
+            if (!productionSiteId || !companyId) {
+              console.debug('Skipping unit with invalid IDs:', { productionSiteId, companyId, unit });
+              return null;
+            }
+            
+            // Check if user has access to this site
+            const hasAccess = hasSiteAccess(productionSiteId, 'production');
+            if (!hasAccess) {
+              console.debug('Filtered out banking unit (no access):', {
+                productionSiteId,
+                companyId,
+                siteName: siteInfo.name || 'Unknown',
+                unitPk: unit.pk
+              });
+              return null;
+            }
+            
+            // Return the processed unit with proper typing
+            return {
+              ...unit,
+              siteName: siteInfo.name || 'Unknown Site',
+              banking: Number(siteInfo.banking) || 0,
+              status: ['Active', 'Inactive'].includes(siteInfo.status) ? siteInfo.status : 'Inactive',
+              productionSiteId,
+              companyId,
+              type: siteInfo.type || 'GENERATION',
+              c1: Math.max(0, Number(unit.c1) || 0),
+              c2: Math.max(0, Number(unit.c2) || 0),
+              c3: Math.max(0, Number(unit.c3) || 0),
+              c4: Math.max(0, Number(unit.c4) || 0),
+              c5: Math.max(0, Number(unit.c5) || 0)
+            };
+          } catch (error) {
+            console.error('Error processing banking unit:', { error, unit });
+            return null;
+          }
+        })
+        .filter(Boolean); // Remove any null entries from failed processing
+      
+      console.log('Accessible banking data:', accessibleBankingData.length, 'records');
+      
       // Aggregate banking data by site for the entire financial year
       const aggregatedBanking = Object.values(
-        allBankingData.reduce((acc, curr) => {
+        accessibleBankingData.reduce((acc, curr) => {
           try {
             if (!curr || !curr.pk) return acc;
             
@@ -625,19 +701,38 @@ const Allocation = () => {
 
       console.log('Aggregated banking data:', aggregatedBanking.length, 'records');
 
-      // Fetch production units for specific month
+      // Fetch production units for specific month, filtered by accessible sites
       const productionUnits = [];
       const productionUnitsErrors = [];
       
+      // Filter production sites to only those the user has access to
+      const accessibleProdSites = prodSites.filter(site => {
+        if (!site?.productionSiteId) return false;
+        const hasAccess = hasSiteAccess(String(site.productionSiteId), 'production');
+        if (!hasAccess) {
+          console.debug('Skipping production site (no access):', {
+            productionSiteId: site.productionSiteId,
+            companyId: site.companyId,
+            siteName: site.name
+          });
+        }
+        return hasAccess;
+      });
+      
+      console.log(`Processing ${accessibleProdSites.length} accessible production sites`);
+      
       await Promise.all(
-        prodSites.map(async (site) => {
-          if (!site || !site.productionSiteId) return;
-          
+        accessibleProdSites.map(async (site) => {
           try {
             const companyId = Number(site.companyId) || 1;
             const productionSiteId = Number(site.productionSiteId);
             
-            console.log(`Fetching production units for site ${productionSiteId} (company ${companyId})`);
+            if (!productionSiteId) {
+              console.warn('Skipping site with invalid productionSiteId:', site);
+              return;
+            }
+            
+            console.debug(`Fetching production units for site ${productionSiteId} (company ${companyId})`);
             
             const unitsResp = await productionUnitApi.fetchAll(companyId, productionSiteId);
             const sk = `${selectedMonth.toString().padStart(2, '0')}${selectedYear}`;
@@ -700,19 +795,38 @@ const Allocation = () => {
 
       console.log('Fetched production units:', productionUnits.length);
 
-      // Process consumption units for specific month
+      // Fetch consumption units for specific month, filtered by accessible sites
       const consumptionUnits = [];
       const consumptionUnitsErrors = [];
       
+      // Filter consumption sites to only those the user has access to
+      const accessibleConsSites = consSites.filter(site => {
+        if (!site?.consumptionSiteId) return false;
+        const hasAccess = hasSiteAccess(String(site.consumptionSiteId), 'consumption');
+        if (!hasAccess) {
+          console.debug('Skipping consumption site (no access):', {
+            consumptionSiteId: site.consumptionSiteId,
+            companyId: site.companyId,
+            siteName: site.name
+          });
+        }
+        return hasAccess;
+      });
+      
+      console.log(`Processing ${accessibleConsSites.length} accessible consumption sites`);
+      
       await Promise.all(
-        consSites.map(async (site) => {
-          if (!site || !site.consumptionSiteId) return;
-          
+        accessibleConsSites.map(async (site) => {
           try {
             const companyId = Number(site.companyId) || 1;
             const consumptionSiteId = Number(site.consumptionSiteId);
             
-            console.log(`Fetching consumption units for site ${consumptionSiteId} (company ${companyId})`);
+            if (!consumptionSiteId) {
+              console.warn('Skipping site with invalid consumptionSiteId:', site);
+              return;
+            }
+            
+            console.debug(`Fetching consumption units for site ${consumptionSiteId} (company ${companyId})`);
             
             const unitsResp = await consumptionUnitApi.fetchAll(companyId, consumptionSiteId);
             const sk = `${selectedMonth.toString().padStart(2, '0')}${selectedYear}`;
@@ -811,8 +925,20 @@ const Allocation = () => {
 
       setProductionData(updatedProductionUnits);
       setConsumptionData(consumptionUnits);
-      setBankingData(allBankingData);
-      setAggregatedBankingData(Object.values(aggregatedBanking));
+      // Set the aggregated banking data with previous balance
+      const bankingDataWithPreviousBalance = aggregatedBanking.map(unit => ({
+        ...unit,
+        previousBalance: {
+          c1: 0,
+          c2: 0,
+          c3: 0,
+          c4: 0,
+          c5: 0
+        }
+      }));
+      
+      setBankingData(accessibleBankingData);
+      setAggregatedBankingData(bankingDataWithPreviousBalance);
       
       // Clear any previous errors
       setError(null);
