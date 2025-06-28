@@ -1,14 +1,7 @@
 const productionSiteDAL = require('./productionSiteDAL');
 const logger = require('../utils/logger');
-const { DynamoDB } = require('@aws-sdk/client-dynamodb');
-const { DynamoDBDocument } = require('@aws-sdk/lib-dynamodb');
 const TableNames = require('../constants/tableNames');
 const { updateUserSiteAccess, removeSiteAccess } = require('../services/siteAccessService');
-
-const dynamoDB = DynamoDBDocument.from(new DynamoDB({
-    region: process.env.AWS_REGION || 'local',
-    endpoint: process.env.DYNAMODB_ENDPOINT || 'http://localhost:8000'
-}));
 
 // Validation functions
 const validateRequiredFields = (data) => {

@@ -1,12 +1,12 @@
-const BaseDAL = require('../common/baseDAL');
+const { QueryCommand, ScanCommand, DeleteCommand } = require('@aws-sdk/lib-dynamodb');
 const TableNames = require('../constants/tableNames');
 const logger = require('../utils/logger');
 const { formatMonthYearKey } = require('../utils/dateUtils');
 const docClient = require('../utils/db');
 
-class AllocationDAL extends BaseDAL {
+class AllocationDAL {
     constructor() {
-        super(TableNames.ALLOCATION);
+        this.tableName = TableNames.ALLOCATION;
     }
 
     generatePK(companyId, productionSiteId, consumptionSiteId) {
@@ -24,19 +24,28 @@ class AllocationDAL extends BaseDAL {
             const sk = formatMonthYearKey(month);
             this.validateSortKey(sk);
 
-            let expression = 'sk = :sk';
-            const values = { ':sk': sk };
+            let KeyConditionExpression = 'sk = :sk';
+            let ExpressionAttributeValues = { ':sk': sk };
+            let ExpressionAttributeNames = undefined;
+            let FilterExpression = undefined;
 
             if (filterBy.type) {
-                expression += ' AND #type = :type';
-                values[':type'] = filterBy.type;
+                FilterExpression = '#type = :type';
+                ExpressionAttributeValues[':type'] = filterBy.type;
+                ExpressionAttributeNames = { '#type': 'type' };
             }
 
-            return await this.queryItems({
-                expression,
-                values,
-                names: filterBy.type ? { '#type': 'type' } : undefined
-            });
+            const params = {
+                TableName: this.tableName,
+                IndexName: undefined, // add if you use GSI
+                KeyConditionExpression,
+                ExpressionAttributeValues,
+            };
+            if (ExpressionAttributeNames) params.ExpressionAttributeNames = ExpressionAttributeNames;
+            if (FilterExpression) params.FilterExpression = FilterExpression;
+
+            const { Items } = await docClient.send(new QueryCommand(params));
+            return Items || [];
         } catch (error) {
             logger.error(`[AllocationDAL] GetAllocations Error for month ${JSON.stringify(month)}:`, error);
             throw error;
@@ -48,10 +57,13 @@ class AllocationDAL extends BaseDAL {
             const sk = formatMonthYearKey(month);
             this.validateSortKey(sk);
 
-            return await this.queryItems({
-                expression: 'sk = :sk',
-                values: { ':sk': sk }
-            });
+            const params = {
+                TableName: this.tableName,
+                KeyConditionExpression: 'sk = :sk',
+                ExpressionAttributeValues: { ':sk': sk }
+            };
+            const { Items } = await docClient.send(new QueryCommand(params));
+            return Items || [];
         } catch (error) {
             logger.error('[AllocationDAL] GetByMonth Error:', error);
             throw error;
@@ -65,14 +77,17 @@ class AllocationDAL extends BaseDAL {
             this.validateSortKey(fromSk);
             this.validateSortKey(toSk);
 
-            return await this.queryItems({
-                expression: 'contains(pk, :search) AND sk BETWEEN :from AND :to',
-                values: {
+            const params = {
+                TableName: this.tableName,
+                FilterExpression: 'contains(pk, :search) AND sk BETWEEN :from AND :to',
+                ExpressionAttributeValues: {
                     ':search': `${companyId}_${consumptionSiteId}`,
                     ':from': fromSk,
                     ':to': toSk
                 }
-            });
+            };
+            const { Items } = await docClient.send(new ScanCommand(params));
+            return Items || [];
         } catch (error) {
             logger.error('[AllocationDAL] GetByConsumptionSite Error:', error);
             throw error;
@@ -83,16 +98,22 @@ class AllocationDAL extends BaseDAL {
         try {
             this.validateSortKey(sk);
             const pk = this.generatePK(companyId, productionSiteId, consumptionSiteId);
-            return await this.deleteItem({ pk, sk });
+            const params = {
+                TableName: this.tableName,
+                Key: { pk, sk },
+                ReturnValues: 'ALL_OLD'
+            };
+            const result = await docClient.send(new DeleteCommand(params));
+            return result.Attributes;
         } catch (error) {
             logger.error('[AllocationDAL] Delete Error:', error);
             throw error;
         }
     }
 
-    // Scan all items in the table (for report page, no filter)
     async scanAll() {
-        return await this.scanTable();
+        const { Items } = await docClient.send(new ScanCommand({ TableName: this.tableName }));
+        return Items || [];
     }
 
     async getAllAllocations() {
@@ -104,10 +125,9 @@ class AllocationDAL extends BaseDAL {
         }
     }
 
-    // Get all allocations without any month filter for report calculations
     async getAllAllocatedUnits() {
         try {
-            const items = await this.scanTable();
+            const items = await this.scanAll();
             return items.map(item => ({
                 ...item,
                 c1: Number(item.c1 || 0),

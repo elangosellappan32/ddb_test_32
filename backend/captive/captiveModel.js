@@ -1,23 +1,6 @@
-const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
-const { 
-    DynamoDBDocumentClient, 
-    PutCommand, 
-    QueryCommand, 
-    UpdateCommand, 
-    DeleteCommand 
-} = require('@aws-sdk/lib-dynamodb');
+const { PutCommand, QueryCommand, UpdateCommand, DeleteCommand } = require('@aws-sdk/lib-dynamodb');
 const TableNames = require('../constants/tableNames');
-
-// Configure DynamoDB client
-const client = new DynamoDBClient({
-    region: 'local',
-    endpoint: 'http://localhost:8000',
-    credentials: {
-        accessKeyId: 'local',
-        secretAccessKey: 'local'
-    }
-});
-const docClient = DynamoDBDocumentClient.from(client);
+const docClient = require('../utils/db');
 
 // Create a new Captive entry
 exports.createCaptiveEntry = async (generatorCompanyId, shareholderCompanyId, effectiveFrom, shareholdingPercentage) => {
@@ -61,18 +44,8 @@ exports.getCaptiveEntriesByGenerator = async (generatorCompanyId) => {
 
 // Get Captive entries by Shareholder Company ID
 exports.getCaptiveEntriesByShareholder = async (shareholderCompanyId) => {
-    const params = {
-        TableName: TableNames.CAPTIVE,
-        IndexName: 'shareholderCompanyId-index', // Note: This requires a GSI which we removed
-        KeyConditionExpression: 'shareholderCompanyId = :shareholderId',
-        ExpressionAttributeValues: {
-            ':shareholderId': shareholderCompanyId
-        }
-    };
-
     try {
-        // Since we removed the GSI, this method will need to be modified
-        // For now, it will do a full table scan, which is not efficient
+        // Since we removed the GSI, this method will do a full table scan
         const { Items } = await docClient.send(new QueryCommand({
             TableName: TableNames.CAPTIVE,
             FilterExpression: 'shareholderCompanyId = :shareholderId',

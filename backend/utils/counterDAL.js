@@ -1,18 +1,7 @@
-const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
-const { 
-    DynamoDBDocumentClient, 
-    UpdateCommand,
-    GetCommand
-} = require('@aws-sdk/lib-dynamodb');
+const { UpdateCommand, GetCommand } = require('@aws-sdk/lib-dynamodb');
 const TableNames = require('../constants/tableNames');
 const logger = require('./logger');
-
-const client = new DynamoDBClient({
-    region: 'local',
-    endpoint: 'http://localhost:8000'
-});
-
-const docClient = DynamoDBDocumentClient.from(client);
+const docClient = require('./db');
 
 const getCurrentValue = async (counterId) => {
     try {

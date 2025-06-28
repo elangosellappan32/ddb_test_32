@@ -1,30 +1,12 @@
-const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
-const { 
-    DynamoDBDocumentClient, 
-    PutCommand,
-    GetCommand,
-    QueryCommand,
-    UpdateCommand,
-    DeleteCommand,
-    ScanCommand
-} = require('@aws-sdk/lib-dynamodb');
+const { PutCommand, GetCommand, QueryCommand, UpdateCommand, DeleteCommand, ScanCommand } = require('@aws-sdk/lib-dynamodb');
 const TableNames = require('../constants/tableNames');
 const logger = require('../utils/logger');
+const docClient = require('../utils/db');
 
 class BankingDAL {
     constructor() {
-        try {
-            const client = new DynamoDBClient({
-                endpoint: process.env.DYNAMODB_ENDPOINT || 'http://localhost:8000',
-                maxAttempts: 3
-            });
-            this.docClient = DynamoDBDocumentClient.from(client);
-            this.tableName = TableNames.BANKING;
-            this.validateTable();
-        } catch (error) {
-            logger.error('Failed to initialize DynamoDB client:', error);
-            throw new Error('Database connection failed');
-        }
+        this.docClient = docClient;
+        this.tableName = TableNames.BANKING;
     }
 
     async validateTable() {

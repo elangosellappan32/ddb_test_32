@@ -166,10 +166,13 @@ const Consumption = () => {
 
   // Handle view click
   const handleViewClick = useCallback((site) => {
-    // Navigate to the site details page or show details in a dialog
-    // For now, we'll just log it since we don't have a details page
-    console.log('Viewing site:', site);
-  }, []);
+    // Navigate to the site details page
+    if (site?.companyId && site?.consumptionSiteId) {
+      navigate(`/consumption/${site.companyId}/${site.consumptionSiteId}`);
+    } else {
+      enqueueSnackbar('Site information is incomplete for navigation', { variant: 'error' });
+    }
+  }, [navigate, enqueueSnackbar]);
 
   // Handle delete click
   const handleDeleteClick = useCallback(async (site) => {

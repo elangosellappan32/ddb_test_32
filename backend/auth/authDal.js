@@ -1,29 +1,13 @@
-const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
-const { 
-    DynamoDBDocumentClient, 
-    ScanCommand,
-    PutCommand,
-    UpdateCommand,
-    QueryCommand,
-    GetCommand
-} = require('@aws-sdk/lib-dynamodb');
+const { ScanCommand, PutCommand, UpdateCommand, QueryCommand, GetCommand } = require('@aws-sdk/lib-dynamodb');
 const logger = require('../utils/logger');
+const docClient = require('../utils/db');
 
 class AuthDAL {
     constructor() {
-        try {
-            const client = new DynamoDBClient({
-                endpoint: process.env.DYNAMODB_ENDPOINT || 'http://localhost:8000',
-                maxAttempts: 3
-            });
-            this.docClient = DynamoDBDocumentClient.from(client);
-            this.userTable = 'UserTable';
-            this.roleTable = 'RoleTable';
-            this.tokenTable = 'TokenTable';
-        } catch (error) {
-            logger.error('AuthDAL initialization error:', error);
-            throw error;
-        }
+        this.docClient = docClient;
+        this.userTable = 'UserTable';
+        this.roleTable = 'RoleTable';
+        this.tokenTable = 'TokenTable';
     }
 
     async validateTables() {

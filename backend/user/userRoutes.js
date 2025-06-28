@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { authenticateToken } = require('../middleware/authorization');
-const { getUserById } = require('../controllers/userController');
+const { getUserById } = require('./userController');
 const logger = require('../utils/logger');
 
 /**

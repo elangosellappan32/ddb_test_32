@@ -9,7 +9,7 @@ const errorHandler = require('./middleware/errorHandler');
 
 // Import routes
 const authRoutes = require('./auth/authRoutes');
-const userRoutes = require('./routes/userRoutes');
+const userRoutes = require('./user/userRoutes');
 const productionSiteRoutes = require('./productionSite/productionSiteRoutes');
 const productionUnitRoutes = require('./productionUnit/productionUnitRoutes');
 const productionChargeRoutes = require('./productionCharge/productionChargeRoutes');

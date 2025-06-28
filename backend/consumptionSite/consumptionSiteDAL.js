@@ -1,4 +1,3 @@
-const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { 
     PutCommand,
     GetCommand,
