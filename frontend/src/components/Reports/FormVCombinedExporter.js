@@ -120,7 +120,7 @@ const FormVCombinedExporter = ({
       const [formVAResponse, formVBResponse, consumptionSitesResponse] = await Promise.all([
         fetchFormVAData(financialYear),
         fetchFormVBData(financialYear),
-        fetchConsumptionSites() // Add this API call to fetch consumption sites
+        fetchConsumptionSites()
       ]);
 
       // Validate responses
@@ -139,7 +139,7 @@ const FormVCombinedExporter = ({
         consumptionSite: consumptionSitesMap.get(metric.consumptionSiteId)
       }));
 
-      // Update the formVBData with enhanced metrics
+      // Use the enhanced formVBData for further processing
       const formVBData = {
         ...formVBResponse.data,
         siteMetrics: enhancedSiteMetrics
@@ -243,9 +243,7 @@ const FormVCombinedExporter = ({
       XLSX.utils.book_append_sheet(wb, formVASheet, 'Form V-A');
 
       // --- Prepare Form V-B Sheet ---
-      const formVBData = formVBResponse.data;
-      
-      // Validate Form V-B data
+      // Use the enhanced formVBData here
       if (!formVBData?.siteMetrics?.length) {
         throw new Error('No site metrics found for Form V-B');
       }

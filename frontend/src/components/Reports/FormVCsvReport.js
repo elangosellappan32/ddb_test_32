@@ -80,16 +80,7 @@ const FormVCsvReport = ({
         let totalPermittedMinus10 = 0;
         let totalPermittedPlus10 = 0;
         let totalActual = 0;
-        
-        // Add auxiliary consumption as first row
-        const auxiliaryRow = [
-          '', // Empty for Sl.No.
-          'Annual Auxiliary Consumption (MUs)', // Description
-          '', '', '', '', // Empty for other columns
-          formatNumber(totalAuxiliary, 0), // Auxiliary value
-          '', '', '', '', '', '', '' // Empty for remaining columns
-        ];
-        csvContent += auxiliaryRow.join(',') + '\n\n';
+        let totalNormsMet = 0;
 
         // Add data rows
         siteMetrics.forEach((site, index) => {
@@ -103,7 +94,7 @@ const FormVCsvReport = ({
           const permittedPlus10 = Number(site.permittedConsumption?.plus10) || 0;
           const actual = Number(site.actualConsumption) || 0;
           const normsMet = site.consumptionNormsMet ? 'Yes' : 'No';
-          
+
           // Update totals
           totalEquityShares += equityShares;
           totalOwnership += ownership;
@@ -114,16 +105,17 @@ const FormVCsvReport = ({
           totalPermittedMinus10 += permittedMinus10;
           totalPermittedPlus10 += permittedPlus10;
           totalActual += actual;
+          if (site.consumptionNormsMet) totalNormsMet += 1;
 
-          // Add row with proper formatting for pro-rata column (skip auxiliary column)
+          // Add row
           const row = [
             index + 1,
             `"${site.siteName || site.name || 'Unnamed Site'}"`,
             formatNumber(equityShares, 0),
-            formatPercentage(ownership / 100), // Convert from percentage to decimal
-            'minimum 51%', // Fixed text for pro rata basis column
+            formatPercentage(ownership), // Already a percentage
+            'minimum 51%',
             formatNumber(generation, 0),
-            '', // Empty for auxiliary column (shown at top)
+            formatNumber(auxiliary, 0),
             formatNumber(criteria, 0),
             formatNumber(permittedWithZero, 0),
             formatNumber(permittedMinus10, 0),
@@ -136,74 +128,54 @@ const FormVCsvReport = ({
 
         // Add totals row with proper alignment
         const avgOwnership = siteMetrics.length > 0 ? totalOwnership / siteMetrics.length : 0;
-        
+        let allNormsMet = totalNormsMet === siteMetrics.length ? 'Yes' :
+                          totalNormsMet === 0 ? 'No' : 'Partial';
+
         const totalRow = [
           'Total',
           '',
           formatNumber(totalEquityShares, 0),
-          formatPercentage(avgOwnership / 100), // Show average ownership
-          '', // Empty for pro-rata column in total row
+          formatPercentage(avgOwnership), // Already a percentage
+          '',
           formatNumber(totalGeneration, 0),
-          '', // Empty for auxiliary column (shown at top)
+          formatNumber(totalAuxiliary, 0),
           formatNumber(totalCriteria, 0),
           formatNumber(totalPermittedWithZero, 0),
           formatNumber(totalPermittedMinus10, 0),
           formatNumber(totalPermittedPlus10, 0),
           formatNumber(totalActual, 0),
-          '' // Empty for norms met column
+          `"${allNormsMet}"`
         ];
         csvContent += totalRow.join(',') + '\n';
 
       } else {
         // --- Form V-A ---
-        csvContent = 'FORMAT V-A\n';
-        csvContent += `Financial Year: ${financialYear}\n\n`;
-        
-        // Headers
-        csvContent += 'Sl. No.,Particulars,Energy in Units\n';
-        
+        // Build headers and subheaders for a structured table
+        const headers = [
+          ['FORMAT V-A'],
+          ['Statement showing compliance to the requirement of proportionality of consumption for Captive Status'],
+          [],
+          [`Financial Year: ${financialYear}`],
+          [],
+          [
+            'Sl. No.',
+            'Particulars',
+            'Energy in Units'
+          ]
+        ];
         // Data rows
         const rows = [
-          { 
-            id: 1, 
-            particulars: 'Total Generated units of a generating plant / Station identified for captive use',
-            value: formatNumber(data.totalGeneratedUnits || 0, 0)
-          },
-          { 
-            id: 2, 
-            particulars: 'Less : Auxiliary Consumption in the above in units',
-            value: formatNumber(data.auxiliaryConsumption || 0, 0)
-          },
-          { 
-            id: 3, 
-            particulars: 'Net units available for captive consumption (Aggregate generation for captive use)',
-            value: formatNumber(data.aggregateGeneration || 0, 0)
-          },
-          { 
-            id: 4, 
-            particulars: '51% of aggregate generation available for captive consumption in units',
-            value: formatNumber(data.percentage51 || 0, 0)
-          },
-          { 
-            id: 5, 
-            particulars: 'Actual Adjusted / Consumed units by the captive users',
-            value: formatNumber(data.totalAllocatedUnits || 0, 0)
-          },
-          { 
-            id: 6, 
-            particulars: 'Percentage of actual adjusted / consumed units by the captive users with respect to aggregate generation for captive use',
-            value: formatPercentage((data.percentageAdjusted || 0) / 100) // Convert from decimal to percentage
-          }
+          [1, 'Total Generated units of a generating plant / Station identified for captive use', formatNumber(data.totalGeneratedUnits || 0, 0)],
+          [2, 'Less : Auxiliary Consumption in the above in units', formatNumber(data.auxiliaryConsumption || 0, 0)],
+          [3, 'Net units available for captive consumption (Aggregate generation for captive use)', formatNumber(data.aggregateGeneration || 0, 0)],
+          [4, '51% of aggregate generation available for captive consumption in units', formatNumber(data.percentage51 || 0, 0)],
+          [5, 'Actual Adjusted / Consumed units by the captive users', formatNumber(data.totalAllocatedUnits || 0, 0)],
+          [6, 'Percentage of actual adjusted / consumed units by the captive users with respect to aggregate generation for captive use', formatPercentage((data.percentageAdjusted || 0) / 100)]
         ];
-        
-        // Add data rows to CSV
-        rows.forEach(row => {
-          csvContent += [
-            row.id,
-            `"${row.particulars}"`,
-            row.value
-          ].join(',') + '\n';
-        });
+        // Combine all rows
+        const allRows = [...headers, ...rows];
+        // Convert to CSV string
+        csvContent = allRows.map(row => row.map(cell => `"${cell ?? ''}"`).join(',')).join('\r\n');
       }
   
       // Create and trigger download

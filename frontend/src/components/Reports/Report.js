@@ -759,22 +759,7 @@ const AllocationReport = () => {
                       <TableCell align="center" sx={{ fontFamily: 'monospace' }}>{row.shares.ownership}</TableCell>
                       <TableCell align="center" sx={{ color: 'text.secondary' }}>{row.proRata}</TableCell>
                       <TableCell align="right" sx={{ fontFamily: 'monospace' }}>{row.generation}</TableCell>
-                      {index === 0 ? (
-                        <TableCell 
-                          rowSpan={prepareForm5BData()?.rows.length + 1} 
-                          align="center" 
-                          sx={{ 
-                            fontFamily: 'monospace',
-                            fontWeight: 700,
-                            fontSize: '1.1em',
-                            backgroundColor: '#f8f9fa',
-                            border: '1px solid #dee2e6',
-                            verticalAlign: 'middle'
-                          }}
-                        >
-                          {prepareForm5BData()?.totals.auxiliary}
-                        </TableCell>
-                      ) : null}
+                      <TableCell align="right" sx={{ fontFamily: 'monospace' }}>{row.auxiliary}</TableCell>
                       <TableCell align="right" sx={{ fontFamily: 'monospace' }}>{row.criteria}</TableCell>
                       <TableCell align="right" sx={{ fontFamily: 'monospace' }}>{row.permittedConsumption.withZero}</TableCell>
                       <TableCell align="right" sx={{ fontFamily: 'monospace' }}>{row.permittedConsumption.minus10}</TableCell>
