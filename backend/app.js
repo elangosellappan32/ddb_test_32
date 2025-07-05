@@ -62,15 +62,16 @@ app.use(helmet());
 
 // CORS configuration
 const corsOptions = {
-    origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+    origin: [
+        'http://localhost:3000',
+        'http://striotestcheck.work.gd',
+        'https://striotestcheck.work.gd'
+    ],
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'Cache-Control', 'Pragma', 'Expires'],
-    exposedHeaders: ['Content-Length', 'X-Foo', 'X-Bar'],
-    maxAge: 600 // Cache preflight request for 10 minutes
+    allowedHeaders: ['Content-Type', 'Authorization']
 };
 
-// Apply CORS with the options
 app.use(cors(corsOptions));
 
 // Handle preflight requests
