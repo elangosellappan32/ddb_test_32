@@ -713,13 +713,11 @@ const AllocationReport = () => {
                     </TableCell>
                     <TableCell rowSpan={2} align="center">% to be consumed on pro rata basis by each captive user</TableCell>
                     <TableCell rowSpan={2} align="center">100% annual generation in MUs (x)</TableCell>
-                    <TableCell rowSpan={2} align="center">
-                      <Box>Annual Auxiliary</Box>
-                      <Box>consumption in MUs (y)</Box>
+                    <TableCell rowSpan={2} align="center" sx={{ backgroundColor: '#f0f4f8' }}>
+                      Annual Auxiliary<br />consumption in MUs (y)
                     </TableCell>
                     <TableCell rowSpan={2} align="center">
-                      <Box>Generation considered to verify</Box>
-                      <Box>consumption criteria in MUs (x-y)*51%</Box>
+                      Generation considered to verify<br />consumption criteria in MUs (x-y)*51%
                     </TableCell>
                     <TableCell colSpan={3} align="center" sx={{ backgroundColor: '#f0f4f8' }}>
                       Permitted consumption as per norms in MUs
@@ -737,9 +735,9 @@ const AllocationReport = () => {
                   <TableRow>
                     <TableCell className="header-cell" align="center">As per share certificates as on 31st March</TableCell>
                     <TableCell className="header-cell" align="center">% of ownership through shares in Company/unit of CGP</TableCell>
-                    <TableCell className="header-cell" align="center">with 0% variation</TableCell>
-                    <TableCell className="header-cell" align="center">-10%</TableCell>
-                    <TableCell className="header-cell" align="center">+10%</TableCell>
+                    <TableCell className="header-cell" align="center" sx={{ fontWeight: 700, color: 'primary.main' }}>{prepareForm5BData().summary.totalPermitted || 0}<br /><span style={{ fontWeight: 400, color: '#888', fontSize: '0.85em' }}>with 0% variation</span></TableCell>
+                    <TableCell className="header-cell" align="center" sx={{ fontWeight: 700, color: 'primary.main' }}>{prepareForm5BData().summary.totalPermittedMinus10 || 0}<br /><span style={{ fontWeight: 400, color: '#888', fontSize: '0.85em' }}>-10%</span></TableCell>
+                    <TableCell className="header-cell" align="center" sx={{ fontWeight: 700, color: 'primary.main' }}>{prepareForm5BData().summary.totalPermittedPlus10 || 0}<br /><span style={{ fontWeight: 400, color: '#888', fontSize: '0.85em' }}>+10%</span></TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -759,11 +757,21 @@ const AllocationReport = () => {
                       <TableCell align="center" sx={{ fontFamily: 'monospace' }}>{row.shares.ownership}</TableCell>
                       <TableCell align="center" sx={{ color: 'text.secondary' }}>{row.proRata}</TableCell>
                       <TableCell align="right" sx={{ fontFamily: 'monospace' }}>{row.generation}</TableCell>
-                      <TableCell align="right" sx={{ fontFamily: 'monospace' }}>{row.auxiliary}</TableCell>
+                      {index === 0 && (
+                        <TableCell align="center" sx={{ fontFamily: 'monospace', backgroundColor: '#f0f4f8', fontWeight: 700 }} rowSpan={prepareForm5BData().rows.length}>
+                          {prepareForm5BData().summary.auxiliaryConsumption}
+                        </TableCell>
+                      )}
                       <TableCell align="right" sx={{ fontFamily: 'monospace' }}>{row.criteria}</TableCell>
-                      <TableCell align="right" sx={{ fontFamily: 'monospace' }}>{row.permittedConsumption.withZero}</TableCell>
-                      <TableCell align="right" sx={{ fontFamily: 'monospace' }}>{row.permittedConsumption.minus10}</TableCell>
-                      <TableCell align="right" sx={{ fontFamily: 'monospace' }}>{row.permittedConsumption.plus10}</TableCell>
+                      {index === 0 && (
+                        <TableCell align="center" sx={{ fontFamily: 'monospace', backgroundColor: '#f0f4f8', fontWeight: 700 }} rowSpan={prepareForm5BData().rows.length} colSpan={3}>
+                          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.5 }}>
+                            <span>{prepareForm5BData().summary.totalPermitted} <span style={{ color: '#888', fontSize: '0.85em' }}>(0% variation)</span></span>
+                            <span>{prepareForm5BData().summary.totalPermittedMinus10} <span style={{ color: '#888', fontSize: '0.85em' }}>(-10%)</span></span>
+                            <span>{prepareForm5BData().summary.totalPermittedPlus10} <span style={{ color: '#888', fontSize: '0.85em' }}>(+10%)</span></span>
+                          </Box>
+                        </TableCell>
+                      )}
                       <TableCell align="right" sx={{ 
                         fontFamily: 'monospace',
                         fontWeight: 500,
@@ -857,76 +865,76 @@ const AllocationReport = () => {
             )}
           </Table>
         </StyledTableContainer>
-      </Paper>
 
-      <Dialog
-        open={dialogOpen}
-        TransitionComponent={Transition}
-        keepMounted
-        onClose={handleCloseDialog}
-        PaperProps={{
-          sx: {
-            borderRadius: '12px',
-            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.1)',
-            p: 1
-          }
-        }}
-      >
-        <DialogTitle sx={{ 
-          py: 2,
-          px: 3,
-          fontSize: '1.25rem',
-          fontWeight: 600
-        }}>
-          {dialogConfig.title}
-        </DialogTitle>
-        <DialogContent sx={{ py: 2, px: 3 }}>
-          <DialogContentText sx={{ color: 'text.secondary' }}>
-            {dialogConfig.content}
-          </DialogContentText>
-        </DialogContent>
-        <DialogActions sx={{ p: 2 }}>
-          <Button 
-            onClick={handleCloseDialog} 
-            sx={{ 
-              fontWeight: 500,
-              textTransform: 'none',
-              px: 3
-            }}
-          >
-            Cancel
-          </Button>
-          {dialogConfig.type === 'download' && (
-            <Button 
-              onClick={() => dialogConfig.action()} 
-              variant="contained"
-              sx={{ 
-                fontWeight: 600,
-                textTransform: 'none',
-                px: 3,
-                borderRadius: '8px'
-              }}
-            >
-              Download
-            </Button>
-          )}
-          {dialogConfig.type === 'error' && (
+        <Dialog
+          open={dialogOpen}
+          TransitionComponent={Transition}
+          keepMounted
+          onClose={handleCloseDialog}
+          PaperProps={{
+            sx: {
+              borderRadius: '12px',
+              boxShadow: '0 8px 32px rgba(0, 0, 0, 0.1)',
+              p: 1
+            }
+          }}
+        >
+          <DialogTitle sx={{ 
+            py: 2,
+            px: 3,
+            fontSize: '1.25rem',
+            fontWeight: 600
+          }}>
+            {dialogConfig.title}
+          </DialogTitle>
+          <DialogContent sx={{ py: 2, px: 3 }}>
+            <DialogContentText sx={{ color: 'text.secondary' }}>
+              {dialogConfig.content}
+            </DialogContentText>
+          </DialogContent>
+          <DialogActions sx={{ p: 2 }}>
             <Button 
               onClick={handleCloseDialog} 
-              variant="contained"
-              color="error"
               sx={{ 
-                fontWeight: 600,
+                fontWeight: 500,
                 textTransform: 'none',
-                px: 3,
-                borderRadius: '8px'
+                px: 3
               }}
             >
-              OK
+              Cancel
             </Button>
-          )}
-        </DialogActions>
-      </Dialog>
+            {dialogConfig.type === 'download' && (
+              <Button 
+                onClick={() => dialogConfig.action()} 
+                variant="contained"
+                sx={{ 
+                  fontWeight: 600,
+                  textTransform: 'none',
+                  px: 3,
+                  borderRadius: '8px'
+                }}
+              >
+                Download
+              </Button>
+            )}
+            {dialogConfig.type === 'error' && (
+              <Button 
+                onClick={handleCloseDialog} 
+                variant="contained"
+                color="error"
+                sx={{ 
+                  fontWeight: 600,
+                  textTransform: 'none',
+                  px: 3,
+                  borderRadius: '8px'
+                }}
+              >
+                OK
+              </Button>
+            )}
+          </DialogActions>
+        </Dialog>
+      </Paper>
     </Box>
   );
 };

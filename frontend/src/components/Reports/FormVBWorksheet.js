@@ -48,20 +48,23 @@ const FormVBWorksheet = ({ data }) => {
     <TableContainer component={Paper} sx={{ mb: 4, mt: 2 }}>
       <Table size="small">
         <TableHead>
-          <TableRow>            <StyledTableCell isheader="true" rowSpan={2} align="center">Sl. No.</StyledTableCell>
+          <TableRow>
+            <StyledTableCell isheader="true" rowSpan={2} align="center">Sl. No.</StyledTableCell>
             <StyledTableCell isheader="true" rowSpan={2} align="center">Name of the Consumption Site</StyledTableCell>
             <StyledTableCell isheader="true" colSpan={2} align="center">Equity Pattern</StyledTableCell>
             <StyledTableCell isheader="true" rowSpan={2} align="center">% of annual generation to be consumed</StyledTableCell>
             <StyledTableCell isheader="true" rowSpan={2} align="center">100% annual generation in MUs (x)</StyledTableCell>
-            <StyledTableCell isheader="true" rowSpan={2} align="center">
-              <Box>Annual Auxiliary</Box>
-              <Box>consumption in MUs (y)</Box>
+            <StyledTableCell isheader="true" rowSpan={2} align="center" sx={{ backgroundColor: '#e3f2fd', fontWeight: 'bold' }}>
+              <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                <span>Annual Auxiliary</span>
+                <span>consumption in MUs (y)</span>
+              </Box>
             </StyledTableCell>
             <StyledTableCell isheader="true" rowSpan={2} align="center">
               <Box>Generation considered to verify</Box>
               <Box>consumption criteria in MUs (x-y)*51%</Box>
             </StyledTableCell>
-            <StyledTableCell isheader="true" colSpan={3} align="center" sx={{ backgroundColor: '#f0f4f8' }}>
+            <StyledTableCell isheader="true" colSpan={3} align="center" sx={{ backgroundColor: '#f0f4f8', fontWeight: 'bold', borderLeft: '2px solid #90caf9', borderRight: '2px solid #90caf9' }}>
               Permitted consumption as per norms in MUs
             </StyledTableCell>
             <StyledTableCell isheader="true" rowSpan={2} align="center">
@@ -74,11 +77,12 @@ const FormVBWorksheet = ({ data }) => {
               <Box>norms met</Box>
             </StyledTableCell>
           </TableRow>
-          <TableRow>            <StyledTableCell isheader="true" align="center">As per share certificates as on 31st March</StyledTableCell>
+          <TableRow>
+            <StyledTableCell isheader="true" align="center">As per share certificates as on 31st March</StyledTableCell>
             <StyledTableCell isheader="true" align="center">% of ownership through shares in Company/unit of CGP</StyledTableCell>
-            <StyledTableCell isheader="true" align="center">with 0% variation</StyledTableCell>
-            <StyledTableCell isheader="true" align="center">-10%</StyledTableCell>
-            <StyledTableCell isheader="true" align="center">+10%</StyledTableCell>
+            <StyledTableCell isheader="true" align="center" sx={{ backgroundColor: '#f0f4f8', borderLeft: '2px solid #90caf9' }}>with 0% variation</StyledTableCell>
+            <StyledTableCell isheader="true" align="center" sx={{ backgroundColor: '#f0f4f8' }}>-10%</StyledTableCell>
+            <StyledTableCell isheader="true" align="center" sx={{ backgroundColor: '#f0f4f8', borderRight: '2px solid #90caf9' }}>+10%</StyledTableCell>
           </TableRow>
         </TableHead>
         <TableBody>
