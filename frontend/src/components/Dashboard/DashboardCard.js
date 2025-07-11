@@ -121,7 +121,7 @@ const DashboardCard = () => {
                 <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
                     <DashboardIcon sx={{ mr: 2, color: 'primary.main' }} />
                     <Typography variant="h5" component="div">
-                        Production Overview
+                        Production 
                     </Typography>
                 </Box>
                 <Divider sx={{ my: 2 }} />

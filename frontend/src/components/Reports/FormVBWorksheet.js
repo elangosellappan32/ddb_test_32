@@ -65,7 +65,14 @@ const FormVBWorksheet = ({ data }) => {
               <Box>consumption criteria in MUs (x-y)*51%</Box>
             </StyledTableCell>
             <StyledTableCell isheader="true" colSpan={3} align="center" sx={{ backgroundColor: '#f0f4f8', fontWeight: 'bold', borderLeft: '2px solid #90caf9', borderRight: '2px solid #90caf9' }}>
-              Permitted consumption as per norms in MUs
+              <Box sx={{ display: 'flex', flexDirection: 'column' }}>
+                <Box>Permitted consumption as per norms in MUs</Box>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', mt: 0.5 }}>
+                  <span>With 0% variation</span>
+                  <span>-10%</span>
+                  <span>+10%</span>
+                </Box>
+              </Box>
             </StyledTableCell>
             <StyledTableCell isheader="true" rowSpan={2} align="center">
               <Box>Actual</Box>
@@ -80,9 +87,41 @@ const FormVBWorksheet = ({ data }) => {
           <TableRow>
             <StyledTableCell isheader="true" align="center">As per share certificates as on 31st March</StyledTableCell>
             <StyledTableCell isheader="true" align="center">% of ownership through shares in Company/unit of CGP</StyledTableCell>
-            <StyledTableCell isheader="true" align="center" sx={{ backgroundColor: '#f0f4f8', borderLeft: '2px solid #90caf9' }}>with 0% variation</StyledTableCell>
-            <StyledTableCell isheader="true" align="center" sx={{ backgroundColor: '#f0f4f8' }}>-10%</StyledTableCell>
-            <StyledTableCell isheader="true" align="center" sx={{ backgroundColor: '#f0f4f8', borderRight: '2px solid #90caf9' }}>+10%</StyledTableCell>
+            <StyledTableCell 
+              isheader="true" 
+              align="center" 
+              sx={{ 
+                backgroundColor: '#f0f4f8', 
+                borderLeft: '2px solid #90caf9',
+                fontWeight: 'normal',
+                fontSize: '0.85rem'
+              }}
+            >
+              With 0% variation
+            </StyledTableCell>
+            <StyledTableCell 
+              isheader="true" 
+              align="center" 
+              sx={{ 
+                backgroundColor: '#f0f4f8',
+                fontWeight: 'normal',
+                fontSize: '0.85rem'
+              }}
+            >
+              -10%
+            </StyledTableCell>
+            <StyledTableCell 
+              isheader="true" 
+              align="center" 
+              sx={{ 
+                backgroundColor: '#f0f4f8', 
+                borderRight: '2px solid #90caf9',
+                fontWeight: 'normal',
+                fontSize: '0.85rem'
+              }}
+            >
+              +10%
+            </StyledTableCell>
           </TableRow>
         </TableHead>
         <TableBody>

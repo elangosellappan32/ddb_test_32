@@ -23,19 +23,43 @@ const lapseRoutes = require('./lapse/lapseRoutes');
 const captiveRoutes = require('./captive/captiveRoutes');
 const companyRoutes = require('./company/companyRoutes');
 const siteAccessRoutes = require('./routes/siteAccessRoutes');
+const formRoutes = require('./routes/formRoutes');
 const app = express();
 const PORT = process.env.PORT || 3333;
 
 // Security middleware
 app.use(helmet());
 
-// CORS configuration
-app.use(cors({
-    origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+// CORS configuration for development
+const corsOptions = {
+    origin: '*', // Allow all origins in development
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+    exposedHeaders: ['Content-Length', 'X-Foo', 'X-Bar'],
     credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE'],
-    allowedHeaders: ['Content-Type', 'Authorization']
-}));
+    optionsSuccessStatus: 200 // Some legacy browsers (IE11, various SmartTVs) choke on 204
+};
+
+app.use(cors(corsOptions));
+
+// Handle preflight requests
+app.options('*', cors(corsOptions));
+
+// Add headers before the routes are defined
+app.use(function (req, res, next) {
+    // Allow all origins in development
+    res.header('Access-Control-Allow-Origin', '*');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+    res.header('Access-Control-Allow-Credentials', 'true');
+    
+    // Handle preflight
+    if (req.method === 'OPTIONS') {
+        return res.status(200).end();
+    }
+    
+    next();
+});
 
 // Body parsing middleware
 app.use(bodyParser.json());
@@ -58,6 +82,7 @@ app.use('/api/lapse', lapseRoutes);
 app.use('/api/captive', captiveRoutes);
 app.use('/api/company', companyRoutes);
 app.use('/api/site-access', siteAccessRoutes);
+app.use('/api/form', formRoutes);
 
 // Error handling
 app.use(errorHandler);

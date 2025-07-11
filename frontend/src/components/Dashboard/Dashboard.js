@@ -194,11 +194,11 @@ const Dashboard = () => {
       )}
 
       <Grid container spacing={3}>
-        {/* Production Overview Card */}
+        {/* Production  Card */}
         <Grid item xs={12} md={6} lg={3}>
           <DashboardCard
             icon={FactoryIcon}
-            title="Production Overview"
+            title="Production"
             color="primary"
             onClick={() => navigate('/production')}
             content={

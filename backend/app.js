@@ -21,6 +21,7 @@ const bankingRoutes = require('./banking/bankingRoutes');
 const lapseRoutes = require('./lapse/lapseRoutes');
 const captiveRoutes = require('./captive/captiveRoutes');
 const siteAccessRoutes = require('./routes/siteAccessRoutes');
+const reportRoutes = require('./routes/reportRoutes');
 
 const app = express();
 
@@ -133,6 +134,9 @@ app.use('/api/lapse', authenticateToken,
 app.use('/api/captive', authenticateToken,
     checkPermission('captive', 'READ'),
     captiveRoutes);
+    
+// Report routes (require authentication)
+app.use('/api/reports', authenticateToken, reportRoutes);
 
 console.log('All routes mounted with authorization');
 

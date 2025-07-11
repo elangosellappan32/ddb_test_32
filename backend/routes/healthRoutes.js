@@ -1,84 +1,82 @@
 const express = require('express');
 const router = express.Router();
 const packageJson = require('../package.json');
-const calculateFormVAMetrics = require('../services/formVACalculation');
-const calculateFormVBMetrics = require('../services/formVBCalculation');
+const { ListTablesCommand } = require('@aws-sdk/client-dynamodb');
+const docClient = require('../utils/db');
 const logger = require('../utils/logger');
 
 /**
- * Health check endpoint
- * Returns basic server status without database checks
+ * Test database connection
  */
-router.get('/', (req, res) => {
-    const serverInfo = {
-        status: 'up',
-        version: packageJson.version,
-        timestamp: new Date().toISOString(),
-        environment: process.env.NODE_ENV || 'development',
-        apiVersion: 'v1'
-    };
-
-    res.json(serverInfo);
-});
-
-// Define the /api/health/formva and formvb routes
-router.get('/formva', async (req, res) => {
+async function testDatabaseConnection() {
+    const startTime = Date.now();
     try {
-        const { financialYear } = req.query;
-        if (!financialYear) {
-            return res.status(400).json({
-                error: 'Bad Request',
-                message: 'financialYear query parameter is required'
-            });
-        }
-
-        // Validate financial year format (YYYY-YYYY)
-        if (!/^\d{4}-\d{4}$/.test(financialYear)) {
-            return res.status(400).json({
-                error: 'Bad Request',
-                message: 'Invalid financial year format. Expected: YYYY-YYYY'
-            });
-        }
-
-        const metrics = await calculateFormVAMetrics(financialYear);
-        res.json(metrics);
+        const command = new ListTablesCommand({});
+        const response = await docClient.send(command);
+        return {
+            status: 'connected',
+            tableCount: response.TableNames?.length || 0,
+            responseTime: `${Date.now() - startTime}ms`
+        };
     } catch (error) {
-        logger.error('[HealthRoutes] FormVA Error:', error);
-        res.status(500).json({ 
-            error: 'Internal Server Error',
-            message: error.message
+        logger.error('Database connection test failed', {
+            error: error.message,
+            stack: error.stack,
+            name: error.name,
+            code: error.code
         });
+        return {
+            status: 'error',
+            error: error.message,
+            code: error.code,
+            responseTime: `${Date.now() - startTime}ms`
+        };
     }
-});
+}
 
-router.get('/formvb', async (req, res) => {
+/**
+ * Health check endpoint
+ * Returns server status with database connection check
+ */
+router.get('/', async (req, res) => {
+    const startTime = Date.now();
+    
     try {
-        const { financialYear } = req.query;
-        if (!financialYear) {
-            return res.status(400).json({
-                error: 'Bad Request',
-                message: 'financialYear query parameter is required'
+        const dbStatus = await testDatabaseConnection();
+        const serverInfo = {
+            status: 'up',
+            version: packageJson.version,
+            timestamp: new Date().toISOString(),
+            environment: process.env.NODE_ENV || 'development',
+            apiVersion: 'v1',
+            database: dbStatus,
+            responseTime: `${Date.now() - startTime}ms`,
+            services: {
+                database: dbStatus.status === 'connected' ? 'up' : 'down'
+            }
+        };
+
+        // If database is down, return 503 Service Unavailable
+        if (dbStatus.status !== 'connected') {
+            return res.status(503).json({
+                ...serverInfo,
+                status: 'degraded',
+                message: 'Service degraded: Database connection failed'
             });
         }
 
-        // Validate financial year format (YYYY-YYYY)
-        if (!/^\d{4}-\d{4}$/.test(financialYear)) {
-            return res.status(400).json({
-                error: 'Bad Request',
-                message: 'Invalid financial year format. Expected: YYYY-YYYY'
-            });
-        }
-
-        const metrics = await calculateFormVBMetrics(financialYear);
-        res.json({
-            success: true,
-            data: metrics
-        });
+        res.json(serverInfo);
     } catch (error) {
-        logger.error('[HealthRoutes] FormVB Error:', error);
-        res.status(500).json({ 
-            error: 'Internal Server Error',
-            message: error.message
+        logger.error('Health check failed', {
+            error: error.message,
+            stack: error.stack
+        });
+        
+        res.status(500).json({
+            status: 'error',
+            message: 'Health check failed',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined,
+            timestamp: new Date().toISOString()
         });
     }
 });

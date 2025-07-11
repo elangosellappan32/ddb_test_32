@@ -1,5 +1,18 @@
-export const API_BASE_URL = process.env.REACT_APP_API_URL || '/api';
+// Get API base URL from environment variable with fallback tobuld it relative path
+const ENV_API_URL = process.env.REACT_APP_API_URL || '';
 
+export const API_BASE_URL = ENV_API_URL.endsWith('/api') 
+  ? ENV_API_URL 
+  : ENV_API_URL ? `${ENV_API_URL}/api` : '/api';
+
+// Log the API configuration in development
+if (process.env.NODE_ENV === 'development') {
+  console.log('API Configuration:', {
+    NODE_ENV: process.env.NODE_ENV,
+    REACT_APP_API_URL: process.env.REACT_APP_API_URL,
+    API_BASE_URL
+  });
+}
 export const API_CONFIG = {
     BASE_URL: API_BASE_URL,
     TIMEOUT: 10000,

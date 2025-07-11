@@ -1,5 +1,5 @@
 import React, { Suspense, lazy } from "react";
-import { Routes, Route, Navigate, BrowserRouter as Router } from "react-router-dom";
+import { Routes, Route, Navigate, BrowserRouter } from "react-router-dom";
 import { ThemeProvider, CircularProgress, Box, CssBaseline } from '@mui/material';
 import { SnackbarProvider } from 'notistack';
 import { LocalizationProvider } from '@mui/x-date-pickers';
@@ -14,7 +14,6 @@ import Login from './components/Login';
 import Layout from "./Layout";
 import ErrorBoundary from "./components/ErrorBoundary";
 import theme from './theme';
-
 // Lazy load components
 const Dashboard = lazy(() => import("./components/Dashboard/Dashboard"));
 const Production = lazy(() => import("./components/Production/Production")); 
@@ -23,6 +22,7 @@ const Consumption = lazy(() => import("./components/Consumption/Consumption"));
 const ConsumptionSiteDetails = lazy(() => import("./components/Consumption/ConsumptionSiteDetails"));
 const Allocation = lazy(() => import("./components/Allocation/Allocation"));
 const Report = lazy(() => import("./components/Reports/Report"));
+const GraphicalReport = lazy(() => import("./components/GraphicalReport"));
 
 // Loading component for suspense fallback
 const LoadingFallback = () => (
@@ -67,6 +67,11 @@ const AppRoutes = () => {
               <Report/>
             </PrivateRoute>
           } />
+          <Route path="/graphical-report" element={
+            <PrivateRoute requiredResource="reports" requiredAction="READ">
+              <GraphicalReport />
+            </PrivateRoute>
+          } />
           <Route path="/allocation" element={
             <PrivateRoute requiredResource="allocation" requiredAction="READ">
               <Allocation />
@@ -82,7 +87,12 @@ const AppRoutes = () => {
 // Main App component
 function App() {
   return (
-    <Router>
+    <BrowserRouter
+      future={{
+        v7_startTransition: true,
+        v7_relativeSplatPath: true
+      }}
+    >
       <StyledEngineProvider injectFirst>
         <ThemeProvider theme={theme}>
           <CssBaseline />
@@ -99,7 +109,7 @@ function App() {
           </LocalizationProvider>
         </ThemeProvider>
       </StyledEngineProvider>
-    </Router>
+    </BrowserRouter>
   );
 }
 

@@ -29,7 +29,8 @@ import {
   Menu as MenuIcon,
   ChevronLeft as ChevronLeftIcon,
   AccountCircle as ProfileIcon,
-  AssignmentTurnedIn as AssignmentTurnedInIcon
+  AssignmentTurnedIn as AssignmentTurnedInIcon,
+  BarChart as BarChartIcon
 } from '@mui/icons-material';
 import { useAuth } from '../context/AuthContext';
 import { useNavigation } from '../context/NavigationContext';
@@ -70,9 +71,15 @@ const Navbar = () => {
       path: '/allocation',
       color: '#F44336' // Red
     },
+    {
+      icon: <BarChartIcon />, 
+      label: 'Graphical', 
+      path: '/graphical-report',
+      color: '#00B8D4' // Cyan
+    },
     { 
       icon: <ReportsIcon />, 
-      label: 'Reports', 
+      label: 'Compliance', 
       path: '/report',
       color: '#9C27B0' // Purple
     }
