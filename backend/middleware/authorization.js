@@ -57,6 +57,21 @@ const authenticateToken = async (req, res, next) => {
                 code: 'USER_NOT_FOUND'
             });
         }
+
+        // Attach user info to request object
+        req.user = {
+            username: user.username,
+            userId: user.userId || user.username,
+            role: user.role || 'user',
+            email: user.email,
+            // Add any other user properties needed by the application
+            ...(user.metadata || {}) // Include any additional metadata
+        };
+        
+        logger.debug('[Auth] User attached to request:', { 
+            username: req.user.username,
+            role: req.user.role 
+        });
         
         // Ensure user object has a valid userId
         if (!user.userId) {
@@ -94,7 +109,7 @@ const authenticateToken = async (req, res, next) => {
             userId: user.userId || user.username, // Use userId if available, fallback to username
             username: decoded.username,
             email: decoded.emailId || user.email,
-            role: decoded.role || user.role,
+            role: decoded.role || user.role || 'user',
             companyId: companyId,
             permissions: decoded.permissions || role?.permissions || {
                 'production': ['READ'],

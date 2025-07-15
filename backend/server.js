@@ -24,6 +24,7 @@ const captiveRoutes = require('./captive/captiveRoutes');
 const companyRoutes = require('./company/companyRoutes');
 const siteAccessRoutes = require('./routes/siteAccessRoutes');
 const formRoutes = require('./routes/formRoutes');
+const graphicalReportRoutes = require('./graphicalReport/graphicalReportRoutes');
 const app = express();
 const PORT = process.env.PORT || 3333;
 
@@ -83,6 +84,7 @@ app.use('/api/captive', captiveRoutes);
 app.use('/api/company', companyRoutes);
 app.use('/api/site-access', siteAccessRoutes);
 app.use('/api/form', formRoutes);
+app.use('/api/graphical-report', graphicalReportRoutes);
 
 // Error handling
 app.use(errorHandler);

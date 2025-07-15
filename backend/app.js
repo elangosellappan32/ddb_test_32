@@ -145,7 +145,16 @@ console.log('All routes mounted with authorization');
 // Error handling middleware
 app.use((err, req, res, next) => {
     logger.error('Error:', err);
-    
+
+    // Axios/network error handling for API proxy or fetch failures
+    if (err.isAxiosError || err.code === 'ECONNREFUSED' || err.code === 'ENOTFOUND') {
+        return res.status(502).json({
+            success: false,
+            message: 'Failed to connect to backend service or external API',
+            detail: process.env.NODE_ENV === 'development' ? err.message : undefined
+        });
+    }
+
     // Specific error handling
     if (err.name === 'ValidationError') {
         return res.status(400).json({

@@ -149,6 +149,20 @@ class AuthController {
             throw new Error('Invalid token');
         }
     }
+
+    /**
+     * Get all sites accessible by a user
+     * @param {Object} user - User object with username
+     * @returns {Promise<Array>} - Array of site objects
+     */
+    async getAccessibleSites(user) {
+        try {
+            return await this.authDal.getAccessibleSites(user);
+        } catch (error) {
+            logger.error('Error in getAccessibleSites:', error);
+            throw error;
+        }
+    }
 }
 
 module.exports = new AuthController();

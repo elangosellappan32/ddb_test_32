@@ -38,6 +38,7 @@
     "sanitize.css": "^13.0.0",
     "yup": "^1.6.1"
   },
+  "proxy": "http://localhost:3333",
   "devDependencies": {
     "@babel/core": "^7.23.7",
     "@babel/plugin-syntax-flow": "^7.23.3",

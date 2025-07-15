@@ -10,37 +10,69 @@ class SiteAccessService {
     }
 
     /**
-     * Fetches available sites of a specific type
-     * @param {string} siteType - Type of site ('production' or 'consumption')
-     * @returns {Promise<Array>} List of available sites
+     * Gets all accessible sites for the current user
+     * @param {string} siteType - Optional filter for site type ('production' or 'consumption')
+     * @returns {Promise<Array>} Array of accessible sites
      */
-    async getAvailableSites(siteType) {
+    async getAvailableSites(siteType = null) {
         try {
-            if (!['production', 'consumption'].includes(siteType)) {
-                throw new Error('Invalid site type. Must be either "production" or "consumption"');
-            }
-
             const response = await api.get(
-                API_CONFIG.ENDPOINTS.SITE_ACCESS.GET_AVAILABLE_SITES(siteType)
+                `${API_CONFIG.ENDPOINTS.SITE_ACCESS.BASE}/my-accessible-sites`
             );
 
-            if (!response?.data?.data) {
-                throw new Error('Invalid response format');
+            if (!response?.data?.success) {
+                throw new Error(response?.data?.message || 'Failed to fetch accessible sites');
             }
 
-            // Process and validate sites
-            const sites = response.data.data.map(site => ({
-                id: `${site.companyId}_${site[`${siteType}SiteId`]}`,
-                companyId: site.companyId,
-                [`${siteType}SiteId`]: site[`${siteType}SiteId`],
-                name: site.name || 'Unnamed Site',
-                type: site.type?.toLowerCase() || 'unknown',
-                location: site.location || 'Unknown Location',
-            }));
+            const { productionSites = [], consumptionSites = [] } = response.data.data || {};
+            
+            // Process sites based on the requested type
+            let sites = [];
+            
+            if (!siteType || siteType === 'production') {
+                sites = [
+                    ...sites,
+                    ...productionSites.map(site => {
+                        // If siteName already contains the company name, use it as is
+                        // Otherwise, format it as "Company Name - Site Name"
+                        const siteName = site.siteName || `Site ${site.siteId}`;
+                        const formattedName = siteName.includes(site.companyName) 
+                            ? siteName 
+                            : site.companyName 
+                                ? `${site.companyName} - ${siteName}`
+                                : siteName;
+
+                        return {
+                            id: `${site.companyId}_${site.siteId}`,
+                            companyId: site.companyId,
+                            productionSiteId: site.siteId,
+                            name: formattedName,
+                            type: 'production',
+                            location: site.location || `${site.district || ''}${site.district && site.state ? ', ' : ''}${site.state || ''}`.trim() || 'Location not specified',
+                            ...site  // Spread the rest of the site data
+                        };
+                    })
+                ];
+            }
+            
+            if (!siteType || siteType === 'consumption') {
+                sites = [
+                    ...sites,
+                    ...consumptionSites.map(site => ({
+                        id: `${site.companyId}_${site.siteId}`,
+                        companyId: site.companyId,
+                        consumptionSiteId: site.siteId,
+                        name: site.siteName || 'Unnamed Consumption Site',
+                        type: 'consumption',
+                        location: `${site.district}, ${site.state}`.trim() || 'Location not specified'
+                    }))
+                ];
+            }
 
             return sites;
         } catch (error) {
-            return handleApiError(error);
+            console.error('Error fetching accessible sites:', error);
+            throw error;
         }
     }
 
@@ -79,5 +111,9 @@ class SiteAccessService {
     }
 }
 
+// Export the class for static method access
+export { SiteAccessService };
+
+// Also export an instance for backward compatibility
 const siteAccessService = new SiteAccessService();
 export default siteAccessService;

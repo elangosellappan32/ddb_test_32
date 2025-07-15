@@ -21,7 +21,7 @@ const ALL_PERIODS = [...NON_PEAK_PERIODS, ...PEAK_PERIODS];
  * @param {Object[]} bankingUnits
  * @returns {Object} { allocations, bankingAllocations, lapseAllocations }
  */
-export function calculateAllocations({ productionUnits, consumptionUnits, bankingUnits }) {
+function calculateAllocations({ productionUnits, consumptionUnits, bankingUnits }) {
   const PEAK_PERIODS = ['c2', 'c3'];
   const NON_PEAK_PERIODS = ['c1', 'c4', 'c5'];
   const ALL_PERIODS = [...NON_PEAK_PERIODS, ...PEAK_PERIODS];
@@ -197,3 +197,7 @@ export function calculateAllocations({ productionUnits, consumptionUnits, bankin
 
   return { allocations, bankingAllocations, lapseAllocations };
 }
+
+module.exports = {
+  calculateAllocations
+};

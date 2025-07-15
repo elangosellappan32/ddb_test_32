@@ -4,14 +4,17 @@ const API_BASE_URL = 'http://localhost:3333/api';
 
 export const fetchFormVAData = async (financialYear) => {
   try {
-    const response = await axios.get(`${API_BASE_URL}/health/formva`, {
+    const response = await axios.get(`/api/form/formva`, {
       params: { financialYear },
     });
-    return response.data;
+    if (response.status === 200 && response.data) {
+      return response.data;
+    }
+    throw new Error('No data found for the selected financial year');
   } catch (error) {
     console.error('Error fetching Form V-A data:', error);
-    if (error.response?.status === 400) {
-      throw new Error(error.response.data.message || 'Invalid financial year format');
+    if (error.response?.status === 404) {
+      throw new Error('No Form V-A data found for the selected financial year');
     }
     throw new Error('Failed to fetch Form V-A data');
   }
@@ -19,7 +22,7 @@ export const fetchFormVAData = async (financialYear) => {
 
 export const fetchFormVBData = async (financialYear) => {
   try {
-    const response = await axios.get(`${API_BASE_URL}/health/formvb`, {
+    const response = await axios.get(`${API_BASE_URL}/form/formvb`, {
       params: { financialYear },
     });
     if (!response.data?.success) {

@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const logger = require('../utils/logger');
 const jwt = require('jsonwebtoken');
+const { authenticateToken } = require('../middleware/authorization');
 const AuthDAL = require('./authDal');
 const authDal = new AuthDAL();
 
@@ -121,6 +122,17 @@ router.post('/login', async (req, res) => {
             success: false,
             message: process.env.NODE_ENV === 'development' ? error.message : message
         });
+    }
+});
+
+// Get accessible sites for the current user
+router.get('/accessible-sites', authenticateToken, async (req, res) => {
+    try {
+        const sites = await authController.getAccessibleSites(req.user);
+        res.json({ success: true, data: sites });
+    } catch (error) {
+        logger.error('Error getting accessible sites:', error);
+        res.status(500).json({ success: false, message: error.message });
     }
 });
 

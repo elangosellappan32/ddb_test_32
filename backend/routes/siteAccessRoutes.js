@@ -4,7 +4,8 @@ const {
   getAvailableSites, 
   addExistingSiteAccess, 
   updateUserSiteAccess,
-  validateSiteType 
+  validateSiteType,
+  getAccessibleSitesForUser
 } = require('../services/siteAccessService');
 const { authenticateToken } = require('../middleware/authorization');
 const logger = require('../utils/logger');
@@ -193,6 +194,27 @@ router.post('/update-site-access', authenticateToken, async (req, res) => {
       error: error.message
     });
   }
+});
+
+// Get all accessible sites for the current user
+router.get('/my-accessible-sites', authenticateToken, async (req, res) => {
+    try {
+        const { username, role } = req.user;
+        
+        const accessibleSites = await getAccessibleSitesForUser(username, role);
+        
+        res.status(200).json({
+            success: true,
+            data: accessibleSites
+        });
+    } catch (error) {
+        logger.error('Error getting accessible sites:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to get accessible sites',
+            error: error.message
+        });
+    }
 });
 
 module.exports = router;

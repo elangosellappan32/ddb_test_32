@@ -21,7 +21,10 @@ router.get('/formva', async (req, res) => {
             });
         }
         const metrics = await calculateFormVAMetrics(financialYear);
-        res.json(metrics);
+        res.json({
+            success: true,
+            data: metrics
+        });
     } catch (error) {
         logger.error('[FormRoutes] FormVA Error:', error);
         res.status(500).json({ 

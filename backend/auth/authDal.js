@@ -1,6 +1,7 @@
 const { ScanCommand, PutCommand, UpdateCommand, QueryCommand, GetCommand } = require('@aws-sdk/lib-dynamodb');
 const logger = require('../utils/logger');
 const docClient = require('../utils/db');
+const TableNames = require('../constants/tableNames');
 
 class AuthDAL {
     constructor() {
@@ -377,6 +378,8 @@ class AuthDAL {
             throw error;
         }
     }
+
+
 }
 
 // Export the AuthDAL class

@@ -1,12 +1,10 @@
-const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
-const { DynamoDBDocumentClient, GetCommand, UpdateCommand, QueryCommand } = require('@aws-sdk/lib-dynamodb');
-const { marshall, unmarshall } = require('@aws-sdk/util-dynamodb');
+const { ScanCommand, GetCommand, UpdateCommand, QueryCommand } = require('@aws-sdk/lib-dynamodb');
 const logger = require('../utils/logger');
 const TableNames = require('../constants/tableNames');
-const { ddbDocClient } = require('../config/aws-config');
+const { docClient } = require('../config/aws-config');
 
 // Use the centralized DynamoDB Document Client
-const docClient = ddbDocClient;
+const ddbDocClient = docClient;
 
 // Constants
 const BATCH_SIZE = 25; // Max items per batch for DynamoDB
@@ -606,10 +604,112 @@ const getUserSites = async (username, siteType) => {
     }
 };
 
+/**
+ * Gets all accessible sites for the current user
+ * @param {string} username - The username of the current user
+ * @param {string} userRole - The role of the current user
+ * @returns {Promise<Object>} Object containing accessible production and consumption sites
+ */
+async function getAccessibleSitesForUser(username, userRole) {
+    try {
+        // If user is admin, get all sites
+        if (userRole === 'admin') {
+            // Get all production sites
+            const productionCommand = new ScanCommand({
+                TableName: TableNames.PRODUCTION_SITES,
+                ProjectionExpression: 'siteId, siteName, companyId, state, district',
+                Limit: 1000 // Adjust based on your needs
+            });
+            
+            // Get all consumption sites
+            const consumptionCommand = new ScanCommand({
+                TableName: TableNames.CONSUMPTION_SITES,
+                ProjectionExpression: 'siteId, siteName, companyId, state, district',
+                Limit: 1000 // Adjust based on your needs
+            });
+
+            const [productionResult, consumptionResult] = await Promise.all([
+                ddbDocClient.send(productionCommand),
+                ddbDocClient.send(consumptionCommand)
+            ]);
+
+            return {
+                productionSites: productionResult.Items || [],
+                consumptionSites: consumptionResult.Items || []
+            };
+        }
+
+        // For non-admin users, get their accessible sites from user metadata
+        const userCommand = new GetCommand({
+            TableName: TableNames.USERS,
+            Key: { username },
+            ProjectionExpression: 'accessibleSites, accessibleSiteIds, metadata.accessibleSites'
+        });
+
+        const userResult = await ddbDocClient.send(userCommand);
+        
+        if (!userResult.Item) {
+            return { productionSites: [], consumptionSites: [] };
+        }
+
+        // Get accessible site IDs from either the new or old format
+        const accessibleSites = userResult.Item.metadata?.accessibleSites || userResult.Item.accessibleSites || {};
+        const productionSiteIds = (accessibleSites.productionSites?.L || []).map(site => site.S || site);
+        const consumptionSiteIds = (accessibleSites.consumptionSites?.L || []).map(site => site.S || site);
+
+        // If using the new format with accessibleSiteIds
+        if (userResult.Item.accessibleSiteIds) {
+            return {
+                productionSites: userResult.Item.accessibleSiteIds
+                    .filter(site => site.type === 'production')
+                    .map(site => ({
+                        siteId: site.siteId,
+                        companyId: site.companyId,
+                        siteName: site.siteName || 'Unnamed Site',
+                        state: site.state || 'Unknown',
+                        district: site.district || 'Unknown'
+                    })),
+                consumptionSites: userResult.Item.accessibleSiteIds
+                    .filter(site => site.type === 'consumption')
+                    .map(site => ({
+                        siteId: site.siteId,
+                        companyId: site.companyId,
+                        siteName: site.siteName || 'Unnamed Site',
+                        state: site.state || 'Unknown',
+                        district: site.district || 'Unknown'
+                    }))
+            };
+        }
+
+        // Fallback to old format or empty arrays
+        return {
+            productionSites: productionSiteIds.map(id => ({
+                siteId: id,
+                companyId: id.split('_')[0],
+                siteName: 'Production Site',
+                state: 'Unknown',
+                district: 'Unknown'
+            })),
+            consumptionSites: consumptionSiteIds.map(id => ({
+                siteId: id,
+                companyId: id.split('_')[0],
+                siteName: 'Consumption Site',
+                state: 'Unknown',
+                district: 'Unknown'
+            }))
+        };
+    } catch (error) {
+        logger.error('Error getting accessible sites for user:', { username, error });
+        throw error;
+    }
+}
+
 module.exports = {
     updateUserSiteAccess,
     addExistingSiteAccess,
     removeSiteAccess,
     getUserSites,
-    validateSiteType
+    validateSiteType,
+    getAccessibleSitesForUser,
+    removeSiteAccessForUser
 };
