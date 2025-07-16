@@ -22,7 +22,7 @@ const Consumption = lazy(() => import("./components/Consumption/Consumption"));
 const ConsumptionSiteDetails = lazy(() => import("./components/Consumption/ConsumptionSiteDetails"));
 const Allocation = lazy(() => import("./components/Allocation/Allocation"));
 const Report = lazy(() => import("./components/Reports/Report"));
-const GraphicalReport = lazy(() => import("./components/GraphicalReport"));
+const GraphicalReport = lazy(() => import("./components/graphicalreport/GraphicalReport.js"));
 
 // Loading component for suspense fallback
 const LoadingFallback = () => (

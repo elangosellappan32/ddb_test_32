@@ -647,7 +647,7 @@ const createDefaultUsers = async () => {
                 accessLevel: 'ADMIN',
                 accessibleSites: {
                     productionSites: { L: [
-                        { S: '1_1' }, { S: '1_2' }, { S: '1_3' }, { S: '1_4' }, { S: '1_5' }
+                        { S: '1_1' }, { S: '1_2' }
                     ]},
                     consumptionSites: { L: [
                         { S: '2_1' }, { S: '3_2' }

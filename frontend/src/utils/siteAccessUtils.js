@@ -72,22 +72,22 @@ export const hasAccessToSite = (user, siteId, siteType) => {
 export const getAccessibleSiteIds = (user, siteType) => {
     if (!user || !siteType) return [];
 
-    // Admin users have access to all sites, but we still need to return the ones they can see
-    // This will be populated by API calls later
-    if (user.role === 'admin' || user.roleName === 'ADMIN') {
-        return [];
+    // Admin users: fetch all site IDs from accessibleSites
+    if (user.role === 'admin' || user.roleName === 'ADMIN' || user.isAdmin) {
+        if (!user.accessibleSites) return [];
+        const sitesList = siteType === 'production'
+            ? user.accessibleSites.productionSites?.L
+            : user.accessibleSites.consumptionSites?.L;
+        if (!Array.isArray(sitesList)) return [];
+        return sitesList.map(site => site.S).filter(Boolean);
     }
 
-    // Check if user has accessible sites configuration
+    // Non-admin users
     if (!user.accessibleSites) return [];
-
-    const sitesList = siteType === 'production' 
-        ? user.accessibleSites.productionSites?.L 
+    const sitesList = siteType === 'production'
+        ? user.accessibleSites.productionSites?.L
         : user.accessibleSites.consumptionSites?.L;
-
-    // Validate sites list structure and return site IDs
     if (!Array.isArray(sitesList)) return [];
-
     return sitesList.map(site => site.S).filter(Boolean);
 };
 
