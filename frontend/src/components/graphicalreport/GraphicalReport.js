@@ -32,7 +32,7 @@ const GraphicalReport = () => {
   const [selectedSites, setSelectedSites] = useState([]);
   const [availableSites, setAvailableSites] = useState([]);
   const [error, setError] = useState(null);
-  const [graphType1, setGraphType1] = useState('line'); // Toggle for first pair of graphs
+  // const [graphType1, setGraphType1] = useState('line'); // Toggle for first pair of graphs (commented out)
   const [graphType2, setGraphType2] = useState('line'); // Toggle for second pair of graphs
 
   // Professional color palette with distinct colors for better visualization
@@ -63,18 +63,8 @@ const GraphicalReport = () => {
       const availableSitesTemp = new Map();
 
       try {
-        console.group('GraphicalReport - Raw Data Loading');
-        console.log('Current Settings:', {
-          financialYear,
-          unitType,
-          selectedSites: selectedSites.map(s => s.key)
-        });
-
         const siteIds = getAccessibleSiteIds(user, unitType);
-        console.log('Accessible Site IDs:', siteIds);
-        
         const months = getFinancialYearMonths(financialYear);
-        console.log('Financial Year Months:', months);
 
         // Fetch all sites first
         const allSites = await (unitType === 'production' 
@@ -82,19 +72,9 @@ const GraphicalReport = () => {
           : consumptionSiteApi.fetchAll()
         ).then(res => res.data || []);
 
-        console.log('Raw Sites Data:', {
-          type: unitType,
-          count: allSites.length,
-          sites: allSites
-        });
-
         // Process each site
         for (const combinedId of siteIds) {
           const [companyId, siteId] = combinedId.split('_');
-          
-          console.group(`Raw Site Data - ${combinedId}`);
-          console.log('Company ID:', companyId);
-          console.log('Site ID:', siteId);
           
           try {
             const unitsResponse = await (unitType === 'production'
@@ -102,16 +82,7 @@ const GraphicalReport = () => {
               : fetchAllConsumptionUnits(companyId, siteId)
             );
 
-            console.log('Raw API Response:', {
-              endpoint: `${unitType}Units/${companyId}/${siteId}`,
-              status: unitsResponse?.status,
-              headers: unitsResponse?.headers,
-              data: unitsResponse?.data
-            });
-
             if (!unitsResponse?.data) {
-              console.warn('No data in response');
-              console.groupEnd();
               continue;
             }
 
@@ -122,8 +93,6 @@ const GraphicalReport = () => {
             );
 
             if (!siteObj) {
-              console.warn(`Site not found in allSites array`);
-              console.groupEnd();
               continue;
             }
 
@@ -147,7 +116,7 @@ const GraphicalReport = () => {
               });
             }
           } catch (error) {
-            console.error(`Error processing site ${combinedId}:`, error);
+            // Silently handle the error and continue processing other sites
           }
         }
 
@@ -171,7 +140,6 @@ const GraphicalReport = () => {
           }
         }
       } catch (err) {
-        console.error('Error loading graphical report:', err);
         setError('Failed to load data. Please try again.');
       } finally {
         setLoading(false);
@@ -183,71 +151,18 @@ const GraphicalReport = () => {
       const processedUnits = new Map();
       const [companyId, siteId] = siteKey.split('_');
       
-      console.group('Processing Unit Data');
-      console.log('Processing Site:', {
-        siteKey,
-        companyId,
-        siteId,
-        siteName: siteObj.name,
-        raw: {
-          site: siteObj,
-          monthsExpected: months,
-          totalUnits: units.length
-        }
-      });
-      
       // First, filter units that belong to this site
       const siteUnits = units.filter(unit => {
         const unitBelongsToSite = 
           String(unit.companyId) === String(companyId) && 
           String(unit.productionSiteId || unit.consumptionSiteId) === String(siteId);
-        
-        console.log('Unit Site Check:', {
-          unit: {
-            pk: unit.pk,
-            companyId: unit.companyId,
-            siteId: unit.productionSiteId || unit.consumptionSiteId
-          },
-          expectedSite: {
-            companyId,
-            siteId
-          },
-          belongs: unitBelongsToSite
-        });
-        
         return unitBelongsToSite;
-      });
-
-      console.log('Filtered Site Units:', {
-        total: units.length,
-        filtered: siteUnits.length,
-        units: siteUnits
       });
       
       // Then validate and normalize the month format
       const validUnits = siteUnits.filter(unit => {
         const monthKey = unit.date || unit.sk || unit.period;
         const isValid = monthKey && monthKey.length === 6 && months.includes(monthKey);
-        
-        console.log('Unit Validation:', {
-          unit: {
-            pk: unit.pk,
-            monthKey,
-            c1: unit.c1,
-            c2: unit.c2,
-            c3: unit.c3,
-            c4: unit.c4,
-            c5: unit.c5
-          },
-          isValid,
-          reason: !isValid ? (
-            !monthKey ? 'Missing month key' :
-            monthKey.length !== 6 ? 'Invalid month key format' :
-            !months.includes(monthKey) ? 'Month not in target period' :
-            'Unknown'
-          ) : 'Valid'
-        });
-        
         return isValid;
       });
 
@@ -258,36 +173,11 @@ const GraphicalReport = () => {
         return monthA.localeCompare(monthB);
       });
 
-      console.log('Valid Sorted Units:', {
-        site: siteObj.name,
-        units: validUnits.map(u => ({
-          month: u.date || u.sk || u.period,
-          c1: u.c1,
-          c2: u.c2,
-          c3: u.c3,
-          c4: u.c4,
-          c5: u.c5
-        }))
-      });
-
       // Process each unit and ensure proper C values
       validUnits.forEach(unit => {
         const monthKey = unit.date || unit.sk || unit.period;
         const monthNum = monthKey.slice(0, 2);
         const yearNum = monthKey.slice(2);
-        
-        // Log raw C values before processing
-        console.log('Processing Unit:', {
-          month: monthKey,
-          site: siteObj.name,
-          rawValues: {
-            c1: unit.c1,
-            c2: unit.c2,
-            c3: unit.c3,
-            c4: unit.c4,
-            c5: unit.c5
-          }
-        });
         
         // Calculate C values with proper validation
         const c1 = Math.max(0, Number(unit.c1) || 0);
@@ -313,15 +203,7 @@ const GraphicalReport = () => {
             total
           };
           
-          console.log('Processed Unit Data:', {
-            month: monthKey,
-            site: siteObj.name,
-            data: monthData
-          });
-          
           processedUnits.set(monthKey, monthData);
-        } else {
-          console.log('Skipping zero-value month:', monthKey);
         }
       });
 
@@ -348,30 +230,9 @@ const GraphicalReport = () => {
           c1: 0, c2: 0, c3: 0, c4: 0, c5: 0,
           total: 0
         };
-        console.log('Adding empty month data:', {
-          month,
-          site: siteObj.name
-        });
         return emptyData;
       });
 
-      console.log('Final Site Data:', {
-        site: siteObj.name,
-        siteKey: siteKey,
-        totalMonths: completeData.length,
-        monthsWithData: completeData.filter(d => d.total > 0).length,
-        data: completeData.map(d => ({
-          month: d.sk,
-          total: d.total,
-          c1: d.c1,
-          c2: d.c2,
-          c3: d.c3,
-          c4: d.c4,
-          c5: d.c5
-        }))
-      });
-      
-      console.groupEnd();
       return completeData;
     };
 
@@ -508,7 +369,7 @@ const GraphicalReport = () => {
         />
       </Box>
 
-      {/* First pair of graphs */}
+      {/* First pair of graphs - Temporarily commented out
       <Box sx={{ mb: 4 }}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
           <Typography variant="h6">Total C Values by Site</Typography>
@@ -612,6 +473,7 @@ const GraphicalReport = () => {
           )}
         </ResponsiveContainer>
       </Box>
+      */}
 
       {/* Second pair of graphs */}
       <Box sx={{ mb: 4 }}>
