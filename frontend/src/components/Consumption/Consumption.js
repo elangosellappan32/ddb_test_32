@@ -11,7 +11,7 @@ import {
   Paper
 } from '@mui/material';
 import { Add as AddIcon, Refresh as RefreshIcon } from '@mui/icons-material';
-import consumptionSiteApi from '../../services/consumptionSiteApi';
+import consumptionSiteApi from '../../services/consumptionSiteapi';
 import ConsumptionSiteCard from './ConsumptionSiteCard';
 import ConsumptionSiteDialog from './ConsumptionSiteDialog';
 import { useAuth } from '../../context/AuthContext';

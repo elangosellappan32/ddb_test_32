@@ -3,10 +3,11 @@ const TableNames = require('../constants/tableNames');
 const logger = require('../utils/logger');
 const { formatMonthYearKey } = require('../utils/dateUtils');
 const docClient = require('../utils/db');
+const BaseDAL = require('../common/baseDAL');
 
-class AllocationDAL {
+class AllocationDAL extends BaseDAL {
     constructor() {
-        this.tableName = TableNames.ALLOCATION;
+        super(TableNames.ALLOCATION);
     }
 
     generatePK(companyId, productionSiteId, consumptionSiteId) {
@@ -143,4 +144,4 @@ class AllocationDAL {
     }
 }
 
-module.exports = new AllocationDAL();
+module.exports = AllocationDAL;

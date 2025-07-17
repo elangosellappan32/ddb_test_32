@@ -5,7 +5,7 @@ import { useAuth } from '../../context/AuthContext';
 import { fetchAllProductionUnits, fetchAllConsumptionUnits } from '../../utils/siteUnitApi';
 import { FormControl, InputLabel, Select, MenuItem, Switch, Typography, Box, Autocomplete, TextField, Paper } from '@mui/material';
 import productionSiteApi from '../../services/productionSiteapi';
-import consumptionSiteApi from '../../services/consumptionSiteApi';
+import consumptionSiteApi from '../../services/consumptionSiteapi';
 
 // Helper function to get financial year months
 

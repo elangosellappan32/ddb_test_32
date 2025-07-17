@@ -14,8 +14,8 @@ import {
 } from '@mui/material';
 import { ArrowBack as ArrowBackIcon, Add as AddIcon } from '@mui/icons-material';
 import { useSnackbar } from 'notistack';
-import consumptionSiteApi from '../../services/consumptionSiteApi';
-import consumptionUnitApi from '../../services/consumptionUnitApi';
+import consumptionSiteApi from '../../services/consumptionSiteapi';
+import consumptionUnitApi from '../../services/consumptionUnitapi';
 import SiteInfoCard from './SiteInfoCard';
 import ConsumptionDataTable from './ConsumptionDataTable';
 import ConsumptionSiteDataForm from './ConsumptionSiteDataForm';

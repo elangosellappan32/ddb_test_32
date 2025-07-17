@@ -30,11 +30,11 @@ import {
 } from '@mui/icons-material';
 import { useSnackbar } from 'notistack';
 import productionUnitApi from '../../services/productionUnitapi';
-import consumptionUnitApi from '../../services/consumptionUnitApi';
-import productionSiteApi from '../../services/productionSiteapi';
-import consumptionSiteApi from '../../services/consumptionSiteApi';
+import consumptionUnitApi from '../../services/consumptionUnitapi';
+import productionSiteapi from '../../services/productionSiteapi';
+import consumptionSiteapi from '../../services/consumptionSiteapi';
 import bankingApi from '../../services/bankingApi';
-import allocationApi from '../../services/allocationApi';
+import allocationApi from '../../services/allocationapi';
 import captiveApi from '../../services/captiveApi';
 import companyApi from '../../services/companyApi';
 import ProductionUnitsTable from './ProductionUnitsTable';
@@ -497,12 +497,12 @@ const Allocation = () => {
       });
 
       const [prodSitesResp, consSitesResp, bankingResp] = await Promise.all([
-        productionSiteApi.fetchAll(defaultCompanyId).catch(err => {
+        productionSiteapi.fetchAll(defaultCompanyId).catch(err => {
           console.error('Error fetching production sites:', err);
           enqueueSnackbar('Failed to load production sites', { variant: 'error' });
           return { data: [] };
         }),
-        consumptionSiteApi.fetchAll(defaultCompanyId).catch(err => {
+        consumptionSiteapi.fetchAll(defaultCompanyId).catch(err => {
           console.error('Error fetching consumption sites:', err);
           enqueueSnackbar('Failed to load consumption sites', { variant: 'error' });
           return { data: [] };
