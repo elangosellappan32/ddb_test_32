@@ -252,15 +252,33 @@ const GraphicalConsumptionReport = () => {
     );
   }
 
-  // Prepare chart data
+  // Prepare chart data with individual C values
   const sortedMonths = getSortedFinancialYearMonths(financialYear);
   const chartData = sortedMonths.map(month => {
-    const monthData = { month: formatMonthDisplay(month) };
-    selectedSites.forEach((site, index) => {
+    const monthData = { 
+      month: formatMonthDisplay(month),
+      monthKey: month // Add month key for reference
+    };
+    
+    selectedSites.forEach(site => {
       const siteData = siteDataMap[site.key];
       if (siteData) {
         const dataPoint = siteData.find(d => d.sk === month);
-        monthData[site.name] = dataPoint ? dataPoint.total : 0;
+        if (dataPoint) {
+          // Add each C value separately
+          monthData[`${site.name}_c1`] = dataPoint.c1 || 0;
+          monthData[`${site.name}_c2`] = dataPoint.c2 || 0;
+          monthData[`${site.name}_c3`] = dataPoint.c3 || 0;
+          monthData[`${site.name}_c4`] = dataPoint.c4 || 0;
+          monthData[`${site.name}_c5`] = dataPoint.c5 || 0;
+        } else {
+          // If no data for this month, set all C values to 0
+          monthData[`${site.name}_c1`] = 0;
+          monthData[`${site.name}_c2`] = 0;
+          monthData[`${site.name}_c3`] = 0;
+          monthData[`${site.name}_c4`] = 0;
+          monthData[`${site.name}_c5`] = 0;
+        }
       }
     });
     return monthData;
@@ -269,7 +287,7 @@ const GraphicalConsumptionReport = () => {
   return (
     <Paper elevation={3} sx={{ p: 3, m: 2 }}>
       <Typography variant="h5" gutterBottom>
-        Consumption Units Analysis
+        Consumption Analysis (C1-C5 Values)
       </Typography>
       
       <Box sx={{ mb: 3, display: 'flex', flexWrap: 'wrap', gap: 2, alignItems: 'center' }}>
@@ -339,15 +357,20 @@ const GraphicalConsumptionReport = () => {
               <YAxis />
               <Tooltip />
               <Legend />
-              {selectedSites.map((site, index) => (
-                <Line 
-                  key={site.key}
-                  type="monotone" 
-                  dataKey={site.name}
-                  stroke={palette[index % palette.length]}
-                  activeDot={{ r: 8 }}
-                />
-              ))}
+              {selectedSites.flatMap((site, siteIndex) => 
+                ['c1', 'c2', 'c3', 'c4', 'c5'].map((cKey, cIndex) => (
+                  <Line
+                    key={`${site.key}_${cKey}`}
+                    type="monotone"
+                    dataKey={`${site.name}_${cKey}`}
+                    name={`${site.name} ${cKey.toUpperCase()}`}
+                    stroke={palette[(siteIndex * 5 + cIndex) % palette.length]}
+                    strokeWidth={2}
+                    dot={{ r: 2 }}
+                    activeDot={{ r: 4 }}
+                  />
+                ))
+              )}
             </LineChart>
           ) : (
             <BarChart data={chartData} margin={{ top: 10, right: 30, left: 20, bottom: 50 }}>
@@ -362,14 +385,18 @@ const GraphicalConsumptionReport = () => {
               <YAxis />
               <Tooltip />
               <Legend />
-              {selectedSites.map((site, index) => (
-                <Bar 
-                  key={site.key}
-                  dataKey={site.name}
-                  fill={palette[index % palette.length]}
-                  name={site.name}
-                />
-              ))}
+              {selectedSites.flatMap((site, siteIndex) => 
+                ['c1', 'c2', 'c3', 'c4', 'c5'].map((cKey, cIndex) => (
+                  <Bar
+                    key={`${site.key}_${cKey}`}
+                    dataKey={`${site.name}_${cKey}`}
+                    name={`${site.name} ${cKey.toUpperCase()}`}
+                    fill={palette[(siteIndex * 5 + cIndex) % palette.length]}
+                    radius={[4, 4, 0, 0]}
+                    stack={site.key}
+                  />
+                ))
+              )}
             </BarChart>
           )}
         </ResponsiveContainer>

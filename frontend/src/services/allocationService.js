@@ -56,7 +56,7 @@ class AllocationService {
                 throw new Error(validation.errors.join(', '));
             }
 
-            const response = await fetch('/api/allocations', {
+            const response = await fetch('/api/allocation', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
@@ -69,7 +69,8 @@ class AllocationService {
                 throw new Error(error.message || 'Failed to create allocation');
             }
 
-            return await response.json();
+            const body = await response.json();
+            return Array.isArray(body?.data) ? body.data : body;
         } catch (error) {
             console.error('[AllocationService] Create Error:', error);
             throw error;
@@ -83,7 +84,7 @@ class AllocationService {
                 throw new Error(validation.errors.join(', '));
             }
 
-            const response = await fetch(`/api/allocations/${pk}/${sk}`, {
+            const response = await fetch(`/api/allocation/${pk}/${sk}`, {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json'
@@ -96,23 +97,44 @@ class AllocationService {
                 throw new Error(error.message || 'Failed to update allocation');
             }
 
-            return await response.json();
+            const body = await response.json();
+            return Array.isArray(body?.data) ? body.data : body;
         } catch (error) {
             console.error('[AllocationService] Update Error:', error);
             throw error;
         }
     }
 
+    async getAllAllocations() {
+        const response = await fetch('/api/allocation');
+        if (!response.ok) throw new Error('Failed to fetch allocations');
+        const { data } = await response.json();
+        return Array.isArray(data) ? data : [];
+    }
+
     async fetchAllocationsByMonth(month) {
         try {
-            const response = await fetch(`/api/allocations/month/${month}`);
-            if (!response.ok) {
-                const error = await response.json();
-                throw new Error(error.message || 'Failed to fetch allocations');
+            const response = await fetch(`/api/allocation/month/${month}`);
+            // Handle 404 - no allocations for this month
+        if (response.status === 404) {
+                // No data for this month; return empty list
+                return [];
             }
-            return await response.json();
+            if (!response.ok) {
+                let message = 'Failed to fetch allocations';
+                try {
+                  const err = await response.json();
+                  message = err.message || message;
+                } catch {}
+                throw new Error(message);
+            }
+            const body = await response.json();
+            return Array.isArray(body?.data) ? body.data : body;
         } catch (error) {
-            console.error('[AllocationService] FetchByMonth Error:', error);
+            // Only log other errors (not 404 which we already handled)
+            if (error.message !== 'Failed to fetch allocations') {
+              console.error('[AllocationService] FetchByMonth Error:', error);
+            }
             throw error;
         }
     }

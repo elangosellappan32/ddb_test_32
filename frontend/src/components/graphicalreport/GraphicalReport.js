@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Box, Paper, Tabs, Tab, Typography } from '@mui/material';
 import GraphicalProductionReport from './GraphicalProductionReport';
 import GraphicalConsumptionReport from './GraphicalConsumptionReport';
+import GraphicalAllocationReport from './GraphicalAllocationReport';
 
 function TabPanel(props) {
   const { children, value, index, ...other } = props;
@@ -52,6 +53,7 @@ const GraphicalReport = () => {
         >
           <Tab label="Production Analysis" {...a11yProps(0)} />
           <Tab label="Consumption Analysis" {...a11yProps(1)} />
+          <Tab label="Allocation Analysis" {...a11yProps(2)} />
         </Tabs>
       </Box>
       
@@ -61,6 +63,10 @@ const GraphicalReport = () => {
       
       <TabPanel value={tabValue} index={1}>
         <GraphicalConsumptionReport />
+      </TabPanel>
+      
+      <TabPanel value={tabValue} index={2}>
+        <GraphicalAllocationReport />
       </TabPanel>
     </Paper>
   );

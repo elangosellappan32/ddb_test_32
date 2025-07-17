@@ -1,7 +1,8 @@
 const productionUnitDAL = require('../productionUnit/productionUnitDAL');
 const consumptionUnitDAL = require('../consumptionUnit/consumptionUnitDAL');
 const bankingDAL = require('../banking/bankingDAL');
-const allocationDAL = require('../allocation/allocationDAL');
+const AllocationDAL = require('../allocation/allocationDAL');
+const allocationDAL = new AllocationDAL();
 const consumptionSiteDAL = require('../consumptionSite/consumptionSiteDAL');
 const logger = require('../utils/logger');
 

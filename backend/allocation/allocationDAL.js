@@ -38,14 +38,13 @@ class AllocationDAL extends BaseDAL {
 
             const params = {
                 TableName: this.tableName,
-                IndexName: undefined, // add if you use GSI
-                KeyConditionExpression,
+                FilterExpression: 'sk = :sk',
                 ExpressionAttributeValues,
             };
             if (ExpressionAttributeNames) params.ExpressionAttributeNames = ExpressionAttributeNames;
-            if (FilterExpression) params.FilterExpression = FilterExpression;
+            if (FilterExpression) params.FilterExpression += ` AND ${FilterExpression}`;
 
-            const { Items } = await docClient.send(new QueryCommand(params));
+            const { Items } = await docClient.send(new ScanCommand(params));
             return Items || [];
         } catch (error) {
             logger.error(`[AllocationDAL] GetAllocations Error for month ${JSON.stringify(month)}:`, error);

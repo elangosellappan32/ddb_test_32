@@ -30,6 +30,7 @@ const getGraphicalAllocationReport = async (req, res, next) => {
             if (!monthInRange) return false;
             
             if (sitesList.length > 0) {
+                if(!allocation.pk||typeof allocation.pk!=='string'||!allocation.pk.includes('_')) return false;
                 const [_, productionSiteId] = allocation.pk.split('_');
                 return sitesList.includes(productionSiteId);
             }
@@ -55,6 +56,7 @@ function processAllocationData(allocations) {
     const siteData = {};
 
     allocations.forEach(allocation => {
+        if(!allocation.pk||typeof allocation.pk!=='string'||!allocation.pk.includes('_')) return; // skip malformed record
         const [companyId, productionSiteId, consumptionSiteId] = allocation.pk.split('_');
         const month = allocation.sk;
         const siteKey = `${productionSiteId}_${consumptionSiteId}`;
