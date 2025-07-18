@@ -1,17 +1,18 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
-  BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
+  BarChart, Bar, LineChart, Line, XAxis, YAxis,
+  CartesianGrid, Tooltip, Legend, ResponsiveContainer
 } from 'recharts';
-import { getAccessibleSiteIds } from '../../utils/siteAccessUtils';
-import { useAuth } from '../../context/AuthContext';
 import {
   FormControl, InputLabel, Select, MenuItem, Switch, Typography,
   Box, Autocomplete, TextField, Paper
 } from '@mui/material';
+import { getAccessibleSiteIds } from '../../utils/siteAccessUtils';
+import { useAuth } from '../../context/AuthContext';
 import productionSiteApi from '../../services/productionSiteapi';
 import bankingApi from '../../services/bankingApi';
 
-// Helper: Months for Apr–Mar FY
+// Helper to make array of months for financial year: ["042024", ..., "122024", "012025",..., "032025"]
 function getFinancialYearMonths(fy) {
   const [startYear, endYear] = fy.split('-').map(Number);
   const months = [];
@@ -19,16 +20,19 @@ function getFinancialYearMonths(fy) {
   for (let m = 1; m <= 3; m++) months.push((m < 10 ? '0' : '') + m + String(endYear));
   return months;
 }
-function formatMonthLabel(monthKey) {
-  const M = parseInt(monthKey.slice(0, 2), 10) - 1;
-  const y = monthKey.slice(2);
-  return ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][M] + '/' + y;
+
+// Format months like "Apr FY2024", "May2024", ... "Mar2025"
+function formatMonthDisplay(monthKey) {
+  if (!monthKey || monthKey.length !== 6) return monthKey;
+  const monthNum = parseInt(monthKey.slice(0, 2), 10);
+  const yearNum = monthKey.slice(2);
+  const monthNames = [
+    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+  ];
+  const monthIdx = monthNum - 1;
+  const isNewFY = monthNum === 4;
+  return `${monthNames[monthIdx]}${isNewFY ? ` FY${yearNum}` : yearNum}`;
 }
-const palette = [
-  '#4E79A7', '#F28E2B', '#E15759', '#76B7B2', '#59A14F',
-  '#EDC948', '#B07AA1', '#FF9DA7', '#9C755F', '#BAB0AC'
-];
-const cLabels = { c1: "C1", c2: "C2", c3: "C3", c4: "C4", c5: "C5" };
 
 function processBankingData(bankingData, site, siteKey, months) {
   const byMonth = {};
@@ -52,22 +56,38 @@ function processBankingData(bankingData, site, siteKey, months) {
       byMonth[month][c] += Number(allocated[c] || 0)
     );
     byMonth[month].total =
-      byMonth[month].c1 + byMonth[month].c2 + byMonth[month].c3 + byMonth[month].c4 + byMonth[month].c5;
+      byMonth[month].c1 + byMonth[month].c2 + byMonth[month].c3 +
+      byMonth[month].c4 + byMonth[month].c5;
   });
   return Object.values(byMonth);
 }
+
+const palette = [
+  '#4E79A7', '#F28E2B', '#E15759', '#76B7B2', '#59A14F',
+  '#EDC948', '#B07AA1', '#FF9DA7', '#9C755F', '#BAB0AC'
+];
+const cLabels = { c1: "C1", c2: "C2", c3: "C3", c4: "C4", c5: "C5" };
 
 const GraphicalBankingReport = () => {
   const currentYear = new Date().getFullYear();
   const defaultFY = `${currentYear}-${currentYear + 1}`;
   const [financialYear, setFinancialYear] = useState(defaultFY);
-  const [siteDataMap, setSiteDataMap] = useState({}); // {siteKey: [...months]}
-  const [availableSites, setAvailableSites] = useState([]); // [{key, name, ...}]
+  const [siteDataMap, setSiteDataMap] = useState({});
+  const [availableSites, setAvailableSites] = useState([]);
   const [selectedSites, setSelectedSites] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [graphType, setGraphType] = useState('line');
   const { user } = useAuth();
+
+  // Financial year dropdown options matching production report style
+  const fyOptions = [];
+  for (let y = 2020; y <= currentYear; y++) {
+    fyOptions.push({
+      value: `${y}-${y + 1}`,
+      label: `April ${y} - March ${y + 1}`
+    });
+  }
 
   useEffect(() => {
     setLoading(true);
@@ -102,7 +122,7 @@ const GraphicalBankingReport = () => {
                 productionSiteId: siteObj.productionSiteId
               });
             }
-          } catch { /* error: treat as site with no data */ }
+          } catch {}
         }
 
         setSiteDataMap(siteDataMapNew);
@@ -122,14 +142,16 @@ const GraphicalBankingReport = () => {
     // eslint-disable-next-line
   }, [financialYear, user]);
 
-  const chartData = getFinancialYearMonths(financialYear).map(month => {
-    const row = { month: formatMonthLabel(month) };
+  // Data for recharts (months APR-MAR, labels, per-site per-cat)
+  const months = getFinancialYearMonths(financialYear);
+  const chartData = months.map(month => {
+    const row = { month: formatMonthDisplay(month) };
     selectedSites.forEach(siteKey => {
       const siteObj = availableSites.find(s => s.key === siteKey);
       const siteName = siteObj?.name || siteKey;
       const data = siteDataMap[siteKey]?.find(item => item.month === month) || {};
       ['c1','c2','c3','c4','c5'].forEach(c =>
-        row[`${siteName}-${c}`] = data[c] || 0
+        row[`${siteName}_${c}`] = data[c] || 0
       );
     });
     return row;
@@ -139,7 +161,7 @@ const GraphicalBankingReport = () => {
     const siteObj = availableSites.find(s => s.key === siteKey);
     const siteName = siteObj?.name || siteKey;
     ['c1','c2','c3','c4','c5'].forEach((c,j) =>
-      seriesKeys.push({ key: `${siteName}-${c}`, siteName, c, color: palette[(i*5 + j) % palette.length] })
+      seriesKeys.push({ key: `${siteName}_${c}`, siteName, c, color: palette[(i*5 + j) % palette.length] })
     );
   });
 
@@ -147,17 +169,15 @@ const GraphicalBankingReport = () => {
     <Paper elevation={3} sx={{ p: 3, mt: 2 }}>
       <Typography variant="h5" gutterBottom>Banking Analysis</Typography>
       <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 2, my: 2 }}>
-        <FormControl size="small" sx={{ minWidth: 150 }}>
+        <FormControl size="small" sx={{ minWidth: 220 }}>
           <InputLabel>Financial Year</InputLabel>
           <Select
             value={financialYear}
             onChange={e => setFinancialYear(e.target.value)}
             label="Financial Year"
           >
-            {[currentYear - 2, currentYear - 1, currentYear, currentYear + 1].map(year => (
-              <MenuItem key={year} value={`${year}-${year + 1}`}>
-                {`${year}-${(year + 1).toString().slice(-2)}`}
-              </MenuItem>
+            {fyOptions.map(fy => (
+              <MenuItem key={fy.value} value={fy.value}>{fy.label}</MenuItem>
             ))}
           </Select>
         </FormControl>
@@ -203,7 +223,7 @@ const GraphicalBankingReport = () => {
                       <YAxis />
                       <Tooltip 
                         formatter={(value, name) => {
-                          const i = name.lastIndexOf('-');
+                          const i = name.lastIndexOf('_');
                           if (i < 0) return [value, name];
                           const site = name.substring(0, i);
                           const cat = name.substring(i + 1);
@@ -212,7 +232,7 @@ const GraphicalBankingReport = () => {
                         labelFormatter={label => `Month: ${label}`}
                       />
                       <Legend formatter={name => {
-                        const i = name.lastIndexOf('-');
+                        const i = name.lastIndexOf('_');
                         if (i < 0) return name;
                         const site = name.substring(0, i);
                         const cat = name.substring(i + 1);
@@ -238,7 +258,7 @@ const GraphicalBankingReport = () => {
                       <YAxis />
                       <Tooltip
                         formatter={(value, name) => {
-                          const i = name.lastIndexOf('-');
+                          const i = name.lastIndexOf('_');
                           if (i < 0) return [value, name];
                           const site = name.substring(0, i);
                           const cat = name.substring(i + 1);
@@ -247,7 +267,7 @@ const GraphicalBankingReport = () => {
                         labelFormatter={label => `Month: ${label}`}
                       />
                       <Legend formatter={name => {
-                        const i = name.lastIndexOf('-');
+                        const i = name.lastIndexOf('_');
                         if (i < 0) return name;
                         const site = name.substring(0, i);
                         const cat = name.substring(i + 1);
@@ -260,7 +280,7 @@ const GraphicalBankingReport = () => {
                           name={key}
                           fill={color}
                           radius={[4, 4, 0, 0]}
-                          stack={key.split('-')[0]} // Stack per site
+                          stack={key.split('_')[0]}
                         />
                       ))}
                     </BarChart>

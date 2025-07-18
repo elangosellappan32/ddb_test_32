@@ -11,18 +11,26 @@ import {
 import productionSiteApi from '../../services/productionSiteapi';
 import lapseApi from '../../services/lapseApi';
 
-const getFinancialYearMonths = (fy) => {
+// Get months from April of start year to March of next year
+function getFinancialYearMonths(fy) {
   const [startYear, endYear] = fy.split('-').map(Number);
   const months = [];
-  for (let m = 4; m <= 12; m++) months.push((m < 10 ? '0' : '') + m + String(startYear));
-  for (let m = 1; m <= 3; m++) months.push((m < 10 ? '0' : '') + m + String(endYear));
+  for (let m = 4; m <= 12; m++) months.push((m < 10 ? '0' : '') + m + startYear);
+  for (let m = 1; m <= 3; m++) months.push((m < 10 ? '0' : '') + m + endYear);
   return months;
-};
-function formatMonthLabel(monthKey) {
-  const M = parseInt(monthKey.slice(0, 2), 10) - 1;
-  const y = monthKey.slice(2);
-  return ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][M] + '/' + y;
 }
+
+// Format X-axis label month => e.g. Apr FY2024, May2024
+function formatMonthLabel(monthKey) {
+  if (!monthKey || monthKey.length !== 6) return monthKey;
+  const monthNum = parseInt(monthKey.slice(0, 2), 10);
+  const year = monthKey.slice(2);
+  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const label = monthNames[monthNum - 1];
+  return `${label}${monthNum === 4 ? ` FY${year}` : year}`;
+}
+
 const palette = [
   '#4E79A7', '#F28E2B', '#E15759', '#76B7B2', '#59A14F',
   '#EDC948', '#B07AA1', '#FF9DA7', '#9C755F', '#BAB0AC'
@@ -48,10 +56,11 @@ function processLapseData(lapseData, site, siteKey, months) {
     if (!month || !byMonth[month]) return;
     const allocated = record.allocated || record;
     ['c1','c2','c3','c4','c5'].forEach(c =>
-      byMonth[month][c] = Math.max(0, Number(allocated[c] || 0))
+      byMonth[month][c] += Math.max(0, Number(allocated[c] || 0))
     );
     byMonth[month].total =
-      byMonth[month].c1 + byMonth[month].c2 + byMonth[month].c3 + byMonth[month].c4 + byMonth[month].c5;
+      byMonth[month].c1 + byMonth[month].c2 + byMonth[month].c3 +
+      byMonth[month].c4 + byMonth[month].c5;
   });
   return Object.values(byMonth);
 }
@@ -60,13 +69,22 @@ const GraphicalLapseReport = () => {
   const currentYear = new Date().getFullYear();
   const defaultFY = `${currentYear}-${currentYear + 1}`;
   const [financialYear, setFinancialYear] = useState(defaultFY);
-  const [siteDataMap, setSiteDataMap] = useState({}); // {siteKey: [...months]}
-  const [availableSites, setAvailableSites] = useState([]); // [{key, name, ...}]
+  const [siteDataMap, setSiteDataMap] = useState({});
+  const [availableSites, setAvailableSites] = useState([]);
   const [selectedSites, setSelectedSites] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [graphType, setGraphType] = useState('line');
   const { user } = useAuth();
+
+  // Build dropdown years from 2020–current+1
+  const fyOptions = [];
+  for (let y = 2020; y <= currentYear; y++) {
+    fyOptions.push({
+      value: `${y}-${y + 1}`,
+      label: `April ${y} - March ${y + 1}`
+    });
+  }
 
   useEffect(() => {
     setLoading(true);
@@ -86,13 +104,16 @@ const GraphicalLapseReport = () => {
             String(s.companyId) === String(companyId)
           );
           if (!siteObj) continue;
+
           const siteKey = `${siteObj.companyId}_${siteObj.productionSiteId}`;
           if (siteDataMapNew[siteKey]) continue;
+
           try {
             const response = await lapseApi.fetchAllByPk(siteKey);
             const lapseData = Array.isArray(response) ? response : [];
             const processed = processLapseData(lapseData, siteObj, siteKey, months);
             siteDataMapNew[siteKey] = processed;
+
             if (processed.some(month => month.total > 0)) {
               availableSitesTemp.push({
                 key: siteKey,
@@ -101,61 +122,71 @@ const GraphicalLapseReport = () => {
                 productionSiteId: siteObj.productionSiteId
               });
             }
-          } catch { /* treat as site with 0 data */ }
+          } catch { }
         }
 
         setSiteDataMap(siteDataMapNew);
         setAvailableSites(availableSitesTemp);
         if (!selectedSites.length) {
-          setSelectedSites(availableSitesTemp.slice(0, 5).map(site => site.key));
+          setSelectedSites(availableSitesTemp.slice(0, 5).map(s => s.key));
         } else {
-          const valid = availableSitesTemp.map(site => site.key);
+          const valid = availableSitesTemp.map(s => s.key);
           setSelectedSites(selectedSites.filter(k => valid.includes(k)));
         }
-        if (!Object.keys(siteDataMapNew).length) setError('No lapse data available for the selected period');
+        if (!Object.keys(siteDataMapNew).length) {
+          setError('No lapse data available for the selected period');
+        }
       } catch {
         setError('Failed to load lapse data.');
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     })();
-    // eslint-disable-next-line
   }, [financialYear, user]);
 
-  const chartData = getFinancialYearMonths(financialYear).map(month => {
+  // Prepare chart data
+  const months = getFinancialYearMonths(financialYear);
+  const chartData = months.map(month => {
     const row = { month: formatMonthLabel(month) };
     selectedSites.forEach(siteKey => {
       const siteObj = availableSites.find(s => s.key === siteKey);
       const siteName = siteObj?.name || siteKey;
       const data = siteDataMap[siteKey]?.find(item => item.month === month) || {};
       ['c1','c2','c3','c4','c5'].forEach(c =>
-        row[`${siteName}-${c}`] = data[c] || 0
+        row[`${siteName}_${c}`] = data[c] || 0
       );
     });
     return row;
   });
+
   const seriesKeys = [];
   selectedSites.forEach((siteKey, i) => {
-    const siteObj = availableSites.find(s => s.key === siteKey);
-    const siteName = siteObj?.name || siteKey;
-    ['c1','c2','c3','c4','c5'].forEach((c,j) =>
-      seriesKeys.push({ key: `${siteName}-${c}`, siteName, c, color: palette[(i*5 + j) % palette.length] })
-    );
+    const site = availableSites.find(s => s.key === siteKey);
+    const siteName = site?.name || siteKey;
+    ['c1','c2','c3','c4','c5'].forEach((c,j) => {
+      seriesKeys.push({
+        key: `${siteName}_${c}`,
+        siteName,
+        c,
+        color: palette[(i*5 + j) % palette.length]
+      });
+    });
   });
 
   return (
     <Paper elevation={3} sx={{ p: 3, mt: 2 }}>
       <Typography variant="h5" gutterBottom>Lapse Analysis</Typography>
       <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 2, my: 2 }}>
-        <FormControl size="small" sx={{ minWidth: 150 }}>
+        <FormControl size="small" sx={{ minWidth: 220 }}>
           <InputLabel>Financial Year</InputLabel>
           <Select
             value={financialYear}
             onChange={e => setFinancialYear(e.target.value)}
             label="Financial Year"
           >
-            {[currentYear - 2, currentYear - 1, currentYear, currentYear + 1].map(year => (
-              <MenuItem key={year} value={`${year}-${year + 1}`}>
-                {`${year}-${(year + 1).toString().slice(-2)}`}
+            {fyOptions.map(fy => (
+              <MenuItem key={fy.value} value={fy.value}>
+                {fy.label}
               </MenuItem>
             ))}
           </Select>
@@ -170,7 +201,7 @@ const GraphicalLapseReport = () => {
           />
           <Typography sx={{ fontSize: 14, pl: 1 }}>Line</Typography>
         </Box>
-        <Box sx={{ flex: 1, minWidth: 200 }}>
+        <Box sx={{ flex: 1, minWidth: 300 }}>
           <Autocomplete
             multiple
             options={availableSites}
@@ -185,87 +216,85 @@ const GraphicalLapseReport = () => {
           />
         </Box>
       </Box>
+
       <Box sx={{ width: '100%', height: 500 }}>
-        {loading
-          ? <Typography>Loading lapse data...</Typography>
-          : error
-            ? <Typography color="error">{error}</Typography>
-            : selectedSites.length === 0
-              ? <Typography>No sites selected. Please select sites to view data.</Typography>
-              : (
-                <ResponsiveContainer width="100%" height="100%">
-                  {graphType === 'line' ? (
-                    <LineChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 50 }}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="month" angle={-45} tick={{ fontSize: 12 }} height={70} />
-                      <YAxis />
-                      <Tooltip 
-                        formatter={(value, name) => {
-                          const i = name.lastIndexOf('-');
-                          if (i < 0) return [value, name];
-                          const site = name.substring(0, i);
-                          const cat = name.substring(i + 1);
-                          return [value, `${site} ${cLabels[cat] || cat}`];
-                        }}
-                        labelFormatter={label => `Month: ${label}`}
-                      />
-                      <Legend formatter={name => {
-                        const i = name.lastIndexOf('-');
-                        if (i < 0) return name;
-                        const site = name.substring(0, i);
-                        const cat = name.substring(i + 1);
-                        return `${site} ${cLabels[cat] || cat}`;
-                      }} />
-                      {seriesKeys.map(({ key, color }) => (
-                        <Line
-                          key={key}
-                          type="monotone"
-                          dataKey={key}
-                          name={key}
-                          stroke={color}
-                          strokeWidth={2}
-                          dot={{ r: 2 }}
-                          activeDot={{ r: 4 }}
-                        />
-                      ))}
-                    </LineChart>
-                  ) : (
-                    <BarChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 50 }}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="month" angle={-45} tick={{ fontSize: 12 }} height={70} />
-                      <YAxis />
-                      <Tooltip
-                        formatter={(value, name) => {
-                          const i = name.lastIndexOf('-');
-                          if (i < 0) return [value, name];
-                          const site = name.substring(0, i);
-                          const cat = name.substring(i + 1);
-                          return [value, `${site} ${cLabels[cat] || cat}`];
-                        }}
-                        labelFormatter={label => `Month: ${label}`}
-                      />
-                      <Legend formatter={name => {
-                        const i = name.lastIndexOf('-');
-                        if (i < 0) return name;
-                        const site = name.substring(0, i);
-                        const cat = name.substring(i + 1);
-                        return `${site} ${cLabels[cat] || cat}`;
-                      }} />
-                      {seriesKeys.map(({ key, color }) => (
-                        <Bar
-                          key={key}
-                          dataKey={key}
-                          name={key}
-                          fill={color}
-                          radius={[4, 4, 0, 0]}
-                          stack={key.split('-')[0]} // Stack per site
-                        />
-                      ))}
-                    </BarChart>
-                  )}
-                </ResponsiveContainer>
-              )
-        }
+        {loading ? (
+          <Typography>Loading lapse data...</Typography>
+        ) : error ? (
+          <Typography color="error">{error}</Typography>
+        ) : selectedSites.length === 0 ? (
+          <Typography>No sites selected. Please select sites to view data.</Typography>
+        ) : (
+          <ResponsiveContainer width="100%" height="100%">
+            {graphType === 'line' ? (
+              <LineChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 50 }}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="month" angle={-45} tick={{ fontSize: 12 }} height={70} />
+                <YAxis />
+                <Tooltip
+                  formatter={(value, name) => {
+                    const i = name.lastIndexOf('_');
+                    const site = name.substring(0, i);
+                    const cat = name.substring(i + 1);
+                    return [value, `${site} ${cLabels[cat] || cat}`];
+                  }}
+                  labelFormatter={label => `Month: ${label}`}
+                />
+                <Legend
+                  formatter={name => {
+                    const i = name.lastIndexOf('_');
+                    const site = name.substring(0, i);
+                    const cat = name.substring(i + 1);
+                    return `${site} ${cLabels[cat] || cat}`;
+                  }}
+                />
+                {seriesKeys.map(({ key, color }) => (
+                  <Line
+                    key={key}
+                    type="monotone"
+                    dataKey={key}
+                    stroke={color}
+                    strokeWidth={2}
+                    dot={{ r: 2 }}
+                    activeDot={{ r: 4 }}
+                  />
+                ))}
+              </LineChart>
+            ) : (
+              <BarChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 50 }}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="month" angle={-45} tick={{ fontSize: 12 }} height={70} />
+                <YAxis />
+                <Tooltip
+                  formatter={(value, name) => {
+                    const i = name.lastIndexOf('_');
+                    const site = name.substring(0, i);
+                    const cat = name.substring(i + 1);
+                    return [value, `${site} ${cLabels[cat] || cat}`];
+                  }}
+                  labelFormatter={label => `Month: ${label}`}
+                />
+                <Legend
+                  formatter={name => {
+                    const i = name.lastIndexOf('_');
+                    const site = name.substring(0, i);
+                    const cat = name.substring(i + 1);
+                    return `${site} ${cLabels[cat] || cat}`;
+                  }}
+                />
+                {seriesKeys.map(({ key, color }) => (
+                  <Bar
+                    key={key}
+                    dataKey={key}
+                    fill={color}
+                    radius={[4, 4, 0, 0]}
+                    stack={key.split('_')[0]}
+                  />
+                ))}
+              </BarChart>
+            )}
+          </ResponsiveContainer>
+        )}
       </Box>
     </Paper>
   );
