@@ -227,6 +227,56 @@ const getBankingData = async (req, res) => {
     }
 };
 
+const getBankingByPk = async (req, res) => {
+    try {
+        logger.info(`[getBankingByPk] Request received with params:`, req.params);
+        const { pk } = req.params;
+        
+        if (!pk) {
+            logger.warn('[getBankingByPk] Missing pk parameter');
+            return res.status(400).json({ 
+                success: false, 
+                error: 'Primary key (pk) is required' 
+            });
+        }
+
+        logger.info(`[getBankingByPk] Fetching records for pk: ${pk}`);
+        const records = await bankingDAL.getBankingByPk(pk);
+        
+        logger.info(`[getBankingByPk] Found ${records ? records.length : 0} records`);
+        
+        if (!records || records.length === 0) {
+            logger.warn(`[getBankingByPk] No records found for pk: ${pk}`);
+            return res.status(404).json({ 
+                success: false, 
+                error: 'No banking records found for the specified site' 
+            });
+        }
+
+        const response = {
+            success: true,
+            data: records.map(transformBankingRecordForResponse)
+        };
+        
+        logger.info(`[getBankingByPk] Sending response with ${response.data.length} records`);
+        res.json(response);
+        
+    } catch (error) {
+        logger.error('Error in getBankingByPk:', error);
+        const errorResponse = { 
+            success: false, 
+            error: 'Failed to fetch banking records',
+            details: process.env.NODE_ENV === 'development' ? error.message : undefined
+        };
+        
+        if (process.env.NODE_ENV === 'development') {
+            errorResponse.stack = error.stack;
+        }
+        
+        res.status(500).json(errorResponse);
+    }
+}
+
 module.exports = {
     createBanking,
     getBanking,
@@ -234,5 +284,6 @@ module.exports = {
     updateBanking,
     deleteBanking,
     getAllBanking,
-    getBankingData
+    getBankingData,
+    getBankingByPk
 };

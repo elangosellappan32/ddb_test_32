@@ -11,11 +11,14 @@ router.get('/', bankingController.getAllBanking);
 // Get banking data
 router.get('/data', bankingController.getBankingData);
 
-// Get specific banking record
-router.get('/:pk/:sk', bankingController.getBanking);
+// Get all banking records for a specific site by PK (more specific route first)
+router.get('/site/:pk', bankingController.getBankingByPk);
 
 // Get banking by period
 router.get('/:pk/period/:period', bankingController.queryBankingByPeriod);
+
+// Get specific banking record (keep this last as it's a catch-all for /:pk/:sk)
+router.get('/:pk/:sk', bankingController.getBanking);
 
 // Create banking record
 router.post('/', [validateJson, validateBanking], bankingController.createBanking);

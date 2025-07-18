@@ -2,6 +2,15 @@ const lapseDAL = require('../lapse/lapseDAL');
 const logger = require('../utils/logger');
 
 class LapseService {
+    async getLapsesByPk(pk) {
+        try {
+            return await lapseDAL.getLapsesByPk(pk);
+        } catch (error) {
+            logger.error('[LapseService] getLapsesByPk Error:', error);
+            throw error;
+        }
+    }
+
     async create(lapseData) {
         try {
             // Normalize data

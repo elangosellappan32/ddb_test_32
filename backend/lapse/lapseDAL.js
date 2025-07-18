@@ -1,18 +1,38 @@
-const { 
-    PutCommand, 
-    UpdateCommand, 
-    QueryCommand, 
-    DeleteCommand 
-} = require('@aws-sdk/lib-dynamodb');
+const { QueryCommand, PutCommand, UpdateCommand, DeleteCommand } = require('@aws-sdk/lib-dynamodb');
+const docClient = require('../utils/db');
 const TableNames = require('../constants/tableNames');
 const logger = require('../utils/logger');
 const { formatMonthYearKey } = require('../utils/dateUtils');
 const { ALL_PERIODS } = require('../constants/periods');
-const docClient = require('../utils/db');
 
 class LapseDAL {
     constructor() {
         this.tableName = TableNames.LAPSE;
+    }
+    
+    async getLapsesByPk(pk) {
+        try {
+            if (!pk) {
+                throw new Error('Primary key (pk) is required');
+            }
+            
+            const command = new QueryCommand({
+                TableName: this.tableName,
+                KeyConditionExpression: 'pk = :pk',
+                ExpressionAttributeValues: {
+                    ':pk': pk
+                },
+                // Sort by sort key (month) in ascending order
+                ScanIndexForward: true
+            });
+            
+            logger.debug(`[LapseDAL] Fetching lapses for PK: ${pk}`);
+            const response = await docClient.send(command);
+            return response.Items || [];
+        } catch (error) {
+            logger.error('[LapseDAL] getLapsesByPk Error:', error);
+            throw error;
+        }
     }
 
     validateSortKey(sk) {
@@ -21,16 +41,20 @@ class LapseDAL {
         }
     }
 
+    normalizeAllocated(allocated) {
+        return ALL_PERIODS.reduce((acc, period) => {
+            acc[period] = Math.round(Number(allocated?.[period] || 0));
+            return acc;
+        }, {});
+    }
+
     async createLapse(lapseData) {
         try {
             this.validateSortKey(lapseData.sk);
             
             // Normalize allocated values
-            const normalizedAllocated = ALL_PERIODS.reduce((acc, period) => {
-                acc[period] = Math.round(Number(lapseData.allocated?.[period] || 0));
-                return acc;
-            }, {});
-
+            const normalizedAllocated = this.normalizeAllocated(lapseData.allocated);
+            
             const item = {
                 ...lapseData,
                 allocated: normalizedAllocated,
@@ -38,66 +62,55 @@ class LapseDAL {
                 createdat: new Date().toISOString(),
                 updatedat: new Date().toISOString()
             };
-
+            
             const command = new PutCommand({
                 TableName: this.tableName,
-                Item: item
+                Item: item,
+                ConditionExpression: 'attribute_not_exists(pk) AND attribute_not_exists(sk)'
             });
-
-            logger.debug('[LapseDAL] Creating lapse item:', { pk: item.pk, sk: item.sk });
+            
+            logger.debug(`[LapseDAL] Creating new lapse record: ${JSON.stringify(item)}`);
             await docClient.send(command);
             return item;
         } catch (error) {
-            logger.error('[LapseDAL] createLapse error:', error);
+            logger.error(`[LapseDAL] Error creating lapse record: ${error.message}`, { error });
             throw error;
         }
     }
 
     async updateLapse(pk, sk, updates) {
         try {
+            if (!pk || !sk) {
+                throw new Error('Both pk and sk are required for update');
+            }
+            
             this.validateSortKey(sk);
             
             // Normalize allocated values if present
-            if (updates.allocated) {
-                updates.allocated = ALL_PERIODS.reduce((acc, period) => {
-                    acc[period] = Math.round(Number(updates.allocated[period] || 0));
-                    return acc;
-                }, {});
-            }
-
-            const updateData = {
-                ...updates,
-                updatedat: new Date().toISOString()
+            let updateExpression = 'SET updatedat = :updatedat';
+            const expressionAttributeValues = {
+                ':updatedat': new Date().toISOString()
             };
-
-            const updateExpression = [];
-            const expressionAttributeValues = {};
-            const expressionAttributeNames = {};
-
-            Object.entries(updateData).forEach(([key, value]) => {
-                if (value !== undefined) {
-                    const attrKey = `#${key}`;
-                    const attrValue = `:${key}`;
-                    updateExpression.push(`${attrKey} = ${attrValue}`);
-                    expressionAttributeValues[attrValue] = value;
-                    expressionAttributeNames[attrKey] = key;
-                }
-            });
-
+            
+            if (updates.allocated) {
+                const normalizedAllocated = this.normalizeAllocated(updates.allocated);
+                updateExpression += ', allocated = :allocated';
+                expressionAttributeValues[':allocated'] = normalizedAllocated;
+            }
+            
             const command = new UpdateCommand({
                 TableName: this.tableName,
                 Key: { pk, sk },
-                UpdateExpression: `SET ${updateExpression.join(', ')}`,
-                ExpressionAttributeNames: expressionAttributeNames,
+                UpdateExpression: updateExpression,
                 ExpressionAttributeValues: expressionAttributeValues,
                 ReturnValues: 'ALL_NEW'
             });
-
-            logger.debug('[LapseDAL] Updating lapse item:', { pk, sk, updates: updateData });
+            
+            logger.debug(`[LapseDAL] Updating lapse record: ${pk}, ${sk}`, { updates });
             const response = await docClient.send(command);
             return response.Attributes;
         } catch (error) {
-            logger.error('[LapseDAL] updateLapse error:', error);
+            logger.error(`[LapseDAL] Error updating lapse record: ${error.message}`, { error, pk, sk });
             throw error;
         }
     }
@@ -116,57 +129,70 @@ class LapseDAL {
                 }
             });
 
-            logger.debug('[LapseDAL] Getting lapses by month:', { companyId, month: sk });
+            logger.debug(`[LapseDAL] Getting lapses by month: ${companyId}, ${month}`);
             const response = await docClient.send(command);
             return response.Items || [];
         } catch (error) {
-            logger.error('[LapseDAL] getLapsesByMonth error:', error);
+            logger.error(`[LapseDAL] Error fetching lapses by month: ${error.message}`, { error, companyId, month });
             throw error;
         }
     }
 
     async getLapsesByProductionSite(companyId, productionSiteId, fromMonth, toMonth) {
         try {
-            const fromSk = formatMonthYearKey(fromMonth);
-            const toSk = formatMonthYearKey(toMonth);
-            this.validateSortKey(fromSk);
-            this.validateSortKey(toSk);
-
+            if (!companyId || !productionSiteId) {
+                throw new Error('Both companyId and productionSiteId are required');
+            }
+            
             const pk = `${companyId}_${productionSiteId}`;
-            const command = new QueryCommand({
+            const params = {
                 TableName: this.tableName,
-                KeyConditionExpression: 'pk = :pk AND sk BETWEEN :from AND :to',
+                KeyConditionExpression: 'pk = :pk',
                 ExpressionAttributeValues: {
-                    ':pk': pk,
-                    ':from': fromSk,
-                    ':to': toSk
-                }
-            });
-
-            logger.debug('[LapseDAL] Getting lapses by production site:', { pk, fromMonth: fromSk, toMonth: toSk });
+                    ':pk': pk
+                },
+                ScanIndexForward: true
+            };
+            
+            if (fromMonth && toMonth) {
+                params.KeyConditionExpression += ' AND sk BETWEEN :fromMonth AND :toMonth';
+                params.ExpressionAttributeValues[':fromMonth'] = fromMonth;
+                params.ExpressionAttributeValues[':toMonth'] = toMonth;
+            }
+            
+            logger.debug(`[LapseDAL] Fetching lapses for production site: ${pk}`, { fromMonth, toMonth });
+            const command = new QueryCommand(params);
             const response = await docClient.send(command);
             return response.Items || [];
         } catch (error) {
-            logger.error('[LapseDAL] getLapsesByProductionSite error:', error);
+            logger.error(`[LapseDAL] Error fetching lapses for production site: ${error.message}`, { 
+                error, 
+                companyId, 
+                productionSiteId, 
+                fromMonth, 
+                toMonth 
+            });
             throw error;
         }
     }
 
     async deleteLapse(pk, sk) {
         try {
-            this.validateSortKey(sk);
+            if (!pk || !sk) {
+                throw new Error('Both pk and sk are required for deletion');
+            }
             
             const command = new DeleteCommand({
                 TableName: this.tableName,
                 Key: { pk, sk },
                 ReturnValues: 'ALL_OLD'
             });
-
-            logger.debug('[LapseDAL] Deleting lapse item:', { pk, sk });
+            
+            logger.debug(`[LapseDAL] Deleting lapse record: ${pk}, ${sk}`);
             const response = await docClient.send(command);
             return response.Attributes;
         } catch (error) {
-            logger.error('[LapseDAL] deleteLapse error:', error);
+            logger.error(`[LapseDAL] Error deleting lapse record: ${error.message}`, { error, pk, sk });
             throw error;
         }
     }

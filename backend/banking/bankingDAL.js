@@ -215,6 +215,47 @@ class BankingDAL {
             throw error;
         }
     }
+
+    /**
+     * Get all banking records for a specific primary key (site)
+     * @param {string} pk - The primary key (site identifier)
+     * @returns {Promise<Array>} - Array of banking records
+     */
+    async getBankingByPk(pk) {
+        try {
+            const params = {
+                TableName: this.tableName,
+                KeyConditionExpression: 'pk = :pk',
+                ExpressionAttributeValues: {
+                    ':pk': pk
+                },
+                // Sort by sk (date) in descending order to get the latest records first
+                ScanIndexForward: false
+            };
+
+            let allItems = [];
+            let lastEvaluatedKey = null;
+
+            do {
+                if (lastEvaluatedKey) {
+                    params.ExclusiveStartKey = lastEvaluatedKey;
+                }
+
+                const result = await this.docClient.send(new QueryCommand(params));
+                
+                if (result.Items && result.Items.length > 0) {
+                    allItems = [...allItems, ...result.Items];
+                }
+                
+                lastEvaluatedKey = result.LastEvaluatedKey;
+            } while (lastEvaluatedKey);
+
+            return allItems;
+        } catch (error) {
+            logger.error('Error getting banking records by PK:', error);
+            throw error;
+        }
+    }
 }
 
 module.exports = new BankingDAL();

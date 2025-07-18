@@ -134,6 +134,7 @@ export const API_CONFIG = {
         BANKING: {
             BASE: '/banking',
             GET_ALL: '/banking',
+            GET_ALL_BY_PK: (pk) => `/banking/site/${pk}`,
             CREATE: '/banking',
             UPDATE: (pk, sk) => `/banking/${pk}/${sk}`,
             DELETE: (pk, sk) => `/banking/${pk}/${sk}`,
@@ -143,6 +144,7 @@ export const API_CONFIG = {
         LAPSE: {
             BASE: '/lapse',
             GET_ALL: '/lapse',
+            GET_ALL_BY_PK: (pk) => `/lapse/${pk}`,
             CREATE: '/lapse',
             UPDATE: (pk, sk) => `/lapse/${pk}/${sk}`,
             DELETE: (pk, sk) => `/lapse/${pk}/${sk}`,

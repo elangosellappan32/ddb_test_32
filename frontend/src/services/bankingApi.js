@@ -54,6 +54,32 @@ const formatBankingData = (data) => ({
 });
 
 const bankingApi = {
+  /**
+   * Fetches all banking records for a specific site using its PK
+   * @param {string} pk - The primary key of the site (format: companyId_siteId)
+   * @returns {Promise<Array>} - Array of banking records for the site
+   */
+  async fetchAllByPk(pk) {
+    try {
+      if (!pk) {
+        throw new Error('Primary key (pk) is required');
+      }
+      
+      const response = await api.get(API_CONFIG.ENDPOINTS.BANKING.GET_ALL_BY_PK(encodeURIComponent(pk)));
+      return response.data?.data || [];
+    } catch (error) {
+      // If no records found (404), return empty array instead of throwing error
+      if (error.response && error.response.status === 404) {
+        console.log(`[BankingAPI] No banking records found for site ${pk}, returning empty array`);
+        return [];
+      }
+      
+      // For other errors, log and rethrow
+      handleApiError('Error fetching banking records by PK:', error);
+      throw error;
+    }
+  },
+
   fetchAll: async () => {
     try {
       console.log('[BankingAPI] Fetching all banking records');

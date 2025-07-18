@@ -2,6 +2,35 @@ const logger = require('../utils/logger');
 const { ALL_PERIODS } = require('../constants/periods');
 const lapseService = require('../services/lapseService');
 
+// Get all lapses for a specific PK (companyId_productionSiteId)
+exports.getLapsesByPk = async (req, res) => {
+    try {
+        const { pk } = req.params;
+        logger.info(`[LapseController] Fetching lapses for PK: ${pk}`);
+        const result = await lapseService.getLapsesByPk(pk);
+        
+        if (!result || !Array.isArray(result)) {
+            logger.warn(`[LapseController] Invalid response from service for PK: ${pk}`);
+            return res.json({
+                success: true,
+                data: []
+            });
+        }
+        
+        res.json({
+            success: true,
+            data: result.map(transformLapseRecord)
+        });
+    } catch (error) {
+        logger.error('[LapseController] getLapsesByPk Error:', error);
+        res.status(500).json({
+            success: false,
+            message: error.message || 'Internal server error',
+            error: process.env.NODE_ENV === 'development' ? error.stack : undefined
+        });
+    }
+};
+
 const calculateTotal = (data) => {
     return ALL_PERIODS.reduce((sum, key) => sum + (Number(data[key]) || 0), 0);
 };
