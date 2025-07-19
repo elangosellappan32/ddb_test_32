@@ -1,10 +1,12 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useContext } from 'react';
 import allocationApi from '../services/allocationapi';
 import { useSnackbar } from 'notistack';
+import { AuthContext } from '../context/AuthContext';
 
 const POLLING_INTERVAL = 30000; // 30 seconds
 
 const useAllocation = (initialMonth) => {
+    const { user } = useContext(AuthContext);
     const [allocations, setAllocations] = useState({
         allocations: [],
         banking: [],
@@ -31,11 +33,17 @@ const useAllocation = (initialMonth) => {
             setLoading(true);
             setError(null);
             
+            if (!user || !user.companyId) {
+                throw new Error('User not authenticated or company not found');
+            }
+
             if (selectedType === 'all') {
-                const results = await allocationApi.fetchAll(selectedMonth);
+                // Pass company ID to filter allocations
+                const results = await allocationApi.fetchAll(selectedMonth, user.companyId);
                 setAllocations(results);
             } else {
-                const data = await allocationApi.fetchByType(selectedType, selectedMonth);
+                // Pass company ID to filter by type
+                const data = await allocationApi.fetchByType(selectedType, selectedMonth, user.companyId);
                 setAllocations(prev => ({
                     ...prev,
                     [selectedType]: data
@@ -71,8 +79,17 @@ const useAllocation = (initialMonth) => {
 
     const createAllocation = async (data, type = 'ALLOCATION') => {
         try {
+            if (!user || !user.companyId) {
+                throw new Error('User not authenticated or company not found');
+            }
+            
             setError(null);
-            const result = await allocationApi.create(data, type);
+            // Ensure the allocation is associated with the user's company
+            const allocationData = {
+                ...data,
+                companyId: user.companyId
+            };
+            const result = await allocationApi.create(allocationData, type);
             showNotification(`${type} created successfully`, 'success');
             await fetchAllocations();
             return result;

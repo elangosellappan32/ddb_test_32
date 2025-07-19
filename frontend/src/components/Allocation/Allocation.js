@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useContext } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { format } from 'date-fns';
 import {
   Box,
@@ -12,21 +12,12 @@ import {
   DialogTitle,
   DialogContent,
   DialogContentText,
-  DialogActions,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Paper,
-  Grid
+  DialogActions
 } from '@mui/material';
 import {
   Assignment as AssignmentIcon,
   Refresh as RefreshIcon,
-  Autorenew as AutorenewIcon,
-  Business as BusinessIcon
+  Autorenew as AutorenewIcon
 } from '@mui/icons-material';
 import { useSnackbar } from 'notistack';
 import productionUnitApi from '../../services/productionUnitapi';
@@ -36,7 +27,6 @@ import consumptionSiteapi from '../../services/consumptionSiteapi';
 import bankingApi from '../../services/bankingApi';
 import allocationApi from '../../services/allocationapi';
 import captiveApi from '../../services/captiveApi';
-import companyApi from '../../services/companyApi';
 import ProductionUnitsTable from './ProductionUnitsTable';
 import BankingUnitsTable from './BankingUnitsTable';
 import ConsumptionUnitsTable from './ConsumptionUnitsTable';
@@ -48,7 +38,7 @@ import { calculateAllocations } from '../../utils/allocationCalculator';
 
 const Allocation = () => {
   const { enqueueSnackbar } = useSnackbar();
-  const { hasSiteAccess } = useAuth();
+  const { hasSiteAccess, user } = useAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
@@ -63,15 +53,15 @@ const Allocation = () => {
   const [originalBankingAllocations, setOriginalBankingAllocations] = useState([]);
   const [originalLapseAllocations, setOriginalLapseAllocations] = useState([]);
   const [shareholdings, setShareholdings] = useState([]);
-  const [loadingShareholdings, setLoadingShareholdings] = useState(false);
+  const [, setLoadingShareholdings] = useState(false);
   const [manualAllocations, setManualAllocations] = useState({});
   const [showAllocations, setShowAllocations] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
   const [dialogData, setDialogData] = useState({ type: '', data: null });
 
-  // Default company ID - can be set from environment or config
-  const defaultCompanyId = process.env.REACT_APP_DEFAULT_COMPANY_ID || '1';
+  // Get company ID from the logged-in user
+  const companyId = user?.companyId || (user?.metadata?.companyId?.S || null);
   
   // Year range for the year dropdown (1950 to current year)
   const yearRange = {
@@ -81,6 +71,7 @@ const Allocation = () => {
 
   // Fetch shareholdings for a company
   const fetchShareholdings = useCallback(async (companyId) => {
+    if (!hasSiteAccess) return [];
     if (!companyId) {
       console.error('No company ID provided to fetchShareholdings');
       return [];
@@ -152,7 +143,7 @@ const Allocation = () => {
       
       return [];
     }
-  }, [enqueueSnackbar]);
+  }, [enqueueSnackbar, hasSiteAccess]);
 
   const handleManualAllocationChange = (prodId, consId, period, value) => {
     const key = `${prodId}_${consId}_${period}`;
@@ -163,20 +154,26 @@ const Allocation = () => {
 
     // Recalculate allocations with updated manualAllocations
     const updatedManualAllocations = { ...manualAllocations, [key]: newValue };
-    let newAllocations = calculateAllocations({
+    const result = calculateAllocations({
       productionUnits: productionData,
       consumptionUnits: consumptionData,
       bankingUnits: bankingData,
       manualAllocations: updatedManualAllocations,
-      shareholdings
+      shareholdings,
+      month: `${String(selectedMonth).padStart(2, '0')}${selectedYear}`
     });
 
+    // Filter allocations by type
+    const bankingAllocs = result.allocations.filter(a => a.type === 'BANKING');
+    const lapseAllocs = result.allocations.filter(a => a.type === 'LAPSE');
+    const regularAllocs = result.allocations.filter(a => !['BANKING', 'LAPSE'].includes(a.type));
+
     // Save original banking/lapse allocations if not already set
-    if (originalBankingAllocations.length === 0 && newAllocations.bankingAllocations.length > 0) {
-      setOriginalBankingAllocations(newAllocations.bankingAllocations.map(b => ({ ...b })));
+    if (originalBankingAllocations.length === 0 && bankingAllocs.length > 0) {
+      setOriginalBankingAllocations(bankingAllocs.map(b => ({ ...b })));
     }
-    if (originalLapseAllocations.length === 0 && newAllocations.lapseAllocations.length > 0) {
-      setOriginalLapseAllocations(newAllocations.lapseAllocations.map(l => ({ ...l })));
+    if (originalLapseAllocations.length === 0 && lapseAllocs.length > 0) {
+      setOriginalLapseAllocations(lapseAllocs.map(l => ({ ...l })));
     }
 
     // Validation: at least one period in allocated must be > 0, else set all to zero
@@ -192,75 +189,74 @@ const Allocation = () => {
       return a;
     });
 
-    setAllocations(fixZeroAllocations(newAllocations.allocations));
-    setBankingAllocations(fixZeroAllocations(newAllocations.bankingAllocations).map(b => {
-      const prod = productionData.find(p => p.productionSiteId === b.productionSiteId);
-      return {
-        ...b,
-        siteName: prod ? (prod.siteName || prod.productionSite || '') : '',
-        productionSite: prod ? (prod.productionSite || prod.siteName || '') : '',
-      };
-    }));
-    setLapseAllocations(fixZeroAllocations(newAllocations.lapseAllocations).map(l => {
-      const prod = productionData.find(p => p.productionSiteId === l.productionSiteId);
-      return {
-        ...l,
-        siteName: prod ? (prod.siteName || prod.productionSite || '') : '',
-        productionSite: prod ? (prod.productionSite || prod.siteName || '') : '',
-      };
-    }));
+    // Update state with fixed allocations
+    setAllocations(fixZeroAllocations(regularAllocs));
+    setBankingAllocations(fixZeroAllocations(bankingAllocs));
+    setLapseAllocations(fixZeroAllocations(lapseAllocs));
     setShowAllocations(true);
   };
 
-  const runAllocationCalculation = useCallback(() => {
+  const runAllocationCalculation = useCallback((currentShareholdings = shareholdings) => {
     if (!productionData.length || !consumptionData.length) return;
 
-    const { allocations, bankingAllocations, lapseAllocations } = calculateAllocations({
+    const result = calculateAllocations({
       productionUnits: productionData,
       consumptionUnits: consumptionData,
       bankingUnits: bankingData,
       manualAllocations,
-      shareholdings
+      shareholdings,
+      month: `${String(selectedMonth).padStart(2, '0')}${selectedYear}`
     });
     
+    console.log('Allocation result:', result);
     console.log('Shareholdings used in calculation:', shareholdings);
+
+    // Filter allocations by type for logging and display
+    const bankingAllocs = result.allocations.filter(a => a.type === 'BANKING');
+    const lapseAllocs = result.allocations.filter(a => a.type === 'LAPSE');
+    const regularAllocs = result.allocations.filter(a => !['BANKING', 'LAPSE'].includes(a.type));
 
     // Log banking allocations
     console.group('🏦 Banking Allocations');
-    console.log('Total Banking Allocations:', bankingAllocations.length);
-    bankingAllocations.forEach(bank => {
-      console.group(`Banking for ${bank.siteName || bank.productionSite}`);
+    console.log('Total Banking Allocations:', bankingAllocs.length);
+    bankingAllocs.forEach(bank => {
+      console.group(`Banking for ${bank.siteName || bank.productionSite || 'Unknown'}`);
       console.log('Production Site ID:', bank.productionSiteId);
       console.log('Allocated Units:', bank.allocated);
-      console.log('Total Units:', Object.values(bank.allocated).reduce((sum, val) => sum + (Number(val) || 0), 0));
+      console.log('Total Units:', Object.values(bank.allocated || {}).reduce((sum, val) => sum + (Number(val) || 0), 0));
       console.groupEnd();
     });
     console.groupEnd();
 
     // Log lapse allocations
     console.group('⏳ Lapse Allocations');
-    console.log('Total Lapse Allocations:', lapseAllocations.length);
-    lapseAllocations.forEach(lapse => {
-      console.group(`Lapse for ${lapse.siteName || lapse.productionSite}`);
+    console.log('Total Lapse Allocations:', lapseAllocs.length);
+    lapseAllocs.forEach(lapse => {
+      console.group(`Lapse for ${lapse.siteName || lapse.productionSite || 'Unknown'}`);
       console.log('Production Site ID:', lapse.productionSiteId);
       console.log('Allocated Units:', lapse.allocated);
-      console.log('Total Units:', Object.values(lapse.allocated).reduce((sum, val) => sum + (Number(val) || 0), 0));
+      console.log('Total Units:', Object.values(lapse.allocated || {}).reduce((sum, val) => sum + (Number(val) || 0), 0));
       console.groupEnd();
     });
     console.groupEnd();
 
-    setAllocations(allocations);
-    setBankingAllocations(bankingAllocations);
-    setLapseAllocations(lapseAllocations);
+    // Set all allocations in the main state
+    setAllocations(regularAllocs);
+    
+    // For backward compatibility, also set banking and lapse allocations
+    // but these will be derived from the main allocations array
+    setBankingAllocations(bankingAllocs);
+    setLapseAllocations(lapseAllocs);
+    
     setShowAllocations(true);
 
     enqueueSnackbar('Allocation data updated', { 
       variant: 'success',
       autoHideDuration: 2000 
     });
-  }, [productionData, consumptionData, bankingData, manualAllocations, enqueueSnackbar]);
+  }, [productionData, consumptionData, bankingData, manualAllocations, enqueueSnackbar, selectedMonth, selectedYear, shareholdings, showAllocations]);
 
-  const updateAllocationData = useCallback(() => {
+  const updateAllocationData = useCallback((currentShareholdings = shareholdings) => {
     if (!showAllocations) {
       console.log('Allocations not shown, skipping update');
       return;
@@ -284,31 +280,33 @@ const Allocation = () => {
     
     try {
       // Recalculate allocations with current data
-      const { allocations, bankingAllocations, lapseAllocations } = calculateAllocations({
+      const result = calculateAllocations({
         productionUnits: productionData,
         consumptionUnits: consumptionData,
         bankingUnits: bankingData,
         manualAllocations,
-        shareholdings
+        shareholdings,
+        month: `${String(selectedMonth).padStart(2, '0')}${selectedYear}`
       });
       
-      console.log('Allocation calculation results:', {
-        allocations: allocations.length,
-        bankingAllocations: bankingAllocations.length,
-        lapseAllocations: lapseAllocations.length
-      });
+      console.log('Allocation calculation results:', result);
+      
+      // Filter allocations by type
+      const bankingAllocs = result.allocations.filter(a => a.type === 'BANKING');
+      const lapseAllocs = result.allocations.filter(a => a.type === 'LAPSE');
+      const regularAllocs = result.allocations.filter(a => !['BANKING', 'LAPSE'].includes(a.type));
       
       // Update state with new allocations
-      setAllocations(allocations);
-      setBankingAllocations(bankingAllocations);
-      setLapseAllocations(lapseAllocations);
+      setAllocations(regularAllocs);
+      setBankingAllocations(bankingAllocs);
+      setLapseAllocations(lapseAllocs);
       
       // Save original banking/lapse allocations if not already set
-      if (originalBankingAllocations.length === 0 && bankingAllocations.length > 0) {
-        setOriginalBankingAllocations(bankingAllocations.map(b => ({ ...b })));
+      if (originalBankingAllocations.length === 0 && bankingAllocs.length > 0) {
+        setOriginalBankingAllocations(bankingAllocs.map(b => ({ ...b })));
       }
-      if (originalLapseAllocations.length === 0 && lapseAllocations.length > 0) {
-        setOriginalLapseAllocations(lapseAllocations.map(l => ({ ...l })));
+      if (originalLapseAllocations.length === 0 && lapseAllocs.length > 0) {
+        setOriginalLapseAllocations(lapseAllocs.map(l => ({ ...l })));
       }
       
     } catch (error) {
@@ -316,7 +314,6 @@ const Allocation = () => {
       enqueueSnackbar('Failed to update allocations. Please try again.', { variant: 'error' });
     }
   }, [
-    showAllocations, 
     productionData, 
     consumptionData, 
     bankingData, 
@@ -324,13 +321,73 @@ const Allocation = () => {
     shareholdings, 
     originalBankingAllocations.length, 
     originalLapseAllocations.length, 
-    enqueueSnackbar
+    enqueueSnackbar,
+    selectedMonth,
+    selectedYear
   ]);
 
-  const prepareAllocationPayload = (allocation, type, selectedMonth, selectedYear) => {
-    const companyId = defaultCompanyId;
-    const monthYear = allocation.month && allocation.month.length === 6 ? allocation.month : formatAllocationMonth(selectedMonth, selectedYear);
-    let payload = { ...allocation };
+  const prepareAllocationPayload = useCallback((allocation, type, month, year) => {
+    if (!companyId) {
+      throw new Error('No company ID available for preparing allocation payload');
+    }
+    
+    const monthYear = allocation.month && allocation.month.length === 6 ? allocation.month : formatAllocationMonth(month, year);
+    
+    // Create a copy of the allocation to avoid mutating the original
+    const payload = { ...allocation };
+    
+    // Validate production site ID for allocation types that require it
+    if (['ALLOCATION', 'BANKING', 'LAPSE'].includes(String(type || '').toUpperCase())) {
+      const prodSiteId = payload.productionSiteId || allocation.productionSiteId;
+      if (!prodSiteId) {
+        throw new Error(`Production site ID is required for ${type} allocation`);
+      }
+      
+      // Find the production site to get the correct ID format and company ID
+      const productionSite = productionData.find(site => 
+        site.productionSiteId === prodSiteId || site.id === prodSiteId || String(site.productionSiteId) === String(prodSiteId)
+      );
+      
+      if (!productionSite) {
+        console.warn(`Production site not found in local data: ${prodSiteId}`, {
+          allocation,
+          availableSites: productionData.map(s => ({ 
+            id: s.id, 
+            productionSiteId: s.productionSiteId, 
+            companyId: s.companyId,
+            name: s.siteName,
+            type: typeof s.productionSiteId
+          }))
+        });
+        throw new Error(`Production site not found: ${prodSiteId}. Please refresh the page and try again.`);
+      }
+      
+      // Ensure productionSiteId is set to the correct format from the database
+      const productionSiteId = productionSite.productionSiteId || productionSite.id;
+      payload.productionSiteId = productionSiteId;
+      
+      // Set production site name and details for banking and lapse allocations
+      if (type === 'BANKING' || type === 'LAPSE') {
+        payload.productionSite = productionSite.siteName || productionSite.name;
+        payload.siteName = productionSite.siteName || productionSite.name;
+        payload.productionSiteId = productionSiteId;
+        // Ensure c1-c5 values are copied to root level for LAPSE to match BANKING
+        if (type === 'LAPSE' && payload.allocated) {
+          payload.c1 = payload.allocated.c1 || 0;
+          payload.c2 = payload.allocated.c2 || 0;
+          payload.c3 = payload.allocated.c3 || 0;
+          payload.c4 = payload.allocated.c4 || 0;
+          payload.c5 = payload.allocated.c5 || 0;
+        }
+      }
+      
+      // Use the company ID from the production site
+      let siteCompanyId = companyId; // Create a new variable to avoid reassigning the prop
+      if (productionSite.companyId) {
+        siteCompanyId = productionSite.companyId;
+      }
+    }
+    
     payload.companyId = companyId;
     payload.type = (type || allocation.type || 'ALLOCATION').toUpperCase();
     payload.month = monthYear;
@@ -357,11 +414,22 @@ const Allocation = () => {
     payload.ttl = 0;
     if (!payload.createdAt) payload.createdAt = ts;
     payload.updatedAt = ts;
+    
+    // Clean up undefined/null values and log the final payload for debugging
     Object.keys(payload).forEach(
       key => (payload[key] === undefined || payload[key] === null) && delete payload[key]
     );
+    
+    console.log(`[prepareAllocationPayload] Prepared ${type} payload:`, {
+      productionSiteId: payload.productionSiteId,
+      consumptionSiteId: payload.consumptionSiteId,
+      month: payload.month,
+      type: payload.type,
+      companyId: payload.companyId
+    });
+    
     return payload;
-  };
+  }, [companyId, productionData, consumptionData, bankingData, manualAllocations, formatAllocationMonth]);
 
   // Fix edit dialog selection: match by productionSiteId and consumptionSiteId (if present)
   const handleEditAllocation = useCallback((allocation, type) => {
@@ -462,52 +530,49 @@ const Allocation = () => {
     return month >= 4 ? year : year - 1;
   };
 
-  const getFinancialYearMonths = (year) => {
-    const months = [];
-    // April to December of selected year
-    for (let month = 4; month <= 12; month++) {
-      months.push(`${month.toString().padStart(2, '0')}${year}`);
-    }
-    // January to March of next year
-    for (let month = 1; month <= 3; month++) {
-      months.push(`${month.toString().padStart(2, '0')}${year + 1}`);
-    }
-    return months;
-  };
-
   const fetchAllData = useCallback(async () => {
+    if (!selectedMonth || !selectedYear || !companyId) {
+      console.error('Missing required data for fetchAllData:', { 
+        selectedMonth, 
+        selectedYear, 
+        companyId 
+      });
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+    
+    console.log(`Fetching data for month: ${selectedMonth} year: ${selectedYear} for company: ${companyId}`);
+    
+    // Format month with leading zero if needed
+    const formattedMonth = String(selectedMonth).padStart(2, '0');
+    const financialYear = selectedMonth > 3 ? selectedYear : selectedYear - 1;
+    
+    const params = {
+      companyId: companyId,
+      month: selectedMonth,
+      year: selectedYear,
+      formattedMonth: `${formattedMonth}${selectedYear}`,
+      financialYear,
+      financialYearString: `${financialYear}-${financialYear + 1}`
+    };
+    
+    console.log('Fetching data with params:', params);
 
     try {
-      setLoading(true);
-      setError(null);
-      
-      console.log('Fetching data for month:', selectedMonth, 'year:', selectedYear);
-      
-      const formattedMonth = `${selectedMonth.toString().padStart(2, '0')}${selectedYear}`;
-      const financialYear = getFinancialYear(selectedMonth, selectedYear);
-      const financialYearMonths = getFinancialYearMonths(financialYear);
-
-      console.log('Fetching data with params:', {
-        companyId: defaultCompanyId,
-        month: selectedMonth,
-        year: selectedYear,
-        formattedMonth,
-        financialYear,
-        financialYearMonths
-      });
-
       const [prodSitesResp, consSitesResp, bankingResp] = await Promise.all([
-        productionSiteapi.fetchAll(defaultCompanyId).catch(err => {
+        productionSiteapi.fetchAll(companyId).catch(err => {
           console.error('Error fetching production sites:', err);
           enqueueSnackbar('Failed to load production sites', { variant: 'error' });
           return { data: [] };
         }),
-        consumptionSiteapi.fetchAll(defaultCompanyId).catch(err => {
+        consumptionSiteapi.fetchAll(companyId).catch(err => {
           console.error('Error fetching consumption sites:', err);
           enqueueSnackbar('Failed to load consumption sites', { variant: 'error' });
           return { data: [] };
         }),
-        bankingApi.fetchByPeriod(formattedMonth, defaultCompanyId).catch(err => {
+        bankingApi.fetchByPeriod(formattedMonth, companyId).catch(err => {
           console.error('Error fetching banking data:', err);
           enqueueSnackbar('Failed to load banking data', { variant: 'error' });
           return { data: [] };
@@ -551,6 +616,19 @@ const Allocation = () => {
       }, {});
 
       console.log('Created site name map with', Object.keys(siteNameMap).length, 'sites');
+
+      // Calculate financial year months for filtering banking data
+      const financialYear = selectedMonth > 3 ? selectedYear : selectedYear - 1;
+      const financialYearMonths = [];
+      
+      // April to December of the current financial year
+      for (let month = 4; month <= 12; month++) {
+        financialYearMonths.push(`${month.toString().padStart(2, '0')}${financialYear}`);
+      }
+      // January to March of the next financial year
+      for (let month = 1; month <= 3; month++) {
+        financialYearMonths.push(`${month.toString().padStart(2, '0')}${financialYear + 1}`);
+      }
 
       // Process banking data for the entire financial year
       const allBankingData = bankingData
@@ -888,7 +966,7 @@ const Allocation = () => {
       const updatedProductionUnits = productionUnits.map(unit => {
         try {
           if (!unit) return null;
-          const companyId = defaultCompanyId;
+          // Using the component's companyId from user context
           const formattedMonth = `${selectedMonth.toString().padStart(2, '0')}${selectedYear}`; // mmyyyy format
           
           return {
@@ -964,14 +1042,14 @@ const Allocation = () => {
     } finally {
       setLoading(false);
     }
-  }, [enqueueSnackbar, selectedMonth, selectedYear]);
+  }, [enqueueSnackbar, selectedMonth, selectedYear, companyId, hasSiteAccess]);
 
-  // Fetch shareholdings on component mount
+  // Fetch shareholdings on component mount or when companyId changes
   useEffect(() => {
     const loadShareholdings = async () => {
-      if (!defaultCompanyId) {
-        console.error('[loadShareholdings] No default company ID set');
-        enqueueSnackbar('No default company configured', { 
+      if (!companyId) {
+        console.error('[loadShareholdings] No company ID available for the logged-in user');
+        enqueueSnackbar('No company information found for the logged-in user', { 
           variant: 'error',
           autoHideDuration: 5000 
         });
@@ -980,9 +1058,9 @@ const Allocation = () => {
 
       try {
         setLoadingShareholdings(true);
-        console.log(`[loadShareholdings] Loading shareholdings for company: ${defaultCompanyId}`);
+        console.log(`[loadShareholdings] Loading shareholdings for company: ${companyId}`);
         
-        const shareholdingsData = await fetchShareholdings(defaultCompanyId);
+        const shareholdingsData = await fetchShareholdings(companyId);
         console.log(`[loadShareholdings] Received ${shareholdingsData?.length || 0} shareholdings`);
         
         if (shareholdingsData && shareholdingsData.length > 0) {
@@ -1017,8 +1095,16 @@ const Allocation = () => {
       }
     };
     
-    loadShareholdings();
-  }, [defaultCompanyId, enqueueSnackbar, fetchShareholdings]);
+    if (companyId) {
+      loadShareholdings();
+    } else {
+      console.warn('Cannot load shareholdings: No company ID available');
+      enqueueSnackbar('Cannot load shareholdings: No company information available', {
+        variant: 'warning',
+        autoHideDuration: 5000
+      });
+    }
+  }, [companyId, enqueueSnackbar, fetchShareholdings]);
 
   // Update allocations when shareholdings or data changes
   useEffect(() => {
@@ -1039,12 +1125,20 @@ const Allocation = () => {
       console.log('Updating allocation data with shareholdings:', shareholdings.length);
       updateAllocationData();
     }
-  }, [shareholdings, productionData, consumptionData, updateAllocationData, enqueueSnackbar]);
+  }, [productionData, consumptionData, shareholdings, updateAllocationData, enqueueSnackbar, selectedMonth, selectedYear]);
 
-  // Fetch data when selectedYear or selectedMonth changes
+  // Fetch data when selectedYear, selectedMonth, or companyId changes
   useEffect(() => {
-    fetchAllData();
-  }, [selectedYear, selectedMonth, fetchAllData]);
+    if (companyId) {
+      fetchAllData();
+    } else {
+      console.warn('Cannot fetch data: No company ID available');
+      enqueueSnackbar('Cannot load data: No company information available', {
+        variant: 'warning',
+        autoHideDuration: 5000
+      });
+    }
+  }, [selectedYear, selectedMonth, companyId, fetchAllData, enqueueSnackbar]);
 
   const handleMonthChange = (event) => {
     setSelectedMonth(Number(event.target.value));
@@ -1058,15 +1152,44 @@ const Allocation = () => {
   const handleSaveAllocation = async () => {
     setIsSaving(true);
     try {
+      // Log available production sites for debugging
+      console.log('Available production sites:', productionData.map(site => ({
+        id: site.id,
+        productionSiteId: site.productionSiteId,
+        name: site.siteName,
+        companyId: site.companyId
+      })));
+
       // 1. Save allocations
       if (allocations.length) {
         const allocPayloads = allocations.map(a => prepareAllocationPayload(a, 'ALLOCATION', selectedMonth, selectedYear));
-        console.log('[AllocationApi] Payload to allocation table:', allocPayloads);
+        console.log('[AllocationApi] Payload to allocation table:', JSON.stringify(allocPayloads, null, 2));
+        
+        // Verify all production sites exist before making API calls
         for (const payload of allocPayloads) {
           try {
+            // Log the payload being sent
+            console.log(`Creating allocation for production site: ${payload.productionSiteId}`, {
+              payload,
+              productionSiteId: payload.productionSiteId,
+              hasProductionSite: productionData.some(site => 
+                site.productionSiteId === payload.productionSiteId || site.id === payload.productionSiteId
+              )
+            });
+            
             await allocationApi.createAllocation(payload);
           } catch (error) {
             const msg = error.message || '';
+            console.error('Error creating allocation:', {
+              error,
+              payload,
+              productionSites: productionData.map(s => ({
+                id: s.id,
+                productionSiteId: s.productionSiteId,
+                name: s.siteName
+              }))
+            });
+            
             if (msg.includes('already exists')) {
               // Duplicate: ask to update existing record
               if (window.confirm(`${msg}. Do you want to update it instead?`)) {
@@ -1075,6 +1198,12 @@ const Allocation = () => {
                 throw error;
               }
             } else {
+              // For production site not found errors, provide more context
+              if (msg.includes('Production site not found')) {
+                throw new Error(`${msg}. Available production sites: ${
+                  productionData.map(s => `${s.siteName} (ID: ${s.productionSiteId || s.id})`).join(', ')
+                }`);
+              }
               throw error;
             }
           }
@@ -1082,18 +1211,93 @@ const Allocation = () => {
       }
       // 2. Save banking allocations
       if (bankingAllocations.length) {
-        const bankPayloads = bankingAllocations.map(b => prepareAllocationPayload(b, 'BANKING', selectedMonth, selectedYear));
-        console.log('[BankingApi] Payload to banking table:', bankPayloads);
-        for (const payload of bankPayloads) {
-          await allocationApi.createBanking(payload);
+        // Group banking allocations by production site and month
+        const bankingMap = new Map();
+        
+        bankingAllocations.forEach(b => {
+          const payload = prepareAllocationPayload(b, 'BANKING', selectedMonth, selectedYear);
+          // Use a composite key of productionSiteId and month to group
+          const key = `${payload.productionSiteId}_${payload.month}`;
+          
+          if (!bankingMap.has(key)) {
+            // Initialize with the first payload for this site/month
+            bankingMap.set(key, { ...payload });
+          } else {
+            // Merge c1-c5 values for the same site/month
+            const existing = bankingMap.get(key);
+            ['c1', 'c2', 'c3', 'c4', 'c5'].forEach(field => {
+              existing[field] = (existing[field] || 0) + (payload[field] || 0);
+            });
+          }
+        });
+        
+        // Convert map values back to array
+        const consolidatedBanking = Array.from(bankingMap.values());
+        console.log('[BankingApi] Consolidated banking payloads:', consolidatedBanking);
+        
+        // Process each unique banking allocation
+        for (const payload of consolidatedBanking) {
+          try {
+            console.log(`[BankingApi] Processing banking for site ${payload.productionSiteId}, month ${payload.month}`);
+            await allocationApi.createBanking(payload);
+          } catch (error) {
+            console.error(`[BankingApi] Error processing banking for site ${payload.productionSiteId}:`, error);
+            throw error;
+          }
         }
       }
-      // 3. Save lapse allocations
+      // 3. Save lapse allocations - handle potential duplicates with existence check
       if (lapseAllocations.length) {
         const lapsePayloads = lapseAllocations.map(l => prepareAllocationPayload(l, 'LAPSE', selectedMonth, selectedYear));
         console.log('[LapseApi] Payload to lapse table:', lapsePayloads);
+        
         for (const payload of lapsePayloads) {
-          await allocationApi.createLapse(payload);
+          try {
+            // First, check if a LAPSE record already exists for this PK/SK
+            console.log(`[LapseApi] Checking for existing LAPSE record: ${payload.pk}_${payload.sk}`);
+            const existingRecord = await allocationApi.get(payload.pk, payload.sk, 'LAPSE').catch(() => null);
+            
+            if (existingRecord) {
+              // Record exists, update it
+              console.log(`[LapseApi] Updating existing LAPSE record: ${payload.pk}_${payload.sk}`);
+              await allocationApi.update(payload.pk, payload.sk, payload, 'LAPSE');
+              console.log('[LapseApi] Successfully updated LAPSE record');
+            } else {
+              // No record exists, create a new one
+              console.log(`[LapseApi] Creating new LAPSE record: ${payload.pk}_${payload.sk}`);
+              await allocationApi.createLapse(payload);
+              console.log('[LapseApi] Successfully created LAPSE record');
+            }
+          } catch (error) {
+            const errorMessage = error.message || '';
+            const responseMessage = error.response?.data?.message || '';
+            const statusCode = error.response?.status;
+            
+            console.error(`[LapseApi] Error processing LAPSE record ${payload.pk}_${payload.sk}:`, {
+              error: errorMessage,
+              response: responseMessage,
+              statusCode
+            });
+            
+            // If we get a 400 and the error message is about the record existing, try to update it
+            if (statusCode === 400 && 
+                (errorMessage.includes('already exists') || 
+                 errorMessage.includes('conditional check failed') ||
+                 responseMessage.includes('already exists') ||
+                 responseMessage.includes('conditional check failed'))) {
+              console.log('[LapseApi] Record may exist, attempting update...');
+              try {
+                await allocationApi.update(payload.pk, payload.sk, payload, 'LAPSE');
+                console.log('[LapseApi] Successfully updated LAPSE record after initial failure');
+                continue; // Success, move to next record
+              } catch (updateError) {
+                console.error('[LapseApi] Failed to update LAPSE record after initial failure:', updateError);
+              }
+            }
+            
+            // If we get here, all attempts have failed
+            throw new Error(`Failed to save LAPSE record: ${errorMessage || responseMessage || 'Unknown error'}`);
+          }
         }
       }
       enqueueSnackbar('Allocations saved successfully!', { variant: 'success' });
@@ -1209,6 +1413,9 @@ const Allocation = () => {
         consumptionData={consumptionData}
         selectedYear={financialYear}
         shareholdings={shareholdings}
+        companyId={companyId}
+        isLoading={loading}
+        onAllocationSaved={updateAllocationData}
       />
 
       <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 4, mt: 2 }}>

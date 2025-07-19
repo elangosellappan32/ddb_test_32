@@ -36,21 +36,43 @@ class BankingDAL {
             // Get existing banking record if it exists
             const existingBanking = await this.getBanking(item.pk, item.sk);
             
+            // If record exists, update it with new values (don't add to existing values)
+            if (existingBanking) {
+                const updateData = {
+                    ...item,
+                    // Use new values directly, don't add to existing
+                    c1: Number(item.c1 || 0),
+                    c2: Number(item.c2 || 0),
+                    c3: Number(item.c3 || 0),
+                    c4: Number(item.c4 || 0),
+                    c5: Number(item.c5 || 0),
+                    updatedAt: now,
+                    version: (existingBanking.version || 0) + 1
+                };
+                
+                // Calculate total banking with new values
+                updateData.totalBanking = this.calculateTotal(updateData);
+                
+                // Use update operation to ensure we don't lose any existing fields
+                return await this.updateBanking(item.pk, item.sk, updateData);
+            }
+            
+            // If no existing record, create a new one
             const bankingItem = {
                 ...item,
-                // Add new banking values to existing ones
-                c1: (existingBanking?.c1 || 0) + Number(item.c1 || 0),
-                c2: (existingBanking?.c2 || 0) + Number(item.c2 || 0),
-                c3: (existingBanking?.c3 || 0) + Number(item.c3 || 0),
-                c4: (existingBanking?.c4 || 0) + Number(item.c4 || 0),
-                c5: (existingBanking?.c5 || 0) + Number(item.c5 || 0),
+                // Use provided values directly
+                c1: Number(item.c1 || 0),
+                c2: Number(item.c2 || 0),
+                c3: Number(item.c3 || 0),
+                c4: Number(item.c4 || 0),
+                c5: Number(item.c5 || 0),
                 siteName: item.siteName || '',
-                createdAt: existingBanking?.createdAt || now,
+                createdAt: now,
                 updatedAt: now,
-                version: (existingBanking?.version || 0) + 1
+                version: 1
             };
 
-            // Calculate total banking after update
+            // Calculate total banking
             bankingItem.totalBanking = this.calculateTotal(bankingItem);
 
             await this.docClient.send(new PutCommand({
@@ -97,32 +119,59 @@ class BankingDAL {
 
     async updateBanking(pk, sk, updates) {
         try {
-            const updateExpression = [];
+            // Create a clean copy of updates without pk/sk and with proper values
+            const cleanUpdates = {};
             const expressionAttributeValues = {
                 ':updatedAt': new Date().toISOString(),
                 ':inc': 1
             };
             const expressionAttributeNames = {};
-
+            
+            // Process each update field
             Object.entries(updates).forEach(([key, value]) => {
-                if (value !== undefined && !['pk', 'sk'].includes(key)) {
-                    const attrKey = `#${key}`;
-                    const attrValue = `:${key}`;
-                    updateExpression.push(`${attrKey} = ${attrValue}`);
-                    expressionAttributeValues[attrValue] = value;
-                    expressionAttributeNames[attrKey] = key;
+                if (['pk', 'sk'].includes(key)) return; // Skip primary key fields
+                
+                // Handle special cases for c1-c5 to ensure they're numbers
+                if (key.match(/^c[1-5]$/)) {
+                    cleanUpdates[key] = Number(value) || 0;
+                } else if (key !== 'updatedAt') { // Skip updatedAt as we handle it separately
+                    cleanUpdates[key] = value;
                 }
             });
-
+            
+            // Build update expression
+            const updateExpressions = ['SET #updatedAt = :updatedAt', '#version = #version + :inc'];
+            
+            // Add all fields to update
+            Object.entries(cleanUpdates).forEach(([key, value]) => {
+                const attrKey = `#${key}`;
+                const valKey = `:${key}`;
+                
+                expressionAttributeNames[attrKey] = key;
+                expressionAttributeValues[valKey] = value;
+                updateExpressions.push(`${attrKey} = ${valKey}`);
+            });
+            
+            // Always update updatedAt and version
             expressionAttributeNames['#updatedAt'] = 'updatedAt';
             expressionAttributeNames['#version'] = 'version';
-            updateExpression.push('#updatedAt = :updatedAt');
-            updateExpression.push('#version = #version + :inc');
+            
+            // Calculate total if any c1-c5 values were updated
+            if (Object.keys(cleanUpdates).some(k => k.match(/^c[1-5]$/))) {
+                const existingItem = await this.getBanking(pk, sk) || {};
+                const totalBanking = this.calculateTotal({
+                    ...existingItem,
+                    ...cleanUpdates
+                });
+                expressionAttributeNames['#totalBanking'] = 'totalBanking';
+                expressionAttributeValues[':totalBanking'] = totalBanking;
+                updateExpressions.push('#totalBanking = :totalBanking');
+            }
 
             const response = await this.docClient.send(new UpdateCommand({
                 TableName: this.tableName,
                 Key: { pk, sk },
-                UpdateExpression: `SET ${updateExpression.join(', ')}`,
+                UpdateExpression: updateExpressions.join(', '),
                 ExpressionAttributeNames: expressionAttributeNames,
                 ExpressionAttributeValues: expressionAttributeValues,
                 ReturnValues: 'ALL_NEW'

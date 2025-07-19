@@ -52,16 +52,33 @@ class LapseDAL {
         try {
             this.validateSortKey(lapseData.sk);
             
-            // Normalize allocated values
-            const normalizedAllocated = this.normalizeAllocated(lapseData.allocated);
+            // Extract c1-c5 from allocated if present, or use root level values
+            const { allocated, ...restData } = lapseData;
+            const cValues = {
+                c1: 0,
+                c2: 0,
+                c3: 0,
+                c4: 0,
+                c5: 0,
+                ...(allocated || {}),
+                ...restData
+            };
             
+            // Create item with c1-c5 at root level
             const item = {
-                ...lapseData,
-                allocated: normalizedAllocated,
+                ...restData,
+                c1: Number(cValues.c1) || 0,
+                c2: Number(cValues.c2) || 0,
+                c3: Number(cValues.c3) || 0,
+                c4: Number(cValues.c4) || 0,
+                c5: Number(cValues.c5) || 0,
                 type: 'LAPSE',
                 createdat: new Date().toISOString(),
                 updatedat: new Date().toISOString()
             };
+            
+            // Remove allocated if it exists
+            delete item.allocated;
             
             const command = new PutCommand({
                 TableName: this.tableName,
@@ -86,27 +103,53 @@ class LapseDAL {
             
             this.validateSortKey(sk);
             
-            // Normalize allocated values if present
-            let updateExpression = 'SET updatedat = :updatedat';
+            // Extract c1-c5 from updates or from allocated if present
+            const { allocated, ...restUpdates } = updates;
+            const cValues = {
+                c1: 0,
+                c2: 0,
+                c3: 0,
+                c4: 0,
+                c5: 0,
+                ...(allocated || {}),
+                ...restUpdates
+            };
+            
+            // Build update expression for direct c1-c5 values
+            const updateExpressions = ['SET updatedat = :updatedat'];
             const expressionAttributeValues = {
                 ':updatedat': new Date().toISOString()
             };
             
-            if (updates.allocated) {
-                const normalizedAllocated = this.normalizeAllocated(updates.allocated);
-                updateExpression += ', allocated = :allocated';
-                expressionAttributeValues[':allocated'] = normalizedAllocated;
-            }
+            // Add c1-c5 to update expression
+            ['c1', 'c2', 'c3', 'c4', 'c5'].forEach((key, index) => {
+                const value = Number(cValues[key]) || 0;
+                updateExpressions.push(`${key} = :${key}`);
+                expressionAttributeValues[`:${key}`] = value;
+            });
             
+            // Remove allocated if it exists in the item
             const command = new UpdateCommand({
                 TableName: this.tableName,
                 Key: { pk, sk },
-                UpdateExpression: updateExpression,
+                UpdateExpression: updateExpressions.join(', '),
                 ExpressionAttributeValues: expressionAttributeValues,
+                // Remove allocated attribute if it exists
+                UpdateExpression: `${updateExpressions.join(', ')} REMOVE allocated`,
                 ReturnValues: 'ALL_NEW'
             });
             
-            logger.debug(`[LapseDAL] Updating lapse record: ${pk}, ${sk}`, { updates });
+            logger.debug(`[LapseDAL] Updating lapse record: ${pk}, ${sk}`, { 
+                updates: {
+                    ...restUpdates,
+                    c1: cValues.c1,
+                    c2: cValues.c2,
+                    c3: cValues.c3,
+                    c4: cValues.c4,
+                    c5: cValues.c5
+                }
+            });
+            
             const response = await docClient.send(command);
             return response.Attributes;
         } catch (error) {
