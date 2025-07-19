@@ -154,38 +154,57 @@ export function calculateAllocations({
 
   // Core allocation
   function allocate(prodList, consList, period) {
-    for (const prod of prodList) {
-      if (prod.remaining[period] <= 0) continue;
+    console.group(`[allocate] Processing period ${period}`);
+  
+    try {
+      for (const prod of prodList) {
+        if (prod.remaining[period] <= 0) continue;
 
-      for (const cons of consList) {
-        if (cons.remaining[period] <= 0) continue;
+        for (const cons of consList) {
+          if (cons.remaining[period] <= 0) continue;
 
-        // Compatibility check
-        if (!isCompatible(period, period)) continue;
+          // Compatibility check
+          if (!isCompatible(period, period)) continue;
 
-        const available = prod.remaining[period];
-        const needed = cons.remaining[period];
-        const alloc = Math.min(available, needed);
-        const finalAlloc = applyShareholding(alloc, prod.companyId, shareMap);
+          const available = prod.remaining[period];
+          const needed = cons.remaining[period];
+          const alloc = Math.min(available, needed);
+          const finalAlloc = applyShareholding(alloc, prod.companyId, shareMap);
 
-        if (finalAlloc <= 0) continue;
+          if (finalAlloc <= 0) continue;
 
-        prod.remaining[period] -= finalAlloc;
-        cons.remaining[period] -= finalAlloc;
+          prod.remaining[period] -= finalAlloc;
+          cons.remaining[period] -= finalAlloc;
 
-        let record = allocations.find(a =>
-          a.productionSiteId === prod.productionSiteId &&
-          a.consumptionSiteId === cons.consumptionSiteId &&
-          a.month === prod.month
-        );
+          const monthYear = formatAllocationMonth(selectedMonth, selectedYear);
+          const allocationKey = `${prod.productionSiteId}_${cons.consumptionSiteId}_${monthYear}`;
+          
+          // Try to find existing allocation record
+          let record = allocations.find(a => 
+            a.productionSiteId === prod.productionSiteId &&
+            a.consumptionSiteId === cons.consumptionSiteId &&
+            a.month === monthYear
+          );
 
-        if (!record) {
-          record = createAllocationRecord(prod, cons, prod.month);
-          allocations.push(record);
+          if (!record) {
+            console.log(`[allocate] Creating new allocation record for site ${prod.productionSiteId} -> ${cons.consumptionSiteId} (${monthYear})`);
+            record = createAllocationRecord(prod, cons, monthYear);
+            allocations.push(record);
+          } else {
+            console.log(`[allocate] Updating existing allocation record for site ${prod.productionSiteId} -> ${cons.consumptionSiteId} (${monthYear})`);
+            record.updatedAt = new Date().toISOString();
+          }
+
+          // Update the allocation for this period
+          record.allocated[period] = (record.allocated[period] || 0) + finalAlloc;
+          console.log(`[allocate] Added ${finalAlloc} units to period ${period} (total: ${record.allocated[period]})`);
         }
-
-        record.allocated[period] += finalAlloc;
       }
+    } catch (error) {
+      console.error('[allocate] Error:', error);
+      throw error;
+    } finally {
+      console.groupEnd();
     }
   }
 
@@ -225,88 +244,60 @@ export function calculateAllocations({
     console.group(`[handleLeftovers] Processing period ${period} with ${group.length} production units`);
     
     try {
-      for (const [idx, prod] of group.entries()) {
-        // Ensure we have a valid number for remaining units
+      const monthYear = formatAllocationMonth(selectedMonth, selectedYear);
+      
+      // First pass: collect all remaining units by site and type
+      for (const prod of group) {
         const left = Math.max(0, Number(prod.remaining[period]) || 0);
+        if (left <= 0) continue;
         
-        console.log(`[${idx}] Checking ${prod.productionSiteId} (${prod.type}) - remaining[${period}]:`, left, 
-                   'bankingEnabled:', prod.bankingEnabled, 
-                   'Full remaining:', {...prod.remaining},
-                   'Production Site ID:', prod.productionSiteId,
-                   'Site Name:', prod.siteName,
-                   'Site Type:', prod.siteType);
+        const recordType = prod.bankingEnabled ? 'BANKING' : 'LAPSE';
+        const siteKey = `${prod.productionSiteId}_${monthYear}`;
         
-        if (left <= 0) {
-          console.log(`[${idx}] No remaining units to allocate`);
-          continue;
-        }
+        // Create or update the record
+        let record;
+        const existingRecordIndex = (recordType === 'BANKING' ? bankingAllocations : lapseAllocations)
+          .findIndex(r => r.productionSiteId === prod.productionSiteId && r.month === monthYear);
         
-        // Ensure we don't have negative remaining values
-        if (left !== prod.remaining[period]) {
-          console.log(`[${idx}] Adjusted remaining from ${prod.remaining[period]} to ${left}`);
-          prod.remaining[period] = left;
-        }
-        
-        // Create a base allocation object with all required fields
-        const base = {
-          productionSiteId: prod.productionSiteId,
-          productionSite: prod.siteName || prod.productionSite || 'Unknown Site',
-          month: formatAllocationMonth(selectedMonth, selectedYear),
-          siteType: prod.siteType || 'WIND', // Default to WIND if not specified
-          siteName: prod.siteName || prod.productionSite || 'Unknown Site',
-          type: prod.bankingEnabled ? 'BANKING' : 'LAPSE',
-          allocated: {
-            c1: 0, c2: 0, c3: 0, c4: 0, c5: 0
-          },
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          // Add metadata for debugging
-          _debug: {
-            source: 'handleLeftovers',
-            period,
-            remaining: { ...prod.remaining },
-            timestamp: new Date().toISOString()
-          }
-        };
-
-        // Create a deep copy of the base object with the allocated value for this period
-        const allocated = JSON.parse(JSON.stringify(base.allocated));
-        allocated[period] = left;
-        
-        if (prod.bankingEnabled) {
-          const bankingRecord = {
-            ...base,
-            allocated,
-            consumptionSite: 'Banking',
-            consumptionSiteId: 'BANK', // Special ID for banking records
-            // Ensure all required fields are present
-            id: `banking_${prod.productionSiteId}_${period}_${Date.now()}`,
-            version: 1,
-            status: 'ACTIVE'
-          };
-          console.log(`[${idx}] Creating BANKING record for ${left} units`, bankingRecord);
-          bankingAllocations.push(bankingRecord);
+        if (existingRecordIndex >= 0) {
+          // Update existing record
+          const records = recordType === 'BANKING' ? bankingAllocations : lapseAllocations;
+          record = records[existingRecordIndex];
+          record.updatedAt = new Date().toISOString();
+          record.allocated[period] = (record.allocated[period] || 0) + left;
         } else {
-          const lapseRecord = {
-            ...base,
-            allocated,
-            consumptionSite: 'Lapsed',
-            consumptionSiteId: 'LAPSE',
-            _debug: {
-              source: 'handleLeftovers',
-              period,
-              remaining: { ...prod.remaining },
-              timestamp: new Date().toISOString()
-            }
+          // Create new record
+          record = {
+            productionSiteId: prod.productionSiteId,
+            productionSite: prod.siteName || prod.productionSite || 'Unknown Site',
+            month: monthYear,
+            siteType: prod.siteType || 'WIND',
+            siteName: prod.siteName || prod.productionSite || 'Unknown Site',
+            type: recordType,
+            allocated: { c1: 0, c2: 0, c3: 0, c4: 0, c5: 0 },
+            bankingEnabled: prod.bankingEnabled || false,
+            consumptionSite: recordType === 'BANKING' ? 'Banking' : 'Lapsed',
+            consumptionSiteId: recordType === 'BANKING' ? 'BANK' : 'LAPSE',
+            id: `${recordType.toLowerCase()}_${prod.productionSiteId}_${monthYear}`,
+            version: 1,
+            status: 'ACTIVE',
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
           };
-          console.log(`[${idx}] Adding lapse record:`, lapseRecord);
-          lapseAllocations.push(lapseRecord);
+          record.allocated[period] = left;
+          
+          // Add to the appropriate array
+          if (recordType === 'BANKING') {
+            bankingAllocations.push(record);
+          } else {
+            lapseAllocations.push(record);
+          }
+          
+          console.log(`Created new ${recordType} record for site ${record.siteName} (${prod.productionSiteId})`);
         }
         
-        // Reset remaining to avoid double-counting
-        const beforeReset = { ...prod.remaining };
+        // Reset the remaining value for this period
         prod.remaining[period] = 0;
-        console.log(`[${idx}] Reset remaining[${period}] from ${beforeReset[period]} to ${prod.remaining[period]}`);
       }
     } catch (error) {
       console.error('[handleLeftovers] Error:', error);
