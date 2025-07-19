@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import allocationApi from '../services/allocationApi';
+import allocationApi from '../services/allocationapi';
 import { useSnackbar } from 'notistack';
 
 const POLLING_INTERVAL = 30000; // 30 seconds
