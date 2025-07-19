@@ -240,13 +240,23 @@ const Allocation = () => {
     });
     console.groupEnd();
 
+    // Log the banking allocations for debugging
+    console.log('Banking allocations to be set:', bankingAllocs);
+    console.log('Lapse allocations to be set:', lapseAllocs);
+    
     // Set all allocations in the main state
     setAllocations(regularAllocs);
     
-    // For backward compatibility, also set banking and lapse allocations
-    // but these will be derived from the main allocations array
-    setBankingAllocations(bankingAllocs);
-    setLapseAllocations(lapseAllocs);
+    // Set banking and lapse allocations
+    // Make sure we're setting the arrays directly from the result
+    setBankingAllocations(result.bankingAllocations || bankingAllocs);
+    setLapseAllocations(result.lapseAllocations || lapseAllocs);
+    
+    // Log the state after setting
+    setTimeout(() => {
+      console.log('Banking allocations after setState:', result.bankingAllocations || bankingAllocs);
+      console.log('Lapse allocations after setState:', result.lapseAllocations || lapseAllocs);
+    }, 0);
     
     setShowAllocations(true);
 
@@ -1435,9 +1445,9 @@ const Allocation = () => {
           <AllocationDetailsTable 
             allocations={allocations}
             bankingAllocations={bankingAllocations}
-            oldBankingAllocations={originalBankingAllocations}
+            oldBankingAllocations={[]} // Don't use originalBankingAllocations as it might be outdated
             lapseAllocations={lapseAllocations}
-            oldLapseAllocations={originalLapseAllocations}
+            oldLapseAllocations={[]}   // Don't use originalLapseAllocations as it might be outdated
             loading={loading || isSaving}
             onEdit={handleEditAllocation}
             onSave={handleSaveAllocation}
