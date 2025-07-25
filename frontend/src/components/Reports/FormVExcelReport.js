@@ -30,13 +30,18 @@ const FormVExcelReport = ({
         throw new Error('No response received from Form V-A API');
       }
 
+      // Validate Form V-A data
+      if (!formVAResponse || typeof formVAResponse !== 'object') {
+        throw new Error('Invalid Form V-A response');
+      }
+
       const formVAData = {
-        totalGeneratedUnits: formVAResponse.totalGeneratedUnits,
-        auxiliaryConsumption: formVAResponse.auxiliaryConsumption,
-        aggregateGeneration: formVAResponse.aggregateGeneration,
-        fiftyOnePercentGeneration: formVAResponse.percentage51,
-        actualConsumedUnits: formVAResponse.totalAllocatedUnits,
-        consumptionPercentage: formVAResponse.percentageConsumed
+        totalGeneratedUnits: formVAResponse.data?.totalGeneratedUnits,
+        auxiliaryConsumption: formVAResponse.data?.auxiliaryConsumption,
+        aggregateGeneration: formVAResponse.data?.aggregateGeneration,
+        fiftyOnePercentGeneration: formVAResponse.data?.percentage51,
+        actualConsumedUnits: formVAResponse.data?.totalAllocatedUnits,
+        consumptionPercentage: formVAResponse.data?.percentageAdjusted
       };
 
       const formVACreated = await createFormVAWorksheet(workbook, formVAData, financialYear);
@@ -52,17 +57,22 @@ const FormVExcelReport = ({
           throw new Error('Invalid Form V-B response format');
         }
 
+        if (!formVBResponse?.data?.siteMetrics) {
+          throw new Error('No site metrics data available in Form V-B response');
+        }
+
         const formVBData = {
           aggregateGeneration: formVBResponse.data.aggregateGeneration,
           auxiliaryConsumption: formVBResponse.data.auxiliaryConsumption,
           totalGeneratedUnits: formVBResponse.data.totalGeneratedUnits,
           siteMetrics: formVBResponse.data.siteMetrics.map(site => ({
             ...site,
-            permittedMinus10: site.permittedConsumption * 0.9,
-            permittedPlus10: site.permittedConsumption * 1.1,
-            consumptionNormsMet: 
-              site.actualConsumption >= (site.permittedConsumption * 0.9) && 
-              site.actualConsumption <= (site.permittedConsumption * 1.1)
+            permittedMinus10: site.permittedConsumption?.withZero * 0.9,
+            permittedPlus10: site.permittedConsumption?.withZero * 1.1,
+            consumptionNormsMet: site.consumptionNormsMet || (
+              site.actualConsumption >= (site.permittedConsumption?.minus10 || 0) && 
+              site.actualConsumption <= (site.permittedConsumption?.plus10 || 0)
+            )
           }))
         };
 

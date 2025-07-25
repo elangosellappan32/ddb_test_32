@@ -51,6 +51,11 @@ const StyledTableContainer = styled(TableContainer)(({ theme }) => ({
   border: '1px solid rgba(230, 235, 240, 0.8)',
   overflow: 'auto',
   marginTop: theme.spacing(3),
+  '& .variation-column': {
+    backgroundColor: '#f5f9ff',
+    borderLeft: '1px solid rgba(144, 202, 249, 0.5)',
+    borderRight: '1px solid rgba(144, 202, 249, 0.5)',
+  },
   '& .MuiTable-root': {
     borderCollapse: 'separate',
     borderSpacing: 0,
@@ -713,31 +718,42 @@ const AllocationReport = () => {
                     </TableCell>
                     <TableCell rowSpan={2} align="center">% to be consumed on pro rata basis by each captive user</TableCell>
                     <TableCell rowSpan={2} align="center">100% annual generation in MUs (x)</TableCell>
-                    <TableCell rowSpan={2} align="center" sx={{ backgroundColor: '#f0f4f8' }}>
-                      Annual Auxiliary<br />consumption in MUs (y)
-                    </TableCell>
-                    <TableCell rowSpan={2} align="center">
-                      Generation considered to verify<br />consumption criteria in MUs (x-y)*51%
-                    </TableCell>
+                    <TableCell rowSpan={2} align="center">Annual Auxiliary consumption in MUs (y)</TableCell>
+                    <TableCell rowSpan={2} align="center">Generation considered to verify consumption criteria in MUs (x-y)*51%</TableCell>
                     <TableCell colSpan={3} align="center" sx={{ backgroundColor: '#f0f4f8' }}>
                       Permitted consumption as per norms in MUs
                     </TableCell>
-                    <TableCell rowSpan={2} align="center">
-                      <Box>Actual</Box>
-                      <Box>consumption in MUs</Box>
-                    </TableCell>
-                    <TableCell rowSpan={2} align="center">
-                      <Box>Whether</Box>
-                      <Box>consumption</Box>
-                      <Box>norms met</Box>
-                    </TableCell>
+                    <TableCell rowSpan={2} align="center">Actual consumption in MUs</TableCell>
+                    <TableCell rowSpan={2} align="center">Whether consumption norms met</TableCell>
                   </TableRow>
                   <TableRow>
-                    <TableCell className="header-cell" align="center">As per share certificates as on 31st March</TableCell>
-                    <TableCell className="header-cell" align="center">% of ownership through shares in Company/unit of CGP</TableCell>
-                    <TableCell className="header-cell" align="center" sx={{ fontWeight: 700, color: 'primary.main' }}>{prepareForm5BData().summary.totalPermitted || 0}<br /><span style={{ fontWeight: 400, color: '#888', fontSize: '0.85em' }}>with 0% variation</span></TableCell>
-                    <TableCell className="header-cell" align="center" sx={{ fontWeight: 700, color: 'primary.main' }}>{prepareForm5BData().summary.totalPermittedMinus10 || 0}<br /><span style={{ fontWeight: 400, color: '#888', fontSize: '0.85em' }}>-10%</span></TableCell>
-                    <TableCell className="header-cell" align="center" sx={{ fontWeight: 700, color: 'primary.main' }}>{prepareForm5BData().summary.totalPermittedPlus10 || 0}<br /><span style={{ fontWeight: 400, color: '#888', fontSize: '0.85em' }}>+10%</span></TableCell>
+                    <TableCell className="header-cell" align="center">
+                      As per share certificates as on 31st March
+                    </TableCell>
+                    <TableCell className="header-cell" align="center">
+                      % of ownership through shares in Company/unit of CGP
+                    </TableCell>
+                    <TableCell 
+                      colSpan={3}
+                      className="header-cell" 
+                      align="center"
+                      sx={{ 
+                        backgroundColor: '#f0f4f8',
+                        '& .variations': {
+                          display: 'flex',
+                          justifyContent: 'space-around',
+                          borderTop: '1px solid rgba(144, 202, 249, 0.5)',
+                          marginTop: '8px',
+                          paddingTop: '8px'
+                        }
+                      }}
+                    >
+                      <div className="variations">
+                        <span>with -10% variation</span>
+                        <span>with 0% variation</span>
+                        <span>with +10% variation</span>
+                      </div>
+                    </TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -764,11 +780,34 @@ const AllocationReport = () => {
                       )}
                       <TableCell align="right" sx={{ fontFamily: 'monospace' }}>{row.criteria}</TableCell>
                       {index === 0 && (
-                        <TableCell align="center" sx={{ fontFamily: 'monospace', backgroundColor: '#f0f4f8', fontWeight: 700 }} rowSpan={prepareForm5BData().rows.length} colSpan={3}>
-                          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.5 }}>
-                            <span>{prepareForm5BData().summary.totalPermitted} <span style={{ color: '#888', fontSize: '0.85em' }}>(0% variation)</span></span>
-                            <span>{prepareForm5BData().summary.totalPermittedMinus10} <span style={{ color: '#888', fontSize: '0.85em' }}>(-10%)</span></span>
-                            <span>{prepareForm5BData().summary.totalPermittedPlus10} <span style={{ color: '#888', fontSize: '0.85em' }}>(+10%)</span></span>
+                        <TableCell 
+                          colSpan={3} 
+                          align="center" 
+                          sx={{ 
+                            fontFamily: 'monospace', 
+                            backgroundColor: '#f0f4f8', 
+                            fontWeight: 700 
+                          }} 
+                          rowSpan={prepareForm5BData().rows.length}
+                        >
+                          <Box sx={{ 
+                            display: 'flex', 
+                            justifyContent: 'space-around',
+                            '& .value': {
+                              textAlign: 'right',
+                              flex: 1,
+                              padding: '0 8px'
+                            },
+                            '& .separator': {
+                              borderLeft: '1px solid rgba(144, 202, 249, 0.5)',
+                              margin: '0 8px'
+                            }
+                          }}>
+                            <span className="value">{prepareForm5BData().summary.totalPermittedMinus10}</span>
+                            <span className="separator" />
+                            <span className="value">{prepareForm5BData().summary.totalPermitted}</span>
+                            <span className="separator" />
+                            <span className="value">{prepareForm5BData().summary.totalPermittedPlus10}</span>
                           </Box>
                         </TableCell>
                       )}
@@ -812,14 +851,30 @@ const AllocationReport = () => {
                       <TableCell align="right" sx={{ fontFamily: 'monospace', fontWeight: 700 }}>
                         {prepareForm5BData().totals.criteria}
                       </TableCell>
-                      <TableCell align="right" sx={{ fontFamily: 'monospace', fontWeight: 700 }}>
-                        {prepareForm5BData().totals.permittedConsumption.withZero}
-                      </TableCell>
-                      <TableCell align="right" sx={{ fontFamily: 'monospace', fontWeight: 700 }}>
-                        {prepareForm5BData().totals.permittedConsumption.minus10}
-                      </TableCell>
-                      <TableCell align="right" sx={{ fontFamily: 'monospace', fontWeight: 700 }}>
-                        {prepareForm5BData().totals.permittedConsumption.plus10}
+                      <TableCell colSpan={3} align="center" sx={{ 
+                        fontFamily: 'monospace', 
+                        fontWeight: 700,
+                        backgroundColor: '#f0f4f8'
+                      }}>
+                        <Box sx={{ 
+                          display: 'flex', 
+                          justifyContent: 'space-around',
+                          '& .value': {
+                            textAlign: 'right',
+                            flex: 1,
+                            padding: '0 8px'
+                          },
+                          '& .separator': {
+                            borderLeft: '1px solid rgba(144, 202, 249, 0.5)',
+                            margin: '0 8px'
+                          }
+                        }}>
+                          <span className="value">{prepareForm5BData().totals.permittedConsumption.minus10}</span>
+                          <span className="separator" />
+                          <span className="value">{prepareForm5BData().totals.permittedConsumption.withZero}</span>
+                          <span className="separator" />
+                          <span className="value">{prepareForm5BData().totals.permittedConsumption.plus10}</span>
+                        </Box>
                       </TableCell>
                       <TableCell align="right" sx={{ 
                         fontFamily: 'monospace', 

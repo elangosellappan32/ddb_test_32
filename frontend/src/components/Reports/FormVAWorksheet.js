@@ -1,21 +1,26 @@
 import * as XLSX from 'xlsx';
 import { getCellStyle, toNumber } from '../../utils/excelUtils';
 
-export const createFormVAWorksheet = (workbook, data, financialYear) => {
+export const createFormVAWorksheet = (workbook, formData, financialYear) => {
   try {
-    if (!data) {
+    // Validate the data structure
+    if (!formData) {
+      console.error('No data provided for Form V-A');
       throw new Error('No data available for Form V-A');
     }
 
     // Process numeric values with proper validation
-    const totalGenerated = toNumber(data.totalGeneratedUnits);
-    const auxiliaryConsumption = toNumber(data.auxiliaryConsumption);
-    const aggregateGeneration = toNumber(data.aggregateGeneration);
-    const fiftyOnePercent = toNumber(data.fiftyOnePercentGeneration);
-    const actualConsumed = toNumber(data.actualConsumedUnits);
-    const consumptionPercentage = aggregateGeneration > 0 
-      ? (actualConsumed / aggregateGeneration) * 100 
-      : 0;
+    const totalGenerated = toNumber(formData.totalGeneratedUnits || 0);
+    const auxiliaryConsumption = toNumber(formData.auxiliaryConsumption || 0);
+    const aggregateGeneration = toNumber(formData.aggregateGeneration || 0);
+    const fiftyOnePercent = toNumber(formData.fiftyOnePercentGeneration || 0);
+    const actualConsumed = toNumber(formData.actualConsumedUnits || 0);
+    
+    // Calculate consumption percentage if not provided
+    let consumptionPercentage = toNumber(formData.consumptionPercentage || 0);
+    if (consumptionPercentage === 0 && aggregateGeneration > 0) {
+      consumptionPercentage = (actualConsumed / aggregateGeneration) * 100;
+    }
 
     // Define headers and data rows
     const headers = [
@@ -26,6 +31,10 @@ export const createFormVAWorksheet = (workbook, data, financialYear) => {
       ['Sl.No.', 'Particulars', 'Energy in Units (kWh)']
     ];
 
+    // Format percentage to 2 decimal places for display
+    const formattedPercentage = parseFloat(consumptionPercentage.toFixed(2));
+    
+    // Create rows with the actual data
     const rows = [
       [1, 'Total Generated units of a generating plant / Station identified for captive use', totalGenerated],
       [2, 'Less : Auxiliary Consumption in the above in units', auxiliaryConsumption],
@@ -33,19 +42,20 @@ export const createFormVAWorksheet = (workbook, data, financialYear) => {
       [4, '51% of aggregate generation available for captive consumption in units', fiftyOnePercent],
       [5, 'Actual Adjusted / Consumed units by the captive users', actualConsumed],
       [6, 'Percentage of actual adjusted / consumed units by the captive users with respect to aggregate generation for captive use', 
-        consumptionPercentage / 100]
+        formattedPercentage / 100] // Convert to decimal for Excel percentage format
     ];
 
     // Create worksheet
     const ws = XLSX.utils.aoa_to_sheet([...headers, ...rows]);
 
-    // Set column widths and merges
+    // Set column widths
     ws['!cols'] = [
       { wch: 8 },    // Sl.No
       { wch: 80 },   // Particulars
       { wch: 20 }    // Energy in Units
     ];
 
+    // Define merged ranges
     ws['!merges'] = [
       { s: { r: 0, c: 0 }, e: { r: 0, c: 2 } },  // Title
       { s: { r: 1, c: 0 }, e: { r: 1, c: 2 } },  // Subtitle
@@ -64,8 +74,9 @@ export const createFormVAWorksheet = (workbook, data, financialYear) => {
         const isTitle = R === 0;
         const isHeader = R === 4;
         const isData = R > 4;
-        const isPercentage = R === range.e.r;
+        const isPercentage = isData && R === range.e.r && C === 2;
 
+        // Apply cell styles
         ws[cell].s = getCellStyle(
           isHeader,
           false,
@@ -73,19 +84,36 @@ export const createFormVAWorksheet = (workbook, data, financialYear) => {
           C === 1 ? 'left' : 'center'
         );
 
+        // Apply number formats for data cells
         if (isData && C === 2) {
-          ws[cell].z = isPercentage ? '0.00%' : '#,##0';
-          if (ws[cell].v !== undefined) {
-            ws[cell].v = isPercentage 
-              ? toNumber(ws[cell].v, 0) / 100
-              : Math.round(toNumber(ws[cell].v, 0));
+          if (isPercentage) {
+            ws[cell].z = '0.00%';
+            if (ws[cell].v !== undefined && ws[cell].v !== '') {
+              ws[cell].v = parseFloat(ws[cell].v);
+            }
+          } else {
+            ws[cell].z = '#,##0.00';
+            if (ws[cell].v !== undefined && ws[cell].v !== '') {
+              ws[cell].v = parseFloat(ws[cell].v);
+            }
           }
         }
       }
     }
 
+    // Set row heights for better readability
+    ws['!rows'] = [
+      { hpt: 30 },  // Title
+      { hpt: 45 },  // Subtitle
+      { hpt: 30 },  // Financial Year
+      { hpt: 15 },  // Empty row
+      { hpt: 35 },  // Header row
+      ...Array(rows.length).fill({ hpt: 25 }) // Data rows
+    ];
+
     // Add worksheet to workbook
     XLSX.utils.book_append_sheet(workbook, ws, 'Form V-A');
+    console.log('Form V-A worksheet created successfully');
     return true;
   } catch (error) {
     console.error('Error creating Form V-A worksheet:', error);
