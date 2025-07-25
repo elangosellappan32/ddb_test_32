@@ -3,9 +3,19 @@ import { getCellStyle, toNumber } from '../../utils/excelUtils';
 
 export const createFormVBWorksheet = (workbook, data, financialYear) => {
   try {
-    if (!data?.siteMetrics?.length) {
+    // Validate required data
+    if (!data) {
+      throw new Error('No data provided for Form V-B');
+    }
+
+    if (!data.siteMetrics || !Array.isArray(data.siteMetrics) || data.siteMetrics.length === 0) {
       throw new Error('No site metrics data available for Form V-B');
-    }    // Define headers
+    }
+
+    // Log the data being processed
+    console.log('Creating Form V-B worksheet with data:', data);
+
+    // Define headers
     const headers = [
       ['FORMAT V-B'],
       ['Statement showing compliance to the requirement of proportionality of consumption for Captive Status'],
@@ -51,16 +61,16 @@ export const createFormVBWorksheet = (workbook, data, financialYear) => {
     const siteRows = data.siteMetrics.map((site, index) => [
       index + 1,
       site.siteName || `Site ${index + 1}`,
-      site.equityShares || 0,
-      site.ownershipPercentage ? toNumber(site.ownershipPercentage) / 100 : 0,
-      site.requiredConsumptionPercentage ? toNumber(site.requiredConsumptionPercentage) / 100 : 0,
-      toNumber(site.annualGeneration),
-      site.auxiliaryConsumption ? toNumber(site.auxiliaryConsumption) / 100 : 0,
-      toNumber(site.generationForConsumption),
-      toNumber(site.permittedConsumption?.withZero),
-      toNumber(site.permittedConsumption?.minus10),
-      toNumber(site.permittedConsumption?.plus10),
-      toNumber(site.actualConsumption),
+      site.equityShares,
+      site.ownershipPercentage ? site.ownershipPercentage / 100 : null,
+      site.requiredConsumptionPercentage ? site.requiredConsumptionPercentage / 100 : null,
+      site.annualGeneration,
+      site.auxiliaryConsumption ? site.auxiliaryConsumption / 100 : null,
+      site.generationForConsumption,
+      site.permittedConsumption?.withZero,
+      site.permittedConsumption?.minus10,
+      site.permittedConsumption?.plus10,
+      site.actualConsumption,
       site.consumptionNormsMet ? 'Yes' : 'No'
     ]);
 

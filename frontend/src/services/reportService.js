@@ -18,13 +18,11 @@ export const fetchFormVAData = async (financialYear) => {
         throw new Error('Invalid response format');
       }
 
-      // If we have a success property, the data is nested under data property
-      if (response.data.success) {
-        return response.data.data;
-      }
-
-      // Otherwise return the data directly
-      return response.data;
+      // Always return the complete response with success and data properties
+      return {
+        success: true,
+        data: response.data.data || response.data
+      };
     }
     throw new Error('No data found for the selected financial year');
   } catch (error) {
@@ -41,10 +39,24 @@ export const fetchFormVBData = async (financialYear) => {
     const response = await axios.get(`${API_BASE_URL}/form/formvb`, {
       params: { financialYear },
     });
-    if (!response.data?.success) {
-      throw new Error('Invalid response format');
+    
+    // Log the raw response for debugging
+    console.log('Form V-B API Response:', response.data);
+
+    if (response.status === 200) {
+      // Check if we have a valid response structure
+      if (!response.data || (!response.data.success && !response.data.data)) {
+        console.error('Invalid Form V-B response format:', response.data);
+        throw new Error('Invalid response format');
+      }
+
+      // Always return the complete response with success and data properties
+      return {
+        success: true,
+        data: response.data.data || response.data
+      };
     }
-    return response.data;
+    throw new Error('No data found for the selected financial year');
   } catch (error) {
     console.error('Error fetching Form V-B data:', error);
     if (error.response?.status === 400) {
