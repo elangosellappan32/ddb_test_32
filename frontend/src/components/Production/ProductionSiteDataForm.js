@@ -239,9 +239,18 @@ const ProductionSiteDataForm = ({
     
     // Allow empty string and numeric values (including decimals)
     if (inputValue === '' || /^-?\d*\.?\d*$/.test(inputValue)) {
+      // Convert the input value to a number and handle zero properly
+      let processedValue;
+      if (inputValue === '' || parseFloat(inputValue) === 0) {
+        processedValue = '0';
+      } else {
+        // Remove leading zeros and convert to string
+        processedValue = String(parseFloat(inputValue));
+      }
+
       setFormData(prev => ({
         ...prev,
-        [field]: inputValue === '' ? '0' : inputValue
+        [field]: processedValue
       }));
       
       if (errors[field]) {

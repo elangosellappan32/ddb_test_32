@@ -179,9 +179,23 @@ const ConsumptionSiteDataForm = ({
 
   const handleChange = (field, value) => {
     const inputValue = value?.target?.value ?? value;
+    
+    // Convert the input value to a number and handle special cases
+    let processedValue = inputValue;
+    
+    if (inputValue !== '') {
+      // Remove leading zeros unless the number is just "0"
+      processedValue = inputValue.replace(/^0+(?=\d)/, '');
+      
+      // If the value is empty after removing zeros, set it to "0"
+      if (processedValue === '') {
+        processedValue = '0';
+      }
+    }
+
     setFormData(prev => ({
       ...prev,
-      [field]: inputValue
+      [field]: processedValue
     }));
   };
 
