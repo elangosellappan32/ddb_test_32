@@ -20,10 +20,14 @@ import {
   WbSunny as SolarIcon,
   Air as WindIcon,
   Power as PowerIcon,
-  Speed as EfficiencyIcon
+  Speed as EfficiencyIcon,
+  Pending as PendingIcon,
+  CheckCircle as CheckCircleIcon,
+  Warning as WarningIcon
 } from '@mui/icons-material';
 import productionSiteApi from '../../services/productionSiteapi';
 import { useConsumptionStats } from '../../hooks/useConsumptionStats';
+import useDashboardData from '../../hooks/useDashboardData';
 import { Factory as IndustryIcon, Settings as TextileIcon } from '@mui/icons-material';
 
 const DashboardCard = ({ icon: Icon, title, content, color, onClick }) => (
@@ -65,6 +69,7 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const { stats: consumptionStats, loading: consumptionLoading, error: consumptionError } = useConsumptionStats();
+  const { allocationStats, reportStats } = useDashboardData();
 
   const calculateStats = useCallback((response) => {
     try {
@@ -202,40 +207,46 @@ const Dashboard = () => {
             color="primary"
             onClick={() => navigate('/production')}
             content={
-              <Box>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                  <Typography color="textSecondary">Total Sites:</Typography>
-                  <Typography>{stats.total}</Typography>
+              loading ? (
+                <Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}>
+                  <CircularProgress size={24} />
                 </Box>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                    <SolarIcon sx={{ mr: 0.5, color: 'warning.main', fontSize: 'small' }} />
-                    <Typography color="textSecondary">Solar:</Typography>
+              ) : (
+                <Box>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                    <Typography color="textSecondary">Total Sites:</Typography>
+                    <Typography>{stats.total}</Typography>
                   </Box>
-                  <Typography>{stats.solar} ({stats.solarCapacity} MW)</Typography>
-                </Box>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                    <WindIcon sx={{ mr: 0.5, color: 'success.main', fontSize: 'small' }} />
-                    <Typography color="textSecondary">Wind:</Typography>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                      <SolarIcon sx={{ mr: 0.5, color: 'warning.main', fontSize: 'small' }} />
+                      <Typography color="textSecondary">Solar:</Typography>
+                    </Box>
+                    <Typography>{stats.solar} ({stats.solarCapacity} MW)</Typography>
                   </Box>
-                  <Typography>{stats.wind} ({stats.windCapacity} MW)</Typography>
-                </Box>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                    <PowerIcon sx={{ mr: 0.5, color: 'primary.main', fontSize: 'small' }} />
-                    <Typography color="textSecondary">Total Capacity:</Typography>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                      <WindIcon sx={{ mr: 0.5, color: 'success.main', fontSize: 'small' }} />
+                      <Typography color="textSecondary">Wind:</Typography>
+                    </Box>
+                    <Typography>{stats.wind} ({stats.windCapacity} MW)</Typography>
                   </Box>
-                  <Typography>{stats.totalCapacity} MW</Typography>
-                </Box>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 1 }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                    <EfficiencyIcon sx={{ mr: 0.5, color: 'info.main', fontSize: 'small' }} />
-                    <Typography color="textSecondary">Efficiency:</Typography>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                      <PowerIcon sx={{ mr: 0.5, color: 'primary.main', fontSize: 'small' }} />
+                      <Typography color="textSecondary">Total Capacity:</Typography>
+                    </Box>
+                    <Typography>{stats.totalCapacity} MW</Typography>
                   </Box>
-                  <Typography>{stats.efficiency}%</Typography>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 1 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                      <EfficiencyIcon sx={{ mr: 0.5, color: 'info.main', fontSize: 'small' }} />
+                      <Typography color="textSecondary">Efficiency:</Typography>
+                    </Box>
+                    <Typography>{stats.efficiency}%</Typography>
+                  </Box>
                 </Box>
-              </Box>
+              )
             }
           />
         </Grid>
@@ -259,24 +270,38 @@ const Dashboard = () => {
             color="warning"
             onClick={() => navigate('/allocation')}
             content={
-              <Box>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                  <Typography color="textSecondary">Total Allocated:</Typography>
-                  <Typography>{stats.totalCapacity} MW</Typography>
+              allocationStats.loading ? (
+                <Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}>
+                  <CircularProgress size={24} />
                 </Box>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                  <Typography color="textSecondary">Units Allocated:</Typography>
-                  <Typography>{stats.total}</Typography>
+              ) : allocationStats.error ? (
+                <Alert severity="error" sx={{ m: 1 }}>{allocationStats.error}</Alert>
+              ) : (
+                <Box>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                    <Typography color="textSecondary">Total Allocated:</Typography>
+                    <Typography>{allocationStats.totalAllocated} MW</Typography>
+                  </Box>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                    <Typography color="textSecondary">Units Allocated:</Typography>
+                    <Typography>{allocationStats.unitsAllocated}</Typography>
+                  </Box>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                      <PendingIcon sx={{ mr: 0.5, color: 'warning.main', fontSize: 'small' }} />
+                      <Typography color="textSecondary">Pending:</Typography>
+                    </Box>
+                    <Typography>{allocationStats.pendingAllocations}</Typography>
+                  </Box>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                      <EfficiencyIcon sx={{ mr: 0.5, color: 'success.main', fontSize: 'small' }} />
+                      <Typography color="textSecondary">Allocation Rate:</Typography>
+                    </Box>
+                    <Typography>{allocationStats.allocationRate}%</Typography>
+                  </Box>
                 </Box>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                  <Typography color="textSecondary">Pending:</Typography>
-                  <Typography>2</Typography>
-                </Box>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <Typography color="textSecondary">Allocation Rate:</Typography>
-                  <Typography>92%</Typography>
-                </Box>
-              </Box>
+              )
             }
           />
         </Grid>
@@ -289,24 +314,38 @@ const Dashboard = () => {
             color="info"
             onClick={() => navigate('/report')}
             content={
-              <Box>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                  <Typography color="textSecondary">Daily Reports:</Typography>
-                  <Typography>24</Typography>
+              reportStats.loading ? (
+                <Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}>
+                  <CircularProgress size={24} />
                 </Box>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                  <Typography color="textSecondary">Monthly Reports:</Typography>
-                  <Typography>4</Typography>
+              ) : reportStats.error ? (
+                <Alert severity="error" sx={{ m: 1 }}>{reportStats.error}</Alert>
+              ) : (
+                <Box>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                    <Typography color="textSecondary">Daily Reports:</Typography>
+                    <Typography>{reportStats.dailyReports}</Typography>
+                  </Box>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                    <Typography color="textSecondary">Monthly Reports:</Typography>
+                    <Typography>{reportStats.monthlyReports}</Typography>
+                  </Box>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                      <WarningIcon sx={{ mr: 0.5, color: 'warning.main', fontSize: 'small' }} />
+                      <Typography color="textSecondary">Pending Review:</Typography>
+                    </Box>
+                    <Typography>{reportStats.pendingReview}</Typography>
+                  </Box>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                      <CheckCircleIcon sx={{ mr: 0.5, color: 'success.main', fontSize: 'small' }} />
+                      <Typography color="textSecondary">Compliance Rate:</Typography>
+                    </Box>
+                    <Typography>{reportStats.complianceRate}%</Typography>
+                  </Box>
                 </Box>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                  <Typography color="textSecondary">Pending Review:</Typography>
-                  <Typography>3</Typography>
-                </Box>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <Typography color="textSecondary">Compliance Rate:</Typography>
-                  <Typography>98%</Typography>
-                </Box>
-              </Box>
+              )
             }
           />
         </Grid>

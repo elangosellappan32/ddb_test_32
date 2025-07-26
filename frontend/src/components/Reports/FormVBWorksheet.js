@@ -65,14 +65,7 @@ const FormVBWorksheet = ({ data }) => {
               <Box>consumption criteria in MUs (x-y)*51%</Box>
             </StyledTableCell>
             <StyledTableCell isheader="true" colSpan={3} align="center" sx={{ backgroundColor: '#f0f4f8', fontWeight: 'bold', borderLeft: '2px solid #90caf9', borderRight: '2px solid #90caf9' }}>
-              <Box sx={{ display: 'flex', flexDirection: 'column' }}>
-                <Box>Permitted consumption as per norms in MUs</Box>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', mt: 0.5 }}>
-                  <span>With 0% variation</span>
-                  <span>-10%</span>
-                  <span>+10%</span>
-                </Box>
-              </Box>
+              <Box>Permitted consumption as per norms in MUs</Box>
             </StyledTableCell>
             <StyledTableCell isheader="true" rowSpan={2} align="center">
               <Box>Actual</Box>
@@ -97,7 +90,7 @@ const FormVBWorksheet = ({ data }) => {
                 fontSize: '0.85rem'
               }}
             >
-              With 0% variation
+              With -10% variation
             </StyledTableCell>
             <StyledTableCell 
               isheader="true" 
@@ -108,7 +101,7 @@ const FormVBWorksheet = ({ data }) => {
                 fontSize: '0.85rem'
               }}
             >
-              -10%
+              With 0% variation
             </StyledTableCell>
             <StyledTableCell 
               isheader="true" 
@@ -120,7 +113,7 @@ const FormVBWorksheet = ({ data }) => {
                 fontSize: '0.85rem'
               }}
             >
-              +10%
+              With +10% variation
             </StyledTableCell>
           </TableRow>
         </TableHead>

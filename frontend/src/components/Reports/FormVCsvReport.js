@@ -61,9 +61,9 @@ const FormVCsvReport = ({
           '100% annual generation in MUs (x)',
           'Annual Auxiliary consumption in MUs (y)',
           'Generation considered to verify consumption criteria in MUs (x-y)*51%',
-          'Permitted consumption with 0% variation',
-          'Permitted consumption with -10% variation',
-          'Permitted consumption with +10% variation',
+          'Permitted consumption as per norms in MUs (with -10% variation)',
+          'Permitted consumption as per norms in MUs (with 0% variation)',
+          'Permitted consumption as per norms in MUs (with +10% variation)',
           'Actual consumption in MUs',
           'Whether consumption norms met'
         ];
@@ -117,8 +117,8 @@ const FormVCsvReport = ({
             formatNumber(generation, 0),
             formatNumber(auxiliary, 0),
             formatNumber(criteria, 0),
-            formatNumber(permittedWithZero, 0),
             formatNumber(permittedMinus10, 0),
+            formatNumber(permittedWithZero, 0),
             formatNumber(permittedPlus10, 0),
             formatNumber(actual, 0),
             `"${normsMet}"`

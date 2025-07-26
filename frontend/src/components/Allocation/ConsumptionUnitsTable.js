@@ -68,7 +68,14 @@ const formatMonthDisplay = (monthKey) => {
   return format(new Date(year, month - 1), "MMMM yyyy");
 };
 
-const ConsumptionUnitsTable = ({ consumptionData, isLoading, error, onAllocationSaved }) => {
+const ConsumptionUnitsTable = ({ 
+  consumptionData, 
+  isLoading, 
+  error, 
+  onAllocationSaved, 
+  companyId, 
+  shareholdings = [] 
+}) => {
   // State for allocation dialog
   const [allocationDialog, setAllocationDialog] = useState(false);
   const [splitPercentages, setSplitPercentages] = useState([]);
@@ -91,41 +98,6 @@ const ConsumptionUnitsTable = ({ consumptionData, isLoading, error, onAllocation
     [calculateTotal, NON_PEAK_PERIODS]
   );
 
-  const handleAllocationClick = async () => {
-    try {
-      setIsProcessing(true);
-      const [sitesResponse, captiveResponse] = await Promise.all([
-        api.get('/consumption-site/all'),
-        api.get('/captive')
-      ]);
-
-      const sites = sitesResponse.data?.data || [];
-      const captiveData = captiveResponse.data || [];
-      
-      setConsumptionSites(sites);
-      
-      if (sites.length > 0) {
-        if (captiveData.length > 0) {
-          const percentages = sites.map(site => {
-            const captive = captiveData.find(c => c.consumptionSiteId === site.consumptionSiteId);
-            return captive ? captive.shareholdingPercentage : 0;
-          });
-          setSplitPercentages(percentages);
-        } else {
-          initializeEqualSplitPercentages(sites.length);
-        }
-        setAllocationDialog(true);
-      } else {
-        enqueueSnackbar('No consumption sites available', { variant: 'warning' });
-      }
-    } catch (error) {
-      console.error("Failed to fetch data:", error);
-      enqueueSnackbar(error.message || 'Failed to fetch data', { variant: 'error' });
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
   const initializeEqualSplitPercentages = useCallback((siteCount) => {
     if (siteCount === 0) return;
     const equalShare = Math.floor(100 / siteCount);
@@ -136,6 +108,48 @@ const ConsumptionUnitsTable = ({ consumptionData, isLoading, error, onAllocation
     }
     setSplitPercentages(percentages);
   }, []);
+
+  const handleAllocationClick = useCallback(async () => {
+    try {
+      setIsProcessing(true);
+      
+      // Fetch consumption sites
+      const sitesResponse = await api.get('/consumption-site/all');
+      const sites = sitesResponse.data?.data || [];
+      
+      // Filter shareholdings by the current company ID
+      const filteredShareholdings = shareholdings.filter(
+        sh => sh.generatorCompanyId === Number(companyId)
+      );
+      
+      setConsumptionSites(sites);
+      
+      if (sites.length > 0) {
+        if (filteredShareholdings.length > 0) {
+          // Map shareholding percentages to sites
+          const percentages = sites.map(site => {
+            const share = filteredShareholdings.find(
+              sh => sh.consumptionSiteId === site.consumptionSiteId
+            );
+            return share ? share.shareholdingPercentage : 0;
+          });
+          setSplitPercentages(percentages);
+        } else {
+          initializeEqualSplitPercentages(sites.length);
+          enqueueSnackbar('No shareholding data found for this company', { variant: 'warning' });
+        }
+        setAllocationDialog(true);
+      } else {
+        enqueueSnackbar('No consumption sites available', { variant: 'warning' });
+      }
+    } catch (error) {
+      console.error('Error loading allocation data:', error);
+      enqueueSnackbar('Failed to load allocation data', { variant: 'error' });
+    } finally {
+      setIsProcessing(false);
+    }
+  }, [companyId, shareholdings, enqueueSnackbar, initializeEqualSplitPercentages]);
+
 
   const handleAutoAllocate = useCallback(() => {
     if (consumptionSites.length === 0) return;
@@ -190,7 +204,7 @@ const ConsumptionUnitsTable = ({ consumptionData, isLoading, error, onAllocation
   };
 
   // Function to handle saving allocations
-  const handleSaveAllocation = async () => {
+  const handleSaveAllocation = useCallback(async () => {
     const total = splitPercentages.reduce((sum, value) => sum + value, 0);
     if (Math.abs(total - 100) > 0.01) {
       setDialogError("Total allocation must equal 100%");
@@ -200,9 +214,14 @@ const ConsumptionUnitsTable = ({ consumptionData, isLoading, error, onAllocation
     try {
       setIsProcessing(true);
       const updatePromises = consumptionSites.map((site, index) => {
+        const shareholding = shareholdings.find(
+          sh => sh.consumptionSiteId === site.consumptionSiteId && 
+                sh.generatorCompanyId === Number(companyId)
+        );
+        
         const captiveData = {
-          generatorCompanyId: 1, // Default generator company
-          shareholderCompanyId: site.shareholderCompanyId || Number(site.consumptionSiteId),
+          generatorCompanyId: Number(companyId),
+          shareholderCompanyId: shareholding?.shareholderCompanyId || Number(site.consumptionSiteId),
           consumptionSiteId: site.consumptionSiteId,
           siteName: site.name,
           effectiveFrom: new Date().toISOString().split('T')[0],
@@ -242,47 +261,60 @@ const ConsumptionUnitsTable = ({ consumptionData, isLoading, error, onAllocation
     } finally {
       setIsProcessing(false);
     }
-  };
+  }, [companyId, consumptionSites, enqueueSnackbar, onAllocationSaved, shareholdings, splitPercentages]);
 
-  const getAllocationPercentage = (consumptionSiteId) => {
+  const getAllocationPercentage = useCallback((consumptionSiteId) => {
     const index = consumptionSites.findIndex(site => site.consumptionSiteId === consumptionSiteId);
     if (index !== -1) {
       return splitPercentages[index] || 0;
     }
     return 0;
-  };
+  }, [consumptionSites, splitPercentages]);
 
-  // Load saved allocations on mount
+  // Load saved allocations on mount and when shareholdings change
   useEffect(() => {
     const loadSavedAllocations = async () => {
+      if (!companyId) return;
+      
       try {
+        setIsProcessing(true);
+        
         // Load consumption sites
         const sitesResponse = await api.get('/consumption-site/all');
         const sites = sitesResponse.data?.data || [];
         setConsumptionSites(sites);
         
-        // Load captive allocations
-        const captiveResponse = await api.get('/captive');
-        const captiveData = captiveResponse.data || [];
+        if (sites.length === 0) {
+          enqueueSnackbar('No consumption sites available', { variant: 'warning' });
+          return;
+        }
         
-        // Map captive data to sites
-        if (sites.length > 0 && captiveData.length > 0) {
+        // Use the shareholdings passed as props, which are already filtered by companyId
+        if (shareholdings && shareholdings.length > 0) {
+          // Map shareholding percentages to sites for the current company
           const percentages = sites.map(site => {
-            const captive = captiveData.find(c => c.consumptionSiteId === site.consumptionSiteId);
-            return captive ? captive.shareholdingPercentage : 0;
+            const share = shareholdings.find(
+              sh => sh.consumptionSiteId === site.consumptionSiteId && 
+                    sh.generatorCompanyId === Number(companyId)
+            );
+            return share ? share.shareholdingPercentage : 0;
           });
           setSplitPercentages(percentages);
         } else {
+          // Fallback to equal split if no shareholdings found
+          console.log('No shareholdings found for company:', companyId);
           initializeEqualSplitPercentages(sites.length);
         }
       } catch (error) {
         console.error('Error loading saved allocations:', error);
         enqueueSnackbar('Error loading allocations', { variant: 'error' });
+      } finally {
+        setIsProcessing(false);
       }
     };
 
     loadSavedAllocations();
-  }, [enqueueSnackbar, initializeEqualSplitPercentages]);
+  }, [companyId, enqueueSnackbar, initializeEqualSplitPercentages, shareholdings, setIsProcessing]);
 
   // Memoize the grouped and sorted data
   const groupedData = useMemo(() => {

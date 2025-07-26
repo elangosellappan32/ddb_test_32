@@ -487,6 +487,20 @@ const createDefaultCaptiveData = async () => {
             consumptionSiteId: '3',
             effectiveFrom: '2024-01-02',
             shareholdingPercentage: 61
+        },
+        {
+            generatorCompanyId: 5,  // STRIO KAIZEN HITECH RESEARCH LABS PVT LTD
+            shareholderCompanyId: 3, // A RAMAR AND SONS
+            consumptionSiteId: '2',
+            effectiveFrom: '2024-01-02',
+            shareholdingPercentage: 23
+        },
+        {
+            generatorCompanyId: 5,  // STRIO KAIZEN HITECH RESEARCH LABS PVT LTD
+            shareholderCompanyId: 2, // A RAMAR AND SONS
+            consumptionSiteId: '1',
+            effectiveFrom: '2024-01-02',
+            shareholdingPercentage: 33
         }
     ];
 

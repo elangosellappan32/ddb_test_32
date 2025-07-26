@@ -26,21 +26,44 @@ const FormVExcelReport = ({
 
       // Handle Form V-A
       const formVAResponse = await fetchFormVAData(financialYear);
+      
+      // Validate Form V-A response
       if (!formVAResponse) {
         throw new Error('No response received from Form V-A API');
       }
+      
+      if (!formVAResponse.success) {
+        throw new Error('Form V-A API request was not successful');
+      }
+      
+      if (!formVAResponse.data) {
+        throw new Error('No data received from Form V-A API');
+      }
 
-      const formVAData = {
-        totalGeneratedUnits: formVAResponse.totalGeneratedUnits,
-        auxiliaryConsumption: formVAResponse.auxiliaryConsumption,
-        aggregateGeneration: formVAResponse.aggregateGeneration,
-        fiftyOnePercentGeneration: formVAResponse.percentage51,
-        actualConsumedUnits: formVAResponse.totalAllocatedUnits,
-        consumptionPercentage: formVAResponse.percentageConsumed
-      };
+      const requiredFields = [
+        'totalGeneratedUnits',
+        'auxiliaryConsumption',
+        'aggregateGeneration',
+        'percentage51',
+        'totalAllocatedUnits',
+        'percentageAdjusted'
+      ];
 
-      const formVACreated = await createFormVAWorksheet(workbook, formVAData, financialYear);
-      if (!formVACreated) {
+      const missingFields = requiredFields.filter(field => {
+        const value = formVAResponse.data[field];
+        return value === undefined || value === null;
+      });
+
+      if (missingFields.length > 0) {
+        throw new Error(`Missing required fields in Form V-A data: ${missingFields.join(', ')}`);
+      }
+
+      // Log the response for debugging
+      console.log('Form V-A API Response:', formVAResponse);
+
+      // Create Form V-A worksheet with the API response directly
+      const formVASuccess = await createFormVAWorksheet(workbook, formVAResponse, financialYear);
+      if (!formVASuccess) {
         throw new Error('Failed to create Form V-A worksheet');
       }
 
@@ -52,21 +75,15 @@ const FormVExcelReport = ({
           throw new Error('Invalid Form V-B response format');
         }
 
-        const formVBData = {
-          aggregateGeneration: formVBResponse.data.aggregateGeneration,
-          auxiliaryConsumption: formVBResponse.data.auxiliaryConsumption,
-          totalGeneratedUnits: formVBResponse.data.totalGeneratedUnits,
-          siteMetrics: formVBResponse.data.siteMetrics.map(site => ({
-            ...site,
-            permittedMinus10: site.permittedConsumption * 0.9,
-            permittedPlus10: site.permittedConsumption * 1.1,
-            consumptionNormsMet: 
-              site.actualConsumption >= (site.permittedConsumption * 0.9) && 
-              site.actualConsumption <= (site.permittedConsumption * 1.1)
-          }))
-        };
+        // Validate Form V-B data
+        if (!formVBResponse.data.siteMetrics || !Array.isArray(formVBResponse.data.siteMetrics)) {
+          throw new Error('No site metrics data available in Form V-B response');
+        }
 
-        const formVBCreated = await createFormVBWorksheet(workbook, formVBData, financialYear);
+        console.log('Form V-B data:', formVBResponse.data);
+
+        // Create Form V-B worksheet
+        const formVBCreated = await createFormVBWorksheet(workbook, formVBResponse.data, financialYear);
         if (!formVBCreated) {
           throw new Error('Failed to create Form V-B worksheet');
         }

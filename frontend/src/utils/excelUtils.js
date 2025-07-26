@@ -34,12 +34,13 @@ export const getCellStyle = (isHeader = false, isSummary = false, isTitle = fals
     },
     patternType: 'solid'
   },
-  numFmt: isHeader ? '@' : '0.00'
+  numFmt: isHeader ? '@' : '#,##0.00'
 });
 
 export const formatNumber = (value, decimals = 2) => {
-  if (value === null || value === undefined) return '0';
+  if (value === null || value === undefined || value === '') return null;
   const num = typeof value === 'string' ? parseFloat(value) : value;
+  if (isNaN(num)) return null;
   return num.toLocaleString('en-IN', {
     minimumFractionDigits: decimals,
     maximumFractionDigits: decimals

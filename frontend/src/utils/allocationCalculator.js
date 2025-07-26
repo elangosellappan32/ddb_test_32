@@ -1,548 +1,485 @@
-// Allocation Calculator
+// allocationCalculator.js
+
 const ALL_PERIODS = ['c1', 'c2', 'c3', 'c4', 'c5'];
 const PEAK_PERIODS = ['c2', 'c3'];
 const NON_PEAK_PERIODS = ['c1', 'c4', 'c5'];
 
-/**
- * Creates a deep copy of a unit with remaining values
- */
+function isPeak(p) {
+  return PEAK_PERIODS.includes(p);
+}
+
+function isCompatible(prodPeriod, consPeriod) {
+  if (isPeak(prodPeriod) && isPeak(consPeriod)) return true;
+  if (isPeak(prodPeriod) && !isPeak(consPeriod)) return true;
+  if (!isPeak(prodPeriod) && !isPeak(consPeriod)) return true;
+  if (!isPeak(prodPeriod) && isPeak(consPeriod)) return false;
+  return false;
+}
+
+// Create unit from raw DB/API record
 function createUnitWithRemaining(unit, isProduction = false) {
-    if (!unit) {
-        console.warn('Received undefined/null unit in createUnitWithRemaining');
-        return null;
+  const remaining = ALL_PERIODS.reduce((acc, period) => {
+    acc[period] = Number(unit[period] || 0);
+    return acc;
+  }, {});
+
+  // Enhanced bankingEnabled detection with multiple fallbacks
+  let bankingEnabled = false;
+  if (isProduction) {
+    // Check all possible fields that might indicate banking is enabled
+    bankingEnabled = [
+      unit.bankingEnabled,
+      unit.banking === 1,
+      unit.banking === true,
+      unit.banking === '1',
+      unit.banking === 'true',
+      unit.type === 'WIND'  // Default WIND to banking enabled if not specified
+    ].some(Boolean);
+
+    console.log(`[createUnitWithRemaining] Banking status for ${unit.id} (${unit.type}):`, {
+      bankingEnabled,
+      banking: unit.banking,
+      unitBankingEnabled: unit.bankingEnabled,
+      type: unit.type,
+      isProduction
+    });
+  }
+
+  console.group(`[createUnitWithRemaining] Created ${isProduction ? 'production' : 'consumption'} unit`);
+  console.log('Unit ID:', unit.id);
+  console.log('Type:', unit.type);
+  console.log('Banking Enabled:', bankingEnabled);
+  console.log('Remaining:', remaining);
+  console.log('Source Data:', {
+    banking: unit.banking,
+    bankingEnabled: unit.bankingEnabled,
+    isProduction
+  });
+  console.groupEnd();
+
+  // Create the unit with all necessary properties
+  const result = {
+    id: unit.id,
+    productionSiteId: isProduction ? (unit.productionSiteId || unit.id) : undefined,
+    consumptionSiteId: !isProduction ? (unit.consumptionSiteId || unit.id) : undefined,
+    siteName: unit.siteName || '',
+    type: (unit.type || '').toUpperCase(),
+    companyId: unit.companyId,
+    month: unit.month,
+    remaining,
+    bankingEnabled,
+    // Preserve original data for debugging
+    _original: { ...unit },
+    // Add metadata for tracking
+    _meta: {
+      createdAt: new Date().toISOString(),
+      source: 'createUnitWithRemaining',
+      isProduction
     }
+  };
 
-    // Ensure we have valid period values
-    const remaining = ALL_PERIODS.reduce((acc, period) => {
-        const value = Number(unit[period]);
-        acc[period] = !isNaN(value) ? value : 0;
-        return acc;
-    }, {});
-
-    // Create base object with required fields
-    return {
-        id: unit.id,
-        productionSiteId: isProduction ? (unit.productionSiteId || unit.id) : undefined,
-        consumptionSiteId: !isProduction ? (unit.consumptionSiteId || unit.id) : undefined,
-        siteName: unit.siteName || (isProduction ? unit.productionSite : unit.consumptionSite) || '',
-        type: isProduction ? (unit.type || '').toUpperCase() : undefined,
-        bankingEnabled: isProduction ? (unit.banking === 1) : undefined,
-        month: unit.month,
-        remaining
-    };
+  return result;
 }
 
-/**
- * Checks if a unit has any remaining allocation in any period
- */
-function hasRemainingAllocation(unit) {
-    // Check if unit and unit.remaining exist before accessing
-    if (!unit?.remaining) return false;
-    return Object.values(unit.remaining).some(val => Number(val || 0) > 0);
+function hasRemaining(unit) {
+  return unit && Object.values(unit.remaining).some(val => Number(val || 0) > 0);
 }
 
-/**
- * Applies shareholding percentage to an allocation amount
- */
-function applyShareholding(amount, companyId, shareholdingPercentages) {
-    const percentage = companyId ? (shareholdingPercentages[companyId] || 100) : 100;
-    return Math.floor(amount * (percentage / 100));
+function applyShareholding(amount, companyId, sharePercentMap) {
+  const share = sharePercentMap[companyId] || 100;
+  return Math.floor((amount * share) / 100);
 }
 
-/**
- * Creates a new allocation record
- */
-function createAllocation(prod, cons, allocated = {}) {
-    // Initialize all periods with zero
-    const normalizedAllocation = ALL_PERIODS.reduce((acc, period) => {
-        acc[period] = Number(allocated[period] || 0);
-        return acc;
-    }, {});
-
-    return {
-        productionSiteId: prod.productionSiteId,
-        productionSite: prod.productionSite || prod.siteName,
-        siteType: prod.type,
-        siteName: prod.siteName,
-        consumptionSiteId: cons.consumptionSiteId,
-        consumptionSite: cons.consumptionSite || cons.siteName,
-        month: cons.month,
-        allocated: normalizedAllocation
-    };
+function createAllocationRecord(prod, cons, month) {
+  return {
+    productionSiteId: prod.productionSiteId,
+    productionSite: prod.siteName,
+    consumptionSiteId: cons?.consumptionSiteId || '',
+    consumptionSite: cons?.siteName || '',
+    siteType: prod.type,
+    siteName: prod.siteName,
+    month,
+    type: 'ALLOCATION',
+    allocated: Object.fromEntries(ALL_PERIODS.map(p => [p, 0])),
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  };
 }
 
-// Period prioritization is now handled directly in the calculateAllocations function
-
-/**
- * Calculates allocations based on production, consumption, and shareholding percentages
- * @param {Object} params - The allocation parameters
- * @param {Array} params.productionUnits - Array of production units
- * @param {Array} params.consumptionUnits - Array of consumption units
- * @param {Array} params.bankingUnits - Array of banking units
- * @param {Object} params.manualAllocations - Manual allocation overrides
- * @param {Array} params.shareholdings - Array of shareholding records from captive table
- * @returns {Object} Allocation results
- */
-export function calculateAllocations({ 
-    productionUnits = [], 
-    consumptionUnits = [], 
-    bankingUnits = [], 
-    manualAllocations = {},
-    shareholdings = []
+export function calculateAllocations({
+  productionUnits = [],
+  consumptionUnits = [],
+  bankingUnits = [],
+  manualAllocations = {},
+  shareholdings = [],
+  month = ''
 }) {
-    const shareholdingPercentages = shareholdings.reduce((acc, curr) => {
-        acc[curr.shareholderCompanyId] = curr.shareholdingPercentage;
-        return acc;
-    }, {});
-    
-    console.group('🔄 Running Allocation Calculation');
+  // Parse the allocation month and year
+  const allocationMonth = month || `${String(new Date().getMonth() + 1).padStart(2, '0')}${new Date().getFullYear()}`;
+  const monthStr = allocationMonth.slice(0, 2);
+  const yearStr = allocationMonth.slice(2);
+  const selectedMonth = parseInt(monthStr, 10);
+  const selectedYear = parseInt(yearStr, 10);
+  
+  // Helper function to format allocation month
+  const formatAllocationMonth = (m, y) => `${String(m).padStart(2, '0')}${y}`;
+
+  const shareMap = shareholdings.reduce((acc, cur) => {
+    acc[cur.shareholderCompanyId] = cur.shareholdingPercentage || 100;
+    return acc;
+  }, {});
+
+  const producers = productionUnits.map(u => createUnitWithRemaining(u, true));
+  const consumers = consumptionUnits.map(u => createUnitWithRemaining(u));
+  const banked = bankingUnits.map(u => ({
+    ...u,
+    ...Object.fromEntries(ALL_PERIODS.map(p => [p, Number(u[p] || 0)])),
+    productionSiteId: u.productionSiteId,
+    siteName: u.siteName,
+    month: u.month,
+    companyId: u.companyId
+  }));
+
+  const allocations = [];
+  const bankingAllocations = [];
+  const lapseAllocations = [];
+  const bankingUsage = [];
+
+  // Groups
+  const solar = producers.filter(p => p.type === 'SOLAR');
+  const windNB = producers.filter(p => p.type === 'WIND' && !p.bankingEnabled);
+  const windB = producers.filter(p => p.type === 'WIND' && p.bankingEnabled);
+
+  const producerGroups = [solar, windNB, windB];
+
+  // Core allocation
+  function allocate(prodList, consList, period) {
+    console.group(`[allocate] Processing period ${period}`);
+  
+    try {
+      for (const prod of prodList) {
+        if (prod.remaining[period] <= 0) continue;
+
+        for (const cons of consList) {
+          if (cons.remaining[period] <= 0) continue;
+
+          // Compatibility check
+          if (!isCompatible(period, period)) continue;
+
+          const available = prod.remaining[period];
+          const needed = cons.remaining[period];
+          const alloc = Math.min(available, needed);
+          const finalAlloc = applyShareholding(alloc, prod.companyId, shareMap);
+
+          if (finalAlloc <= 0) continue;
+
+          prod.remaining[period] -= finalAlloc;
+          cons.remaining[period] -= finalAlloc;
+
+          const monthYear = formatAllocationMonth(selectedMonth, selectedYear);
+          const allocationKey = `${prod.productionSiteId}_${cons.consumptionSiteId}_${monthYear}`;
+          
+          // Try to find existing allocation record
+          let record = allocations.find(a => 
+            a.productionSiteId === prod.productionSiteId &&
+            a.consumptionSiteId === cons.consumptionSiteId &&
+            a.month === monthYear
+          );
+
+          if (!record) {
+            console.log(`[allocate] Creating new allocation record for site ${prod.productionSiteId} -> ${cons.consumptionSiteId} (${monthYear})`);
+            record = createAllocationRecord(prod, cons, monthYear);
+            allocations.push(record);
+          } else {
+            console.log(`[allocate] Updating existing allocation record for site ${prod.productionSiteId} -> ${cons.consumptionSiteId} (${monthYear})`);
+            record.updatedAt = new Date().toISOString();
+          }
+
+          // Update the allocation for this period
+          record.allocated[period] = (record.allocated[period] || 0) + finalAlloc;
+          console.log(`[allocate] Added ${finalAlloc} units to period ${period} (total: ${record.allocated[period]})`);
+        }
+      }
+    } catch (error) {
+      console.error('[allocate] Error:', error);
+      throw error;
+    } finally {
+      console.groupEnd();
+    }
+  }
+
+  // Banking allocations handler
+  function allocateFromBanking(period) {
+    const targets = consumers.filter(c => c.remaining[period] > 0);
+    for (const cons of targets) {
+      for (const bank of banked) {
+        if (bank[period] <= 0) continue;
+        const need = cons.remaining[period];
+        if (need <= 0) break;
+
+        const alloc = Math.min(bank[period], need);
+        const final = applyShareholding(alloc, bank.companyId, shareMap);
+        if (final <= 0) continue;
+
+        cons.remaining[period] -= final;
+        bank[period] -= final;
+
+        bankingUsage.push({
+          productionSiteId: bank.productionSiteId,
+          productionSite: bank.siteName,
+          consumptionSiteId: cons.consumptionSiteId,
+          consumptionSite: cons.siteName,
+          month: cons.month,
+          type: 'BANKING',
+          allocated: Object.fromEntries(ALL_PERIODS.map(p => [p, p === period ? -final : 0])),
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        });
+      }
+    }
+  }
+
+  // Lapse or banking leftover
+  function handleLeftovers(period, group) {
+    console.group(`[handleLeftovers] Processing period ${period} with ${group.length} production units`);
     
     try {
-        // Initialize units with remaining values and filter out null/invalid units
-        const prodUnits = productionUnits
-            .map(u => createUnitWithRemaining(u, true))
-            .filter(u => u !== null);
-
-        const consUnits = consumptionUnits
-            .map(u => createUnitWithRemaining(u, false))
-            .filter(u => u !== null);
-
-        const bankUnits = bankingUnits
-            .map(u => {
-                if (!u) return null;
-                const unit = { ...u };
-                // Ensure period values are numbers
-                ALL_PERIODS.forEach(period => {
-                    unit[period] = Number(unit[period] || 0);
-                });
-                return unit;
-            })
-            .filter(u => u !== null);
-
-        if (prodUnits.length === 0 || consUnits.length === 0) {
-            console.warn('No valid production or consumption units to process');
-            return {
-                allocations: [],
-                bankingAllocations: [],
-                lapseAllocations: [],
-                remainingProduction: [],
-                remainingConsumption: []
-            };
-        }
-
-        // Track allocations
-        const allocations = [];
-        const bankingAllocations = [];
-        const lapseAllocations = [];
-        const processBankingUnits = new Map();
-
-        // Helper function to create or update allocation
-        function allocateUnits(source, target, period, amount, type = null) {
-            let allocation = allocations.find(a => 
-                a.productionSiteId === source.productionSiteId && 
-                a.consumptionSiteId === target.consumptionSiteId
-            );
-
-            if (!allocation) {
-                allocation = createAllocation(source, target);
-                if (type) allocation.type = type;
-                allocations.push(allocation);
-            }
-
-            allocation.allocated[period] = (allocation.allocated[period] || 0) + amount;
-            return allocation;
-        }
-
-        // Sort consumption units by highest need first
-        const sortedConsUnits = [...consUnits].sort((a, b) => {
-            // Calculate total peak and non-peak needs
-            const aPeak = PEAK_PERIODS.reduce((sum, p) => sum + Number(a.remaining[p] || 0), 0);
-            const bPeak = PEAK_PERIODS.reduce((sum, p) => sum + Number(b.remaining[p] || 0), 0);
-            // Prioritize units with peak period needs
-            if (aPeak !== bPeak) return bPeak - aPeak;
-            // Then by total consumption
-            return Object.values(b.remaining).reduce((s, v) => s + v, 0) - 
-                   Object.values(a.remaining).reduce((s, v) => s + v, 0);
-        });
-
-        // Classify production sources
-        const solarUnits = prodUnits.filter(u => u.type === 'SOLAR');
-        const windUnits = prodUnits.filter(u => u.type === 'WIND' && !u.bankingEnabled);
-        const bankingWindUnits = prodUnits.filter(u => u.type === 'WIND' && u.bankingEnabled);
-
-        // First pass: Handle peak periods (c2, c3)
-        PEAK_PERIODS.forEach(period => {
-            console.log(`\nProcessing PEAK period ${period}:`);
-
-            // Calculate total peak needs
-            const totalPeakConsumption = sortedConsUnits.reduce((sum, unit) => 
-                sum + Number(unit.remaining[period] || 0), 0);
-
-            if (totalPeakConsumption <= 0) {
-                console.log(`No consumption needs for peak period ${period}`);
-                return;
-            }
-
-            // Allocation Priority for Peak Periods
-            // 1. Solar units
-            allocateProductionUnits(solarUnits, sortedConsUnits, period, shareholdingPercentages, allocateUnits);
-
-            // 2. Regular wind units
-            allocateProductionUnits(windUnits, sortedConsUnits, period, shareholdingPercentages, allocateUnits);
-
-            // 3. Banking-enabled wind units
-            allocateProductionUnits(bankingWindUnits, sortedConsUnits, period, shareholdingPercentages, allocateUnits);
-            
-            // Handle remaining production for banking or lapse
-            handleRemainingProduction(period, [...solarUnits, ...windUnits, ...bankingWindUnits], 
-                sortedConsUnits, bankingAllocations, lapseAllocations, createAllocation);
-
-            // 4. Use banking units if needed (last resort)
-            const remainingPeakConsumption = sortedConsUnits.reduce((sum, unit) => 
-                sum + Number(unit.remaining[period] || 0), 0);
-
-            if (remainingPeakConsumption > 0) {
-                console.log(`Using banking units for remaining ${remainingPeakConsumption} peak units in ${period}`);
-                const sortedBankUnits = [...bankUnits]
-                    .filter(bank => Number(bank[period] || 0) > 0)
-                    .sort((a, b) => Number(b[period] || 0) - Number(a[period] || 0));
-
-                allocateBankingUnits(sortedBankUnits, sortedConsUnits, period, 
-                    shareholdingPercentages, processBankingUnits, allocateUnits);
-            }
-        });
-
-        // Second pass: Handle non-peak periods (c1, c4, c5)
-        NON_PEAK_PERIODS.forEach(period => {
-            console.log(`\nProcessing NON-PEAK period ${period}:`);
-
-            // Calculate total non-peak needs
-            const totalNonPeakConsumption = sortedConsUnits.reduce((sum, unit) => 
-                sum + Number(unit.remaining[period] || 0), 0);
-
-            if (totalNonPeakConsumption <= 0) {
-                console.log(`No consumption needs for non-peak period ${period}`);
-                return;
-            }
-
-            // Allocation Priority for Non-Peak Periods
-            // 1. Solar units
-            allocateProductionUnits(solarUnits, sortedConsUnits, period, shareholdingPercentages, allocateUnits);
-
-            // 2. Banking-enabled wind units (prefer using banking-enabled wind for non-peak)
-            allocateProductionUnits(bankingWindUnits, sortedConsUnits, period, shareholdingPercentages, allocateUnits);
-
-            // 3. Regular wind units
-            allocateProductionUnits(windUnits, sortedConsUnits, period, shareholdingPercentages, allocateUnits);
-            
-            // Handle remaining production for banking or lapse
-            handleRemainingProduction(period, [...solarUnits, ...windUnits, ...bankingWindUnits], 
-                sortedConsUnits, bankingAllocations, lapseAllocations, createAllocation);
-
-            // 4. Use banking units if absolutely necessary (last resort)
-            const remainingNonPeakConsumption = sortedConsUnits.reduce((sum, unit) => 
-                sum + Number(unit.remaining[period] || 0), 0);
-
-            if (remainingNonPeakConsumption > 0) {
-                console.log(`Using banking units for remaining ${remainingNonPeakConsumption} non-peak units in ${period}`);
-                const sortedBankUnits = [...bankUnits]
-                    .filter(bank => Number(bank[period] || 0) > 0)
-                    .sort((a, b) => Number(b[period] || 0) - Number(a[period] || 0));
-
-                allocateBankingUnits(sortedBankUnits, sortedConsUnits, period, 
-                    shareholdingPercentages, processBankingUnits, allocateUnits);
-            }
-        });
-
-        // Return only allocations with proper period initialization
-        console.groupEnd();
+      const monthYear = formatAllocationMonth(selectedMonth, selectedYear);
+      
+      // First pass: collect all remaining units by site and type
+      for (const prod of group) {
+        const left = Math.max(0, Number(prod.remaining[period]) || 0);
+        if (left <= 0) continue;
         
-        // Ensure all allocations have all periods initialized with zeros
-        const normalizeAllocation = (alloc) => {
-            if (!alloc?.allocated) return null;
-            
-            // Create a new object to avoid modifying the original
-            return {
-                ...alloc,
-                allocated: ALL_PERIODS.reduce((acc, period) => {
-                    acc[period] = Number(alloc.allocated[period] || 0);
-                    return acc;
-                }, {})
-            };
-        };
-
-        // Filter for allocations that have non-zero values
-        const hasNonZeroValues = (alloc) =>
-            alloc && Object.values(alloc.allocated).some(v => v !== 0);
-
-        // Process and normalize banking records
-        const bankingRecords = [...processBankingUnits.values()]
-            .map(normalizeAllocation)
-            .filter(bank => {
-                // Keep banking records that have either positive (banked) or negative (used) values
-                return bank && Object.values(bank.allocated).some(v => v !== 0);
-            });
-
-        // Separate banking and usage records
-        const bankingUsageRecords = bankingRecords.filter(bank => 
-            Object.values(bank.allocated).some(v => v < 0)
-        );
-
-        const bankingStorageRecords = bankingRecords.filter(bank => 
-            bank.consumptionSiteId === 'BANK' &&
-            Object.values(bank.allocated).some(v => v > 0)
-        );
-
-        return {
-            // Regular allocations (excluding banking)
-            allocations: allocations
-                .filter(a => a.type !== 'BANKING')
-                .map(normalizeAllocation)
-                .filter(hasNonZeroValues),
-
-            // Banking allocations - both stored and used
-            bankingAllocations: [
-                ...bankingStorageRecords,
-                ...bankingUsageRecords,
-                ...bankingAllocations
-                    .map(normalizeAllocation)
-                    .filter(hasNonZeroValues)
-            ],
-
-            // Lapse allocations
-            lapseAllocations: lapseAllocations
-                .map(normalizeAllocation)
-                .filter(hasNonZeroValues),
-
-            // Remaining units
-            remainingProduction: prodUnits.filter(hasRemainingAllocation),
-            remainingConsumption: consUnits.filter(hasRemainingAllocation)
-        };
+        const recordType = prod.bankingEnabled ? 'BANKING' : 'LAPSE';
+        const siteKey = `${prod.productionSiteId}_${monthYear}`;
+        
+        // Create or update the record
+        let record;
+        const existingRecordIndex = (recordType === 'BANKING' ? bankingAllocations : lapseAllocations)
+          .findIndex(r => r.productionSiteId === prod.productionSiteId && r.month === monthYear);
+        
+        if (existingRecordIndex >= 0) {
+          // Update existing record
+          const records = recordType === 'BANKING' ? bankingAllocations : lapseAllocations;
+          record = records[existingRecordIndex];
+          record.updatedAt = new Date().toISOString();
+          record.allocated[period] = (record.allocated[period] || 0) + left;
+        } else {
+          // Create new record
+          record = {
+            productionSiteId: prod.productionSiteId,
+            productionSite: prod.siteName || prod.productionSite || 'Unknown Site',
+            month: monthYear,
+            siteType: prod.siteType || 'WIND',
+            siteName: prod.siteName || prod.productionSite || 'Unknown Site',
+            type: recordType,
+            allocated: { c1: 0, c2: 0, c3: 0, c4: 0, c5: 0 },
+            bankingEnabled: prod.bankingEnabled || false,
+            consumptionSite: recordType === 'BANKING' ? 'Banking' : 'Lapsed',
+            consumptionSiteId: recordType === 'BANKING' ? 'BANK' : 'LAPSE',
+            id: `${recordType.toLowerCase()}_${prod.productionSiteId}_${monthYear}`,
+            version: 1,
+            status: 'ACTIVE',
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+          };
+          record.allocated[period] = left;
+          
+          // Add to the appropriate array
+          if (recordType === 'BANKING') {
+            bankingAllocations.push(record);
+          } else {
+            lapseAllocations.push(record);
+          }
+          
+          console.log(`Created new ${recordType} record for site ${record.siteName} (${prod.productionSiteId})`);
+        }
+        
+        // Reset the remaining value for this period
+        prod.remaining[period] = 0;
+      }
     } catch (error) {
-        console.error('Error in calculateAllocations:', error);
-        throw error;
+      console.error('[handleLeftovers] Error:', error);
+    } finally {
+      console.groupEnd();
     }
-}
-
-// Helper function to allocate production units to consumption units
-
-// Helper function to allocate production units to consumption units
-function allocateProductionUnits(prodUnits, consUnits, period, shareholdingPercentages, allocateFn) {
-    // Sort production units by highest available units first
-    prodUnits.sort((a, b) => Number(b.remaining[period]) - Number(a.remaining[period]));
-
-    // For each production unit
-    prodUnits.forEach(prod => {
-        // Sort consumption units by highest need first to maximize allocation
-        const sortedConsUnits = consUnits
-            .filter(cons => cons.remaining[period] > 0)
-            .sort((a, b) => Number(b.remaining[period]) - Number(a.remaining[period]));
-
-        sortedConsUnits.forEach(cons => {
-            if (prod.remaining[period] <= 0 || cons.remaining[period] <= 0) return;
-
-            const available = Number(prod.remaining[period]);
-            const needed = Number(cons.remaining[period]);
-            const toAllocate = Math.min(available, needed);
-            const allocated = applyShareholding(toAllocate, prod.companyId, shareholdingPercentages);
-
-            if (allocated > 0) {
-                allocateFn(prod, cons, period, allocated);
-                prod.remaining[period] -= allocated;
-                cons.remaining[period] -= allocated;
-                console.log(`Allocated ${allocated} units from ${prod.productionSiteId} (${prod.type}) to ${cons.consumptionSiteId} in period ${period}`);
-            }
-        });
+    
+    console.log(`After handleLeftovers for ${period}:`, {
+      bankingAllocations: bankingAllocations.length,
+      lapseAllocations: lapseAllocations.length,
+      remainingInGroup: group.map(p => ({
+        id: p.productionSiteId,
+        remaining: p.remaining,
+        type: p.type,
+        bankingEnabled: p.bankingEnabled
+      }))
     });
-}
+  }
 
-// Helper function to handle remaining production
-function handleRemainingProduction(period, prodUnits, consUnits, bankingAllocs, lapseAllocs, createAlloc) {
-    if (!period || !Array.isArray(prodUnits) || !Array.isArray(consUnits)) {
-        console.warn('Invalid arguments in handleRemainingProduction');
-        return;
-    }
-
-    // Filter out invalid units first
-    const validProdUnits = prodUnits.filter(prod => 
-        prod && prod.remaining && typeof prod.remaining === 'object'
-    );
-
-    validProdUnits.forEach(prod => {
-        const remaining = Math.max(0, Number(prod.remaining[period] || 0));
-        if (remaining <= 0) return;
-
-        // Validate critical fields
-        if (!prod.productionSiteId) {
-            console.warn('Production unit missing productionSiteId', prod);
-            return;
-        }
-
+  // Process Peak & Non-Peak periods
+  const processPeriods = (periods, groups) => {
+    console.group(`[processPeriods] Starting allocation for periods: ${periods.join(', ')}`);
+    console.log('Total producer groups:', groups.length);
+    console.log('Total consumers:', consumers.length);
+    
+    try {
+      for (const period of periods) {
+        console.group(`[processPeriods] Processing period: ${period}`);
+        
         try {
-            // Initialize all periods with zero
-            const baseAllocation = ALL_PERIODS.reduce((acc, p) => {
-                acc[p] = p === period ? remaining : 0;
-                return acc;
-            }, {});
+          // Log initial state for this period
+          const initialProduction = groups.flatMap(g => g).reduce((sum, p) => sum + (p.remaining[period] || 0), 0);
+          const initialConsumption = consumers.reduce((sum, c) => sum + (c.remaining[period] || 0), 0);
+          console.log(`Initial state for ${period}:`, {
+            totalProduction: initialProduction,
+            totalConsumption: initialConsumption,
+            producerGroups: groups.map((g, i) => ({
+              group: i,
+              producers: g.length,
+              totalProduction: g.reduce((sum, p) => sum + (p.remaining[period] || 0), 0)
+            }))
+          });
 
-            // Create base record with all required fields
-            const baseRecord = {
-                productionSiteId: prod.productionSiteId,
-                productionSite: prod.productionSite || prod.siteName || '',
-                siteType: prod.type || '',
-                siteName: prod.siteName || '',
-                month: prod.month,
-                allocated: baseAllocation,
-                version: 1,
-                ttl: 0,
-                createdAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString()
-            };
+          // Find consumers that need this period
+          const consumersNeedingPeriod = consumers.filter(c => c.remaining[period] > 0);
+          const hasConsumers = consumersNeedingPeriod.length > 0;
+          
+          if (!hasConsumers) {
+            console.log(`No consumers need period ${period}, but will check for remaining production`);
+          }
+          
+          console.log(`Processing ${consumersNeedingPeriod.length} consumers that need period ${period}`);
 
-            if (prod.bankingEnabled) {
-                // For peak periods or when no more consumption needs, bank the units
-                if (PEAK_PERIODS.includes(period) || !hasRemainingAllocation(consUnits)) {
-                    const bankingRecord = {
-                        ...baseRecord,
-                        consumptionSiteId: 'BANK',
-                        consumptionSite: 'Banking',
-                        type: 'BANKING'
-                    };
-                    
-                    // Look for existing banking record for this production site
-                    const existingBankingIndex = bankingAllocs.findIndex(b => 
-                        b.productionSiteId === prod.productionSiteId
-                    );
+          // Process each producer group
+          for (const [groupIdx, group] of groups.entries()) {
+            console.group(`Processing producer group ${groupIdx} with ${group.length} producers`);
+            
+            try {
+              // Log group state before allocation
+              const groupProdBefore = group.reduce((sum, p) => sum + (p.remaining[period] || 0), 0);
+              console.log(`Group ${groupIdx} initial production: ${groupProdBefore}`);
 
-                    if (existingBankingIndex >= 0) {
-                        // Update existing banking record
-                        const existing = bankingAllocs[existingBankingIndex];
-                        existing.allocated[period] = (existing.allocated[period] || 0) + remaining;
-                        existing.updatedAt = new Date().toISOString();
-                    } else {
-                        // Add new banking record
-                        bankingAllocs.push(bankingRecord);
-                    }
-
-                    console.log(`Banked ${remaining} units from ${prod.productionSiteId} for ${period}`);
-                }
-            } else {
-                // Create lapse record
-                const lapseRecord = {
-                    ...baseRecord,
-                    consumptionSiteId: 'LAPSE',
-                    consumptionSite: 'Lapsed',
-                    type: 'LAPSE'
-                };
-
-                // Look for existing lapse record for this production site
-                const existingLapseIndex = lapseAllocs.findIndex(l => 
-                    l.productionSiteId === prod.productionSiteId
-                );
-
-                if (existingLapseIndex >= 0) {
-                    // Update existing lapse record
-                    const existing = lapseAllocs[existingLapseIndex];
-                    existing.allocated[period] = (existing.allocated[period] || 0) + remaining;
-                    existing.updatedAt = new Date().toISOString();
-                } else {
-                    // Add new lapse record
-                    lapseAllocs.push(lapseRecord);
-                }
-
-                console.log(`Lapsed ${remaining} units from ${prod.productionSiteId} for ${period}`);
+              if (hasConsumers) {
+                // Only try to allocate to consumers if there are consumers needing this period
+                console.log('Allocating to consumers...');
+                allocate(group, consumersNeedingPeriod, period);
+              } else {
+                console.log('No consumers need this period, skipping allocation');
+              }
+              
+              // Always handle leftovers for this group, even if no consumers
+              console.log('Handling leftovers...');
+              handleLeftovers(period, group);
+              
+              // Log group state after allocation and leftovers
+              const groupProdAfter = group.reduce((sum, p) => sum + (p.remaining[period] || 0), 0);
+              console.log(`Group ${groupIdx} remaining after allocation: ${groupProdAfter}`);
+              
+            } catch (error) {
+              console.error(`Error processing group ${groupIdx}:`, error);
+              throw error;
+            } finally {
+              console.groupEnd();
             }
-        } catch (err) {
-            console.error('Error handling remaining production:', err, { prod, period });
+          }
+
+          if (hasConsumers) {
+            // Only try to use banking if there were consumers to allocate to
+            console.log('Attempting to allocate from banking...');
+            allocateFromBanking(period);
+          } else {
+            console.log('No consumers, skipping banking allocation');
+          }
+          
+          // Final check for any remaining production that wasn't allocated
+          console.log('Performing final check for remaining production...');
+          const remainingProducers = [];
+          
+          // First collect all producers with remaining production
+          for (const [groupIdx, group] of groups.entries()) {
+            for (const prod of group) {
+              const remaining = Number(prod.remaining[period]) || 0;
+              if (remaining > 0) {
+                console.log(`Found remaining production in group ${groupIdx} for ${prod.productionSiteId} (${prod.type}): ${remaining} units`);
+                remainingProducers.push(prod);
+              }
+            }
+          }
+          
+          if (remainingProducers.length > 0) {
+            console.log(`Processing ${remainingProducers.length} producers with remaining production`);
+            console.log('Producers with remaining:', remainingProducers.map(p => ({
+              id: p.productionSiteId,
+              type: p.type,
+              remaining: p.remaining[period],
+              bankingEnabled: p.bankingEnabled
+            })));
+            
+            // Process remaining production
+            handleLeftovers(period, remainingProducers);
+            
+            // Verify all remaining was processed
+            const remainingAfter = remainingProducers.reduce((sum, p) => sum + (Number(p.remaining[period]) || 0), 0);
+            if (remainingAfter > 0) {
+              console.warn(`WARNING: Still have ${remainingAfter} units remaining after handleLeftovers for period ${period}`);
+              // Force set remaining to 0 to prevent infinite loops
+              remainingProducers.forEach(p => {
+                if (p.remaining[period] > 0) {
+                  console.log(`Forcing remaining to 0 for ${p.productionSiteId} (was ${p.remaining[period]})`);
+                  p.remaining[period] = 0;
+                }
+              });
+            }
+          } else {
+            console.log('No remaining production found in any group');
+          }
+          
+          // Log final state for this period
+          const finalProduction = groups.flatMap(g => g).reduce((sum, p) => sum + (p.remaining[period] || 0), 0);
+          const finalConsumption = consumers.reduce((sum, c) => sum + (c.remaining[period] || 0), 0);
+          
+          console.log(`Final state for ${period}:`, {
+            remainingProduction: finalProduction,
+            remainingConsumption: finalConsumption,
+            allocations: allocations.filter(a => a.allocated[period] > 0).length,
+            bankingAllocations: bankingAllocations.filter(b => b.allocated[period] > 0).length,
+            lapseAllocations: lapseAllocations.filter(l => l.allocated[period] > 0).length
+          });
+          
+        } catch (error) {
+          console.error(`Error processing period ${period}:`, error);
+          throw error;
+        } finally {
+          console.groupEnd();
         }
-    });
-}
+      }
+      
+      // Final summary
+      console.group('Final allocation summary');
+      console.log('Total allocations:', allocations.length);
+      console.log('Total banking allocations:', bankingAllocations.length);
+      console.log('Total lapse allocations:', lapseAllocations.length);
+      console.log('Total banking usage:', bankingUsage.length);
+      console.groupEnd();
+      
+    } catch (error) {
+      console.error('Error in processPeriods:', error);
+      throw error;
+    } finally {
+      console.groupEnd();
+    }
+  };
 
-// Helper function to allocate banking units
-function allocateBankingUnits(bankUnits, consUnits, period, shareholdingPercentages, processBankingUnits, allocateFn) {
-    // Sort banking units by highest available units first
-    bankUnits.sort((a, b) => Number(b[period]) - Number(a[period]));
+  processPeriods(PEAK_PERIODS, producerGroups); // c2, c3
+  processPeriods(NON_PEAK_PERIODS, producerGroups); // c1, c4, c5
 
-    // Sort consumption units by highest need first
-    const sortedConsUnits = consUnits
-        .filter(cons => cons.remaining[period] > 0)
-        .sort((a, b) => Number(b.remaining[period]) - Number(a.remaining[period]));
-
-    // For each consumption unit with remaining need
-    sortedConsUnits.forEach(cons => {
-        const needed = Number(cons.remaining[period] || 0);
-        if (needed <= 0) return;
-
-        // Try to fulfill the need with banking units
-        bankUnits.forEach(bank => {
-            if (needed <= 0 || bank[period] <= 0) return;
-
-            const available = Number(bank[period]);
-            const toAllocate = Math.min(available, needed);
-            const allocated = applyShareholding(toAllocate, bank.companyId, shareholdingPercentages);
-
-            if (allocated > 0) {
-                // Initialize banking tracking if not exists
-                if (!processBankingUnits.has(bank.productionSiteId)) {
-                    // Create a banking allocation record with all periods initialized to 0
-                    const bankingAllocation = {
-                        productionSiteId: bank.productionSiteId,
-                        productionSite: bank.productionSite || bank.siteName || '',
-                        siteType: 'WIND',
-                        siteName: bank.siteName || '',
-                        consumptionSiteId: 'BANK',
-                        consumptionSite: 'Banking',
-                        month: bank.month,
-                        type: 'BANKING',
-                        allocated: ALL_PERIODS.reduce((acc, p) => {
-                            acc[p] = 0;
-                            return acc;
-                        }, {}),
-                        version: 1,
-                        ttl: 0,
-                        createdAt: new Date().toISOString(),
-                        updatedAt: new Date().toISOString()
-                    };
-                    processBankingUnits.set(bank.productionSiteId, bankingAllocation);
-                }
-
-                // Create a new banking usage record with negative allocation
-                const bankingUsage = {
-                    productionSiteId: bank.productionSiteId,
-                    productionSite: bank.productionSite || bank.siteName || '',
-                    siteType: 'WIND',
-                    siteName: bank.siteName || '',
-                    consumptionSiteId: cons.consumptionSiteId,
-                    consumptionSite: cons.consumptionSite || cons.siteName || '',
-                    month: bank.month,
-                    type: 'BANKING',
-                    allocated: ALL_PERIODS.reduce((acc, p) => {
-                        // Store negative value for the period where banking was used
-                        acc[p] = p === period ? -allocated : 0;
-                        return acc;
-                    }, {}),
-                    version: 1,
-                    ttl: 0,
-                    createdAt: new Date().toISOString(),
-                    updatedAt: new Date().toISOString()
-                };
-
-                // Record the allocation and update remainings
-                allocateFn(bank, cons, period, allocated, 'BANKING');
-                bank[period] -= allocated;
-                cons.remaining[period] -= allocated;
-
-                // Update the banking tracker
-                const bankingTracker = processBankingUnits.get(bank.productionSiteId);
-                bankingTracker.allocated[period] = (bankingTracker.allocated[period] || 0) - allocated;
-                bankingTracker.updatedAt = new Date().toISOString();
-
-                // Add the banking usage record to the tracking map with a unique key
-                const usageKey = `${bank.productionSiteId}_${cons.consumptionSiteId}_${period}`;
-                processBankingUnits.set(usageKey, bankingUsage);
-
-                console.log(`Used ${allocated} banking units from ${bank.productionSiteId} for ${cons.consumptionSiteId} in ${period} (Remaining: ${bank[period]})`);
-            }
-        });
-    });
+  return {
+    allocations,
+    lapseAllocations,
+    bankingAllocations,
+    bankingUsage,
+    remainingProduction: producers.filter(hasRemaining),
+    remainingConsumption: consumers.filter(hasRemaining)
+  };
 }

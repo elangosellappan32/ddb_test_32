@@ -13,13 +13,22 @@ class LapseService {
 
     async create(lapseData) {
         try {
+            // Extract c1-c5 values from allocated if they exist there
+            const { allocated, ...restData } = lapseData;
+            
             // Normalize data
             const normalizedData = {
-                ...lapseData,
+                ...restData,
                 type: 'LAPSE',
                 companyId: lapseData.companyId || '1',
                 pk: `${lapseData.companyId || '1'}_${lapseData.productionSiteId}`,
-                sk: lapseData.month
+                sk: lapseData.month,
+                // Ensure c1-c5 are at root level and are numbers
+                c1: Number(allocated?.c1 || 0) || 0,
+                c2: Number(allocated?.c2 || 0) || 0,
+                c3: Number(allocated?.c3 || 0) || 0,
+                c4: Number(allocated?.c4 || 0) || 0,
+                c5: Number(allocated?.c5 || 0) || 0
             };
 
             // Create lapse record
@@ -50,7 +59,23 @@ class LapseService {
 
     async update(pk, sk, updates) {
         try {
-            return await lapseDAL.updateLapse(pk, sk, updates);
+            // Extract c1-c5 values from allocated if they exist in updates
+            const { allocated, ...restUpdates } = updates;
+            
+            // Prepare the update payload with c1-c5 at root level
+            const updatePayload = {
+                ...restUpdates,
+                // Only include c1-c5 if they exist in allocated
+                ...(allocated && {
+                    c1: Number(allocated.c1 || 0) || 0,
+                    c2: Number(allocated.c2 || 0) || 0,
+                    c3: Number(allocated.c3 || 0) || 0,
+                    c4: Number(allocated.c4 || 0) || 0,
+                    c5: Number(allocated.c5 || 0) || 0
+                })
+            };
+            
+            return await lapseDAL.updateLapse(pk, sk, updatePayload);
         } catch (error) {
             logger.error('[LapseService] Update Error:', error);
             throw error;

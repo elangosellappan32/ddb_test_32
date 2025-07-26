@@ -30,6 +30,7 @@ class AllocationApi {
         } else if (t === 'LAPSE') {
             payload.productionSiteId = data.productionSiteId;
             payload.month = data.month;
+            payload.siteName = data.productionSiteName || data.siteName;
         }
         ['version','ttl','createdAt','updatedAt'].forEach(key => {
             if (data[key] !== undefined) payload[key] = data[key];
@@ -37,30 +38,69 @@ class AllocationApi {
         return payload;
     }
 
-    async fetchAll(month) {
+    async fetchAll(month, companyId) {
         try {
-            // Construct the URL with proper path joining
-            const endpoint = `${API_CONFIG.ENDPOINTS.ALLOCATION.BASE}/month/${month}`;
+            // Construct the URL with company ID as a query parameter
+            const endpoint = `${API_CONFIG.ENDPOINTS.ALLOCATION.BASE}/month/${month}${companyId ? `?companyId=${companyId}` : ''}`;
             const response = await api.get(endpoint);
+            
+            // Filter allocations by company ID if provided
+            const filterByCompany = (items) => {
+                if (!companyId) return items || [];
+                return (items || []).filter(item => item.companyId === companyId);
+            };
+            
             return {
-                allocations: response.data?.data || [],
-                banking: response.data?.banking || [],
-                lapse: response.data?.lapse || []
+                allocations: filterByCompany(response.data?.data),
+                banking: filterByCompany(response.data?.banking),
+                lapse: filterByCompany(response.data?.lapse)
             };
         } catch (error) {
             throw this.handleError(error);
         }
     }
 
-    async fetchAllAllocations() {
+    async fetchAllAllocations(companyId) {
         try {
-            const endpoint = `${API_CONFIG.ENDPOINTS.ALLOCATION.BASE}`;
+            const endpoint = `${API_CONFIG.ENDPOINTS.ALLOCATION.BASE}${companyId ? `?companyId=${companyId}` : ''}`;
             const response = await api.get(endpoint);
-            // Expect response.data to be an array of records with allocated: {c1, c2, ...}
-            return response.data?.data || [];
+            // Filter allocations by company ID if provided
+            const allocations = response.data?.data || [];
+            return companyId 
+                ? allocations.filter(item => item.companyId === companyId)
+                : allocations;
         } catch (error) {
             throw this.handleError(error);
         }
+    }
+
+    async fetchByType(type, month, companyId) {
+        const typeMap = {
+            'allocations': API_CONFIG.ENDPOINTS.ALLOCATION.BASE,
+            'banking': API_CONFIG.ENDPOINTS.BANKING.BASE,
+            'lapse': API_CONFIG.ENDPOINTS.LAPSE.BASE
+        };
+        
+        const endpoint = typeMap[type];
+        if (!endpoint) {
+            throw new Error(`Invalid allocation type: ${type}`);
+        }
+        
+        // Add company ID as query parameter if provided
+        const queryParams = [];
+        if (month) queryParams.push(`month=${month}`);
+        if (companyId) queryParams.push(`companyId=${companyId}`);
+        
+        const queryString = queryParams.length > 0 ? `?${queryParams.join('&')}` : '';
+        const url = `${endpoint}${queryString}`;
+        
+        const response = await api.get(url);
+        const data = response.data?.data || [];
+        
+        // Additional client-side filtering as a fallback
+        return companyId 
+            ? data.filter(item => item.companyId === companyId)
+            : data;
     }
 
     async createAllocation(data) {
@@ -83,8 +123,31 @@ class AllocationApi {
         try {
             const formattedData = this.formatAllocationData(data, 'BANKING');
             console.log('[AllocationApi] Outgoing BANKING payload:', formattedData);
-            const response = await api.post(API_CONFIG.ENDPOINTS.BANKING.CREATE, formattedData);
-            return response.data;
+            
+            // First try to update if record exists
+            try {
+                // Check if we have the required fields for an update
+                if (formattedData.pk && formattedData.sk) {
+                    const existingRecord = await this.get(formattedData.pk, formattedData.sk, 'BANKING').catch(() => null);
+                    if (existingRecord) {
+                        console.log('[BankingApi] Record exists, updating instead of creating');
+                        return await this.update(formattedData.pk, formattedData.sk, formattedData, 'BANKING');
+                    }
+                }
+                // If no existing record or missing fields, proceed with create
+                const response = await api.post(API_CONFIG.ENDPOINTS.BANKING.CREATE, formattedData);
+                return response.data;
+            } catch (createError) {
+                // If create fails with a duplicate error, try to update instead
+                const errorMessage = createError?.response?.data?.message || '';
+                if (errorMessage.includes('already exists') || errorMessage.includes('conditional check failed')) {
+                    console.log('[BankingApi] Record may exist, attempting update instead');
+                    if (formattedData.pk && formattedData.sk) {
+                        return await this.update(formattedData.pk, formattedData.sk, formattedData, 'BANKING');
+                    }
+                }
+                throw createError;
+            }
         } catch (error) {
             console.error('[AllocationApi] Backend BANKING error:', error?.response?.data || error);
             throw this.handleError(error);
@@ -150,6 +213,32 @@ class AllocationApi {
             if (error.response?.status === 404) {
                 // Create new record if update target doesn't exist
                 return this.create(data, type);
+            }
+            throw this.handleError(error);
+        }
+    }
+
+    async get(pk, sk, type = 'ALLOCATION') {
+        try {
+            let getEndpoint;
+            
+            switch (type.toUpperCase()) {
+                case 'BANKING':
+                    getEndpoint = API_CONFIG.ENDPOINTS.BANKING.BASE + `/${pk}/${sk}`;
+                    break;
+                case 'LAPSE':
+                    getEndpoint = API_CONFIG.ENDPOINTS.LAPSE.BASE + `/${pk}/${sk}`;
+                    break;
+                default:
+                    getEndpoint = API_CONFIG.ENDPOINTS.ALLOCATION.BASE + `/${pk}/${sk}`;
+            }
+
+            const response = await api.get(getEndpoint);
+            return response.data;
+        } catch (error) {
+            // Return null if record not found
+            if (error.response?.status === 404) {
+                return null;
             }
             throw this.handleError(error);
         }

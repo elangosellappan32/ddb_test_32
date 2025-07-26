@@ -74,9 +74,10 @@ const FormVCombinedExporter = ({
     }
   });
   const formatValue = (value, decimalPlaces = 2, isPercentage = false) => {
+    if (value === null || value === undefined) return '';
     const num = Number(value);
     if (isNaN(num)) {
-      return isPercentage ? '0.00%' : '0.00';
+      return '';
     }
     const formattedNum = num.toFixed(decimalPlaces);
     return isPercentage ? `${formattedNum}%` : formattedNum;
