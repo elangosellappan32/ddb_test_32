@@ -62,14 +62,10 @@ const createConsumptionSite = async (item) => {
             timetolive: 0
         };
 
-        // Update with optimistic locking
+        // Create the new item
         await docClient.send(new PutCommand({
             TableName,
-            Item: updatedItem,
-            ConditionExpression: 'version = :expectedVersion',
-            ExpressionAttributeValues: {
-                ':expectedVersion': currentVersion
-            }
+            Item: newItem
         }));
 
         // Add the siteKey to the response
