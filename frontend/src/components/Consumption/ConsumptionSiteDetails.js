@@ -69,7 +69,6 @@ const ConsumptionSiteDetails = () => {
         location: siteResponse?.data?.location || 'Location not specified',
         annualConsumption: Number(siteResponse?.data?.annualConsumption || 0),
         status: (siteResponse?.data?.status || 'inactive').toLowerCase(),
-        description: siteResponse?.data?.description || '',
         version: Number(siteResponse?.data?.version || 1),
         timetolive: Number(siteResponse?.data?.timetolive || 0),
         createdat: siteResponse?.data?.createdat || new Date().toISOString(),

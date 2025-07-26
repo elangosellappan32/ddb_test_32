@@ -5,11 +5,10 @@ import {
   Box,
   Card,
   CardActionArea,
-  CardActions,
+  Grid,
   Typography,
   IconButton,
   Tooltip,
-  Chip,
   LinearProgress
 } from '@mui/material';
 import {
@@ -24,21 +23,22 @@ import {
   Home as HomeIcon,
   LocalLaundryService as TextileIcon,
   Error as ErrorIcon,
-  Visibility as VisibilityIcon,
   FiberManualRecord as StatusDotIcon
 } from '@mui/icons-material';
-import { formatDistanceToNow } from 'date-fns';
+import { formatDistanceToNowStrict } from 'date-fns';
 
-// Helper functions
-const getStatusColor = (status) => {
-  const normalizedStatus = String(status || '').toLowerCase().trim();
-  switch (normalizedStatus) {
-    case 'active': return 'success';
-    case 'inactive': return 'error';
-    case 'pending':
+const getStatusDotColor = (status, theme) => {
+  const normalized = String(status || '').toLowerCase().trim();
+  switch (normalized) {
+    case 'active':
+      return theme.palette.success.main;
+    case 'maintenance':
     case 'in progress':
-      return 'warning';
-    default: return 'default';
+    case 'pending':
+      return theme.palette.warning.main;
+    case 'inactive':
+    default:
+      return theme.palette.error.main;
   }
 };
 
@@ -48,6 +48,13 @@ const getStatusLabel = (status) => {
     word.charAt(0).toUpperCase() + word.slice(1)
   ).join(' ');
 };
+
+const normalizeType = (type) =>
+  String(type || '')
+    .trim()
+    .split(' ')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(' ');
 
 const getTypeColor = (type) => {
   const normalizedType = String(type || '').toLowerCase().trim();
@@ -102,26 +109,25 @@ const formatDisplayDate = (dateString) => {
 
 const ConsumptionSiteCard = ({
   site,
-  onView,
   onEdit = null,
   onDelete = null,
   permissions = {},
   onRefresh = null,
-  lastUpdated = new Date()
+  lastUpdated = new Date(),
+  onClick
 }) => {
   const theme = useTheme();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   const [lastRefreshed, setLastRefreshed] = useState(lastUpdated);
 
-  // Safely parse and format the site data with defaults
   const safeData = useMemo(() => {
     if (!site) {
       return {
         consumptionSiteId: '',
         companyId: '',
         name: 'Unnamed Site',
-        type: 'industrial',
+        type: 'Industrial',
         status: 'inactive',
         location: 'Location not specified',
         annualConsumption: 0,
@@ -130,14 +136,11 @@ const ConsumptionSiteCard = ({
         timetolive: 0,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
-        displayDate: 'N/A'
+        displayDate: 'N/A',
       };
     }
-
-    // Handle annual consumption - ensure it's a valid number
     let annualConsumption = 0;
     const rawValue = site.annualConsumption ?? site.annualConsumption_L;
-    
     if (rawValue !== undefined && rawValue !== null) {
       if (typeof rawValue === 'number') {
         annualConsumption = Math.round(rawValue);
@@ -150,12 +153,11 @@ const ConsumptionSiteCard = ({
         annualConsumption = isNaN(num) ? 0 : Math.round(num);
       }
     }
-    
     return {
       consumptionSiteId: site.consumptionSiteId || '',
       companyId: site.companyId || '',
       name: (site.name || 'Unnamed Site').replace(/_/g, ' '),
-      type: (site.type || 'industrial').toLowerCase(),
+      type: normalizeType(site.type || 'Industrial'),
       status: site.status || 'inactive',
       location: site.location?.trim() || 'Location not specified',
       annualConsumption,
@@ -164,16 +166,11 @@ const ConsumptionSiteCard = ({
       timetolive: Number(site?.timetolive || 0),
       createdAt: site?.createdAt || site?.createdat || new Date().toISOString(),
       updatedAt: site?.updatedAt || site?.updatedat || new Date().toISOString(),
-      displayDate: formatDisplayDate(site?.updatedAt || site?.updatedat || site?.createdAt || site?.createdat)
+      displayDate: formatDisplayDate(site?.updatedAt || site?.updatedat || site?.createdAt || site?.createdat),
     };
   }, [site]);
 
-  const statusColor = getStatusColor(safeData.status);
   const typeColor = getTypeColor(safeData.type);
-  
-  const cardHoverColor = useMemo(() => {
-    return alpha(theme.palette[typeColor]?.main || theme.palette.primary.main, 0.05);
-  }, [typeColor, theme.palette]);
 
   const handleRefresh = async (e) => {
     if (e) e.stopPropagation();
@@ -190,8 +187,7 @@ const ConsumptionSiteCard = ({
       }
     }
   };
-  
-  // Format consumption value for display
+
   const formatConsumption = (value) => {
     if (value >= 1000000) {
       return `${(value / 1000000).toFixed(1)}M`;
@@ -199,11 +195,6 @@ const ConsumptionSiteCard = ({
       return `${(value / 1000).toFixed(1)}K`;
     }
     return value.toString();
-  };
-
-  const handleView = (e) => {
-    e?.stopPropagation();
-    if (onView) onView();
   };
 
   const handleEdit = (e) => {
@@ -216,6 +207,17 @@ const ConsumptionSiteCard = ({
     if (onDelete) onDelete();
   };
 
+  // Update time text: 'less than a minute ago' if under 1 min
+  const renderUpdateTime = () => {
+    const now = new Date();
+    const date = new Date(lastRefreshed);
+    const diffMs = now - date;
+    if (diffMs < 60 * 1000) {
+      return 'less than a minute ago';
+    }
+    return formatDistanceToNowStrict(date, { addSuffix: true });
+  };
+
   return (
     <Card
       sx={{
@@ -223,7 +225,7 @@ const ConsumptionSiteCard = ({
         borderRadius: 2,
         transition: 'all 0.3s ease',
         border: 1,
-        borderColor: 'divider',
+        borderColor: 'transparent',
         position: 'relative',
         overflow: 'visible',
         display: 'flex',
@@ -231,158 +233,164 @@ const ConsumptionSiteCard = ({
         '&:hover': {
           transform: 'translateY(-4px)',
           boxShadow: 3,
-          bgcolor: cardHoverColor
-        }
+          bgcolor: (theme) => alpha(theme.palette[typeColor].main, 0.08),
+        },
       }}
     >
-      <CardActionArea
-        onClick={handleView}
-        sx={{
-          p: 2,
-          flex: 1,
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'flex-start'
-        }}
-      >
-        {/* Header with Type Icon and Site Name */}
-        <Box sx={{ display: 'flex', width: '100%', mb: 2, gap: 2 }}>
-          <Box className="type-icon" sx={{ display: 'flex' }}>
-            {getTypeIcon(safeData.type, 'large', theme)}
-          </Box>
-          <Box sx={{ flex: 1, minWidth: 0 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <Typography variant="h6" noWrap sx={{ fontWeight: 600 }}>
-                {safeData.name}
-              </Typography>
-              <Chip
-                label={getStatusLabel(safeData.status)}
-                size="small"
-                color={statusColor}
-                variant="outlined"
-                sx={{
-                  height: 22,
-                  '& .MuiChip-label': { px: 1, fontSize: '0.7rem' },
-                }}
-              />
-            </Box>
-            <Typography
-              variant="caption"
-              color="text.secondary"
-              sx={{
-                display: 'flex',
-                alignItems: 'center',
-                mt: 0.5
-              }}
-            >
-              {isLoading ? (
-                <>
-                  <RefreshIcon
-                    sx={{
-                      fontSize: 12,
-                      mr: 0.5,
-                      animation: 'spin 2s linear infinite',
-                      '@keyframes spin': {
-                        '0%': { transform: 'rotate(0deg)' },
-                        '100%': { transform: 'rotate(360deg)' },
-                      },
-                    }}
-                  />
-                  Updating...
-                </>
-              ) : error ? (
-                <>
-                  <ErrorIcon sx={{ fontSize: 12, color: 'error.main', mr: 0.5 }} />
-                  Update failed
-                </>
-              ) : (
-                <>
-                  <StatusDotIcon
-                    sx={{
-                      fontSize: 10,
-                      mr: 0.5,
-                      color: `${statusColor}.main`
-                    }}
-                  />
-                  {getStatusLabel(safeData.status)} • Updated {formatDistanceToNow(new Date(lastRefreshed), { addSuffix: true })}
-                </>
-              )}
+      <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+        <CardActionArea
+          onClick={onClick}
+          sx={{
+            p: 2,
+            flex: 1,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'flex-start',
+          }}
+        >
+          {/* Site Name */}
+          <Typography variant="h6" noWrap sx={{ width: '100%', mb: 0.5 }}>
+            {safeData.name}
+          </Typography>
+
+          {/* Tiny Status Dot + Status Label + Update Time */}
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              mb: 2,
+              fontWeight: 500,
+              fontSize: '0.625rem', // 10px
+              gap: 0.5,
+              width: '100%',
+              lineHeight: 1,
+              minHeight: 16,
+            }}
+          >
+            <StatusDotIcon sx={{ fontSize: 10, color: getStatusDotColor(safeData.status, theme) }} />
+            <Typography sx={{ color: 'text.primary', fontSize: '0.625rem' }}>
+              {getStatusLabel(safeData.status)}
+            </Typography>
+            {/* Smallest separator dot */}
+            <Box sx={{ width: 3, height: 3, bgcolor: 'text.secondary', borderRadius: '50%', mx: 0.5 }} />
+            <Typography sx={{ color: 'text.secondary', fontSize: '0.625rem' }}>
+              {isLoading ? 'Updating...' : error ? 'Update failed' : renderUpdateTime()}
             </Typography>
           </Box>
-        </Box>
 
-        {/* Location Section */}
-        <Box sx={{ width: '100%', mb: 2 }}>
-          <Typography variant="body2" color="text.secondary" sx={{ display: 'flex', alignItems: 'center', mb: 0.5 }}>
-            <LocationOn sx={{ fontSize: 16, mr: 0.5, opacity: 0.7 }} />
-            Location
-          </Typography>
-          <Typography variant="body1" sx={{ fontWeight: 500 }}>
-            {safeData.location}
-          </Typography>
-        </Box>
+          {/* Details Grid */}
+          <Grid container spacing={2} sx={{ mt: 0, mb: 1 }}>
+            <Grid item xs={6}>
+              <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                {getTypeIcon(safeData.type, 'small', theme)}
+                <Typography variant="body2" color="text.secondary">
+                  Type
+                </Typography>
+              </Box>
+              <Typography sx={{ fontWeight: 500 }} color={`${typeColor}.main`} variant="body1">
+                {safeData.type}
+              </Typography>
+            </Grid>
+            <Grid item xs={6}>
+              <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                <Speed sx={{ mr: 1, fontSize: 20, color: 'primary.main' }} />
+                <Typography variant="body2" color="text.secondary">
+                  Consumption
+                </Typography>
+              </Box>
+              <Typography variant="body1" sx={{ fontWeight: 500 }}>
+                {formatConsumption(safeData.annualConsumption)} MWh
+              </Typography>
+            </Grid>
+            <Grid item xs={6}>
+              <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                <LocationOn sx={{ mr: 1, fontSize: 20, color: 'primary.main' }} />
+                <Typography variant="body2" color="text.secondary">
+                  Location
+                </Typography>
+              </Box>
+              <Typography variant="body1" sx={{ fontWeight: 500 }} noWrap>
+                {safeData.location}
+              </Typography>
+            </Grid>
+          </Grid>
+        </CardActionArea>
 
-        {/* Annual Consumption */}
-        <Box sx={{ width: '100%', mb: 2 }}>
-          <Typography variant="body2" color="text.secondary" sx={{ display: 'flex', alignItems: 'center', mb: 0.5 }}>
-            <Speed sx={{ fontSize: 16, mr: 0.5, opacity: 0.7 }} />
-            Annual Consumption
-          </Typography>
-          <Typography variant="h6" sx={{ fontWeight: 600, color: theme.palette[typeColor].main }}>
-            {formatConsumption(safeData.annualConsumption)} units
-          </Typography>
-        </Box>
-      </CardActionArea>
+        {/* Footer - only action icons on right */}
+        <Box
+          sx={{
+            mt: 'auto',
+            p: 2,
+            pt: 0,
+            width: '100%',
+            display: 'flex',
+            justifyContent: 'flex-end',
+            gap: 2,
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {onRefresh && (
+            <Tooltip title="Refresh Data">
+              <span>
+                <IconButton
+                  size="small"
+                  onClick={handleRefresh}
+                  disabled={isLoading}
+                  sx={{
+                    color: 'primary.main',
+                    bgcolor: (theme) => alpha(theme.palette.primary.main, 0.1),
+                    '&:hover': {
+                      bgcolor: (theme) => alpha(theme.palette.primary.main, 0.2),
+                    },
+                  }}
+                >
+                  <RefreshIcon fontSize="small" />
+                </IconButton>
+              </span>
+            </Tooltip>
+          )}
 
-      {/* Card Actions */}
-      <CardActions sx={{
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        p: 2,
-        pt: 0,
-        borderTop: 1,
-        borderColor: 'divider'
-      }}>
-        <Box sx={{ display: 'flex', gap: 0.5 }}>
-          <Tooltip title="View Details">
-            <IconButton size="small" onClick={handleView}>
-              <VisibilityIcon fontSize="small" />
-            </IconButton>
-          </Tooltip>
           {permissions?.update && onEdit && (
             <Tooltip title="Edit Site">
-              <IconButton size="small" onClick={handleEdit}>
-                <EditIcon fontSize="small" />
-              </IconButton>
+              <span>
+                <IconButton
+                  size="small"
+                  onClick={handleEdit}
+                  sx={{
+                    color: 'info.main',
+                    bgcolor: (theme) => alpha(theme.palette.info.main, 0.1),
+                    '&:hover': {
+                      bgcolor: (theme) => alpha(theme.palette.info.main, 0.2),
+                    },
+                  }}
+                >
+                  <EditIcon fontSize="small" />
+                </IconButton>
+              </span>
             </Tooltip>
           )}
+
           {permissions?.delete && onDelete && (
             <Tooltip title="Delete Site">
-              <IconButton size="small" onClick={handleDelete} color="error">
-                <DeleteIcon fontSize="small" />
-              </IconButton>
+              <span>
+                <IconButton
+                  size="small"
+                  onClick={handleDelete}
+                  sx={{
+                    color: 'error.main',
+                    bgcolor: (theme) => alpha(theme.palette.error.main, 0.1),
+                    '&:hover': {
+                      bgcolor: (theme) => alpha(theme.palette.error.main, 0.2),
+                    },
+                  }}
+                >
+                  <DeleteIcon fontSize="small" />
+                </IconButton>
+              </span>
             </Tooltip>
           )}
         </Box>
-        {onRefresh && (
-          <Tooltip title="Refresh Data">
-            <IconButton
-              size="small"
-              onClick={handleRefresh}
-              disabled={isLoading}
-              sx={{
-                transition: 'transform 0.3s',
-                '&:hover': {
-                  transform: 'rotate(180deg)'
-                }
-              }}
-            >
-              <RefreshIcon fontSize="small" />
-            </IconButton>
-          </Tooltip>
-        )}
-      </CardActions>
-
+      </Box>
       {isLoading && (
         <Box sx={{ width: '100%', position: 'absolute', bottom: 0, left: 0 }}>
           <LinearProgress color="primary" variant="indeterminate" />
@@ -394,21 +402,19 @@ const ConsumptionSiteCard = ({
 
 ConsumptionSiteCard.propTypes = {
   site: PropTypes.object.isRequired,
-  onView: PropTypes.func.isRequired,
+  onClick: PropTypes.func.isRequired,
   onEdit: PropTypes.func,
   onDelete: PropTypes.func,
   permissions: PropTypes.shape({
     update: PropTypes.bool,
-    delete: PropTypes.bool
+    delete: PropTypes.bool,
   }),
   onRefresh: PropTypes.func,
   lastUpdated: PropTypes.oneOfType([
     PropTypes.instanceOf(Date),
     PropTypes.string,
-    PropTypes.number
-  ])
+    PropTypes.number,
+  ]),
 };
-
-// Default props removed - using default parameters instead
 
 export default ConsumptionSiteCard;

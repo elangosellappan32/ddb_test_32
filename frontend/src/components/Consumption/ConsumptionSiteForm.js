@@ -32,7 +32,9 @@ const INITIAL_FORM_STATE = {
   type: 'Industrial',
   status: 'Active',
   annualConsumption: '',
-  timetolive: 0
+  annualConsumption_L: '',
+  timetolive: 0,
+  version: 1
 };
 
 const ConsumptionSiteForm = ({ 
@@ -46,19 +48,36 @@ const ConsumptionSiteForm = ({
   const { enqueueSnackbar } = useSnackbar();
   const [formData, setFormData] = useState(INITIAL_FORM_STATE);
   const [errors, setErrors] = useState({});
-  const [touched, setTouched] = useState({});
 
   // Initialize form data when initialData changes
+  const normalizeType = (type) => {
+    if (!type) return 'Industrial';
+    return String(type)
+      .trim()
+      .split(' ')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .join(' ');
+  };
+
   useEffect(() => {
     if (initialData) {
-      setFormData({
+      // Create a clean submission object with only the fields we need
+      const cleanData = {
         name: initialData.name || '',
-        type: initialData.type || 'Industrial',
+        type: normalizeType(initialData.type),
         location: initialData.location || '',
-        annualConsumption: initialData.annualConsumption || '',
         status: initialData.status || 'Active',
-        timetolive: initialData.timetolive || 0,
-      });
+        annualConsumption: initialData.annualConsumption || initialData.annualConsumption_L || '',
+        timetolive: Number(initialData.timetolive || 0),
+        // Important: Always include these fields for version control
+        version: initialData.version || 1,
+        createdat: initialData.createdat || new Date().toISOString(),
+        updatedat: initialData.updatedat || new Date().toISOString(),
+        // Include IDs if they exist
+        companyId: initialData.companyId,
+        consumptionSiteId: initialData.consumptionSiteId
+      };
+      setFormData(cleanData);
     } else {
       setFormData(INITIAL_FORM_STATE);
     }
@@ -101,7 +120,7 @@ const ConsumptionSiteForm = ({
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = (e) => {
+    const handleSubmit = async (e) => {
     e.preventDefault();
     
     if (!validateForm()) {
@@ -109,13 +128,63 @@ const ConsumptionSiteForm = ({
       return;
     }
     
-    const submissionData = {
-      ...formData,
-      annualConsumption: Number(formData.annualConsumption),
-      timetolive: formData.timetolive ? 1 : 0,
-    };
-    
-    onSubmit(submissionData);
+    try {
+      // Create a clean submission object with only the fields we need
+      const submissionData = {
+        // If we have IDs from initialData, include them
+        ...(formData.companyId && { companyId: formData.companyId }),
+        ...(formData.consumptionSiteId && { consumptionSiteId: formData.consumptionSiteId }),
+        
+        // Core fields with proper formatting
+        name: formData.name.trim(),
+        type: normalizeType(formData.type),
+        location: formData.location.trim(),
+        status: formData.status,
+        
+        // Numeric fields
+        annualConsumption: Number(formData.annualConsumption),
+        annualConsumption_L: Number(formData.annualConsumption),
+        timetolive: formData.timetolive ? 1 : 0,
+        
+        // Version control fields
+        version: Number(formData.version || 1),
+        createdat: formData.createdat || new Date().toISOString(),
+        updatedat: new Date().toISOString()
+      };
+
+      await onSubmit(submissionData);
+    } catch (error) {
+      // Handle version conflict (409 Conflict)
+      if (error.response?.status === 409 || error.message?.includes('Version')) {
+        enqueueSnackbar(
+          'This record has been modified by another user. The form will refresh with the latest data.',
+          { 
+            variant: 'warning',
+            autoHideDuration: 5000,
+            action: (key) => (
+              <Button 
+                color="inherit" 
+                size="small" 
+                onClick={() => {
+                  if (onCancel) {
+                    // This will trigger a refresh in the parent component
+                    onCancel();
+                  }
+                }}
+              >
+                Refresh Now
+              </Button>
+            )
+          }
+        );
+      } else {
+        // Handle other errors
+        enqueueSnackbar(
+          'Error saving site: ' + (error.response?.data?.message || error.message || 'Unknown error'),
+          { variant: 'error' }
+        );
+      }
+    }
   };
 
   return (

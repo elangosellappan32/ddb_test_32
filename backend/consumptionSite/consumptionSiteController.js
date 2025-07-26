@@ -153,8 +153,6 @@ const getConsumptionSite = async (req, res) => {
                 type: item.type.toLowerCase(),
                 status: item.status?.toLowerCase() || 'active',
                 version: Number(item.version || 1),
-                drawalVoltage_KV: Number(item.drawalVoltage_KV || 0),
-                contractDemand_KVA: Number(item.contractDemand_KVA || 0),
                 annualConsumption_L: Number(item.annualConsumption_L || 0),
                 createdat: item.createdat || new Date().toISOString(),
                 updatedat: item.updatedat || new Date().toISOString()
@@ -313,7 +311,7 @@ const createConsumptionSite = async (req, res) => {
 const updateConsumptionSite = async (req, res) => {
     try {
         const { companyId, consumptionSiteId } = req.params;
-        const updates = req.body;
+        const updates = { ...req.body };  // Create a copy to avoid modifying the original
 
         // 1. Validate update data
         if (!updates || Object.keys(updates).length === 0) {
@@ -324,78 +322,114 @@ const updateConsumptionSite = async (req, res) => {
             });
         }
 
-        // 2. If annualConsumption is being updated, validate it
-        if (updates.annualConsumption !== undefined) {
-            const validation = validateAnnualConsumption(updates.annualConsumption);
-            if (!validation.isValid) {
+        // 2. Handle version number
+        // The DAL will handle version increments, so we just ensure it's a valid number if provided
+        if (updates.version !== undefined && updates.version !== null) {
+            updates.version = Number(updates.version);
+            if (isNaN(updates.version)) {
                 return res.status(400).json({
                     success: false,
-                    message: validation.error,
-                    code: validation.code || 'INVALID_ANNUAL_CONSUMPTION'
+                    message: 'Version must be a valid number if provided',
+                    code: 'INVALID_VERSION'
                 });
             }
-            updates.annualConsumption = validation.value;
         }
 
-        // 3. Log the update attempt
+        // 3. Validate decimal fields
+        const decimalFields = {
+            annualConsumption: 'Annual Consumption',
+            annualConsumption_L: 'Annual Consumption'
+        };
+
+        for (const [field, label] of Object.entries(decimalFields)) {
+            if (updates[field] !== undefined) {
+                const validation = validateDecimal(updates[field], label);
+                if (!validation.isValid) {
+                    return res.status(400).json({
+                        success: false,
+                        message: validation.error,
+                        code: validation.code
+                    });
+                }
+                updates[field] = validation.value;
+            }
+        }
+
+
+        // 4. Validate type if provided
+        if (updates.type !== undefined) {
+            const validTypes = ['industrial', 'textile', 'other', 'commercial'];
+            const type = String(updates.type).toLowerCase();
+            if (!validTypes.includes(type)) {
+                return res.status(400).json({
+                    success: false,
+                    message: `Type must be one of: ${validTypes.join(', ')}`,
+                    code: 'INVALID_TYPE'
+                });
+            }
+            updates.type = type;
+        }
+
+        // 5. Validate status if provided
+        if (updates.status !== undefined) {
+            const validStatuses = ['active', 'inactive'];
+            const status = String(updates.status).toLowerCase();
+            if (!validStatuses.includes(status)) {
+                return res.status(400).json({
+                    success: false,
+                    message: `Status must be one of: ${validStatuses.join(', ')}`,
+                    code: 'INVALID_STATUS'
+                });
+            }
+            updates.status = status;
+        }
+
+        // 6. Log the update attempt
         logger.info('Updating consumption site:', { 
             companyId, 
             consumptionSiteId, 
             updates: Object.keys(updates) 
         });
 
-        // 4. Perform the update
+        // 7. Perform the update
         const updatedSite = await consumptionSiteDAL.updateConsumptionSite(
             companyId,
             consumptionSiteId,
             updates
         );
 
-        // 5. Return success response
+        // 8. Return success response
         res.json({
             success: true,
-            data: updatedSite,
-            message: 'Consumption site updated successfully',
-            code: 'SITE_UPDATED'
+            data: updatedSite
         });
     } catch (error) {
         logger.error('[ConsumptionSiteController] Update Error:', error);
         
-        // 6. Handle specific error cases
+        // Handle specific error cases with consistent error format
         if (error.statusCode === 404) {
             return res.status(404).json({
                 success: false,
                 message: 'Consumption site not found',
-                code: 'SITE_NOT_FOUND',
-                details: `No site found with companyId: ${req.params.companyId}, siteId: ${req.params.consumptionSiteId}`
+                code: 'NOT_FOUND'
             });
         }
         
-        if (error.statusCode === 409) {
+        if (error.code === 'VERSION_CONFLICT' || error.message.includes('Version mismatch')) {
             return res.status(409).json({
                 success: false,
-                message: 'Version conflict. The site was modified by another user.',
-                code: 'VERSION_CONFLICT',
-                details: 'Please refresh and try again'
-            });
-        }
-        
-        // 7. Handle validation errors
-        if (error.name === 'ValidationError') {
-            return res.status(400).json({
-                success: false,
                 message: error.message,
-                code: error.code || 'VALIDATION_ERROR',
-                details: error.details
+                code: 'VERSION_CONFLICT',
+                currentVersion: error.currentVersion,
+                receivedVersion: error.receivedVersion,
+                suggestion: 'Please refresh and get the latest version before updating'
             });
         }
         
-        // 8. Handle other errors
-        res.status(error.statusCode || 500).json({
+        res.status(500).json({
             success: false,
             message: error.message || 'An unexpected error occurred while updating the consumption site',
-            code: error.code || 'INTERNAL_SERVER_ERROR',
-            ...(process.env.NODE_ENV === 'development' && { stack: error.stack })
+            code: error.code || 'UPDATE_ERROR'
         });
     }
 };

@@ -20,22 +20,36 @@ const validateConsumptionSiteUpdate = (req, res, next) => {
 
     if (updates.type !== undefined) {
         const validTypes = ['industrial', 'textile', 'other'];
-        if (!validTypes.includes(updates.type.toLowerCase())) {
-            errors.push(`Type must be one of: ${validTypes.join(', ')}`);
+        const type = String(updates.type).toLowerCase();
+        if (!validTypes.includes(type)) {
+            errors.push({
+                field: 'type',
+                message: `Type must be one of: ${validTypes.join(', ')}`,
+                value: updates.type
+            });
         }
     }
 
     if (updates.annualConsumption !== undefined) {
         const consumption = Number(updates.annualConsumption);
         if (isNaN(consumption) || consumption < 0) {
-            errors.push('Annual consumption must be a non-negative number');
+            errors.push({
+                field: 'annualConsumption',
+                message: 'Annual consumption must be a non-negative number',
+                value: updates.annualConsumption
+            });
         }
     }
 
     if (updates.status !== undefined) {
         const validStatuses = ['active', 'inactive'];
-        if (!validStatuses.includes(updates.status.toLowerCase())) {
-            errors.push(`Status must be one of: ${validStatuses.join(', ')}`);
+        const status = String(updates.status).toLowerCase();
+        if (!validStatuses.includes(status)) {
+            errors.push({
+                field: 'status',
+                message: `Status must be one of: ${validStatuses.join(', ')}`,
+                value: updates.status
+            });
         }
     }
 
@@ -43,7 +57,8 @@ const validateConsumptionSiteUpdate = (req, res, next) => {
         return res.status(400).json({
             success: false,
             message: 'Validation failed',
-            errors
+            errors,
+            data: updates // Include the data that failed validation for debugging
         });
     }
 
