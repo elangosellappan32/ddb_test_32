@@ -37,8 +37,7 @@ const getFinancialYearMonths = (fy) => {
   for (let m = 1; m <= 3; m++) months.push(`${m < 10 ? '0' : ''}${m}${endYear}`);
   return months;
 };
-
-// HELPER: Month label for x-axis and tooltips
+// Month label for x-axis and tooltips (April = start of FY)
 const formatMonthDisplay = (monthKey) => {
   if (!monthKey || monthKey.length !== 6) return monthKey;
   const monthNames = [
@@ -50,7 +49,6 @@ const formatMonthDisplay = (monthKey) => {
   const isFYStart = m === 3; // April
   return `${monthNames[m]}${isFYStart ? ` FY${y}` : ''}`;
 };
-
 const getSortedFinancialYearMonths = (fy) => {
   const months = getFinancialYearMonths(fy);
   return months.sort((a, b) => {
@@ -65,22 +63,20 @@ const getSortedFinancialYearMonths = (fy) => {
     return adjustedMonthA - adjustedMonthB;
   });
 };
-
-// HELPER: Given a pk and site maps, get readable label
+// Given a pk and site maps, get readable label
 function getPairLabelFromPk(pk, prodMap, consMap) {
   const parts = pk.split('_');
-  // Accepts either 'pair_prodId_consId' (from allocation) or 'prodId_consId'
   const prodId = parts.length === 3 ? parts[1] : parts[0];
   const consId = parts.length === 3 ? parts[2] : parts[1];
   const prodName = prodMap[prodId] || prodId;
   const consName = consMap[consId] || consId;
   return `${prodName} → ${consName}`;
 }
-
 const palette = [
   '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEEAD',
   '#D4A5A5', '#9B786F', '#E3EAA7', '#86AFC2', '#FFD3B6'
 ];
+
 
 const GraphicalAllocationReport = () => {
   const currentYear = new Date().getFullYear();
@@ -90,18 +86,17 @@ const GraphicalAllocationReport = () => {
   const [loading, setLoading] = useState(true);
   const [prodSiteMap, setProdSiteMap] = useState({});
   const [consSiteMap, setConsSiteMap] = useState({});
-
-  const [pairDataMap, setPairDataMap] = useState({});   // { [pairKey]: [ {sk, ..., c1, ...} ... ] }
+  const [pairDataMap, setPairDataMap] = useState({});
   const [availablePairs, setAvailablePairs] = useState([]);
   const [selectedPairs, setSelectedPairs] = useState([]);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState('');
   const [graphType, setGraphType] = useState('line');
   const { user } = useAuth();
 
   // Fetch and process allocation data
   useEffect(() => {
     setLoading(true);
-    setError(null);
+    setError('');
 
     (async () => {
       try {
@@ -139,14 +134,21 @@ const GraphicalAllocationReport = () => {
 
         // Filter by accessible sites
         allocs = allocs.filter(item => {
-          const [, prodId, consId] = item.pk.split('_');
+          // Handles both legacy and modern PK
+          let prodId, consId;
+          const pkParts = item.pk.split('_');
+          if (pkParts.length === 3) {
+            [, prodId, consId] = pkParts;
+          } else {
+            [prodId, consId] = pkParts;
+          }
           return (
             (!accessibleProdIds.length || accessibleProdIds.includes(prodId)) &&
             (!accessibleConsIds.length || accessibleConsIds.includes(consId))
           );
         });
 
-        // Create pair option list, mapping keys to human readable names
+        // Create pair option list
         const pairMap = new Map();
         allocs.forEach(item => {
           const pairKey = item.pk;
@@ -179,21 +181,20 @@ const GraphicalAllocationReport = () => {
           }));
         });
 
-        // Provide pairs for Autocomplete/selection, pre-select first 5 if nothing is already selected
+        // Provide pairs for selection, pre-select first 5 if nothing already selected
         setPairDataMap(Object.fromEntries(dataMap));
         const availablePairsList = Array.from(pairMap.values());
         setAvailablePairs(availablePairsList);
 
-        if (selectedPairs.length === 0) {
+        if (!selectedPairs.length) {
           setSelectedPairs(availablePairsList.slice(0, 5));
         } else {
           // Remove any now-invalid selected pairs
           const availableKeys = new Set(availablePairsList.map(item => item.key));
           setSelectedPairs(selectedPairs.filter(pair => availableKeys.has(pair.key)));
         }
-
         if (availablePairsList.length === 0) {
-          setError('No allocation data available for the selected period');
+          setError('No sites selected. Please select sites to view data.');
         }
       } catch (err) {
         setError('Failed to load allocation data. Please try again.');
@@ -203,7 +204,7 @@ const GraphicalAllocationReport = () => {
     // eslint-disable-next-line
   }, [user, financialYear]); // Only reload on FY/user change
 
-  // Prepare FY options for dropdown
+  // FY options for dropdown
   const fyOptions = [];
   for (let y = 2020; y <= currentYear; y++) {
     fyOptions.push({
@@ -212,7 +213,7 @@ const GraphicalAllocationReport = () => {
     });
   }
 
-  // Prepare Recharts data array with sitenames as series
+  // Prepare chart data array with sitenames as series
   const sortedMonths = getSortedFinancialYearMonths(financialYear);
   const chartData = sortedMonths.map(month => {
     const monthData = { month: formatMonthDisplay(month), monthKey: month };
@@ -233,136 +234,148 @@ const GraphicalAllocationReport = () => {
     return monthData;
   });
 
-  // Handle Loading & Error
-  if (loading)
-    return (
-      <Box sx={{ p: 3, textAlign: 'center' }}>
-        <Typography>Loading allocation report...</Typography>
-      </Box>
-    );
-  if (error)
-    return (
-      <Box sx={{ p: 3, textAlign: 'center' }}>
-        <Typography color="error">{error}</Typography>
-      </Box>
-    );
+  // Series keys for rendering lines/bars
+  const seriesKeys = [];
+  selectedPairs.forEach((pair, i) => {
+    ['c1','c2','c3','c4','c5'].forEach((c,j) => {
+      seriesKeys.push({
+        key: `${pair.label}_${c}`,
+        pairLabel: pair.label,
+        c,
+        color: palette[(i*5 + j) % palette.length]
+      });
+    });
+  });
 
+  // Render always shows controls and chart area (like GraphicalLapseReport)
   return (
-    <Paper elevation={3} sx={{ p: 3, m: 2 }}>
+    <Paper elevation={3} sx={{ p: 3, mt: 2 }}>
       <Typography variant="h5" gutterBottom>
-        Allocation Analysis (C1–C5 Values)
+        Allocation Analysis
       </Typography>
-
-      <Box sx={{ mb: 3, display: 'flex', flexWrap: 'wrap', gap: 2, alignItems: 'center' }}>
-        <FormControl sx={{ minWidth: 220 }} size="small">
+      <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 2, my: 2 }}>
+        <FormControl size="small" sx={{ minWidth: 220 }}>
           <InputLabel>Financial Year</InputLabel>
           <Select
             value={financialYear}
-            label="Financial Year"
             onChange={e => setFinancialYear(e.target.value)}
+            label="Financial Year"
           >
             {fyOptions.map(fy => (
               <MenuItem key={fy.value} value={fy.value}>{fy.label}</MenuItem>
             ))}
           </Select>
         </FormControl>
-
-        <Box sx={{ display: 'flex', alignItems: 'center', ml: 2 }}>
-          <Typography sx={{ mr: 1 }}>Bar</Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', pl: 1 }}>
+          <Typography sx={{ fontSize: 14, pr: 1 }}>Bar</Typography>
           <Switch
             checked={graphType === 'line'}
-            onChange={e => setGraphType(e.target.checked ? 'line' : 'bar')}
+            onChange={() => setGraphType(prev => prev === 'line' ? 'bar' : 'line')}
+            color="primary"
+            sx={{ mx: 1 }}
           />
-          <Typography sx={{ ml: 1 }}>Line</Typography>
+          <Typography sx={{ fontSize: 14, pl: 1 }}>Line</Typography>
         </Box>
-
-        <Autocomplete
-          multiple
-          id="pair-selector"
-          options={availablePairs}
-          value={selectedPairs}
-          onChange={(_, newValue) => setSelectedPairs(newValue)}
-          getOptionLabel={option => option.label}
-          isOptionEqualToValue={(option, value) => option.key === value.key}
-          renderOption={(props, option) => (
-            <li {...props} key={option.key}>
-              {option.label}
-            </li>
-          )}
-          renderInput={params => (
-            <TextField
-              {...params}
-              variant="outlined"
-              label="Select Allocation Pairs"
-              size="small"
-              sx={{ minWidth: 300 }}
-            />
-          )}
-          sx={{ flexGrow: 1 }}
-          ListboxProps={{
-            style: { maxHeight: '200px' }
-          }}
-        />
+        <Box sx={{ flex: 1, minWidth: 300 }}>
+          <Autocomplete
+            multiple
+            options={availablePairs}
+            getOptionLabel={option => option.label}
+            value={availablePairs.filter(pair => selectedPairs.some(sel => sel.key === pair.key))}
+            onChange={(_, vals) => setSelectedPairs(vals)}
+            renderInput={params => (
+              <TextField
+                {...params}
+                variant="outlined"
+                label="Select Sites"
+                size="small"
+              />
+            )}
+            sx={{ width: '100%' }}
+            disableCloseOnSelect
+            isOptionEqualToValue={(option, value) => option.key === value.key}
+          />
+        </Box>
       </Box>
 
-      <Box sx={{ height: 500 }}>
-        <ResponsiveContainer width="100%" height="100%">
-          {graphType === 'line' ? (
-            <LineChart data={chartData} margin={{ top: 10, right: 30, left: 20, bottom: 50 }}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis
-                dataKey="month"
-                angle={-45}
-                textAnchor="end"
-                height={70}
-                tick={{ fontSize: 12 }}
-              />
-              <YAxis />
-              <Tooltip />
-              <Legend />
-              {selectedPairs.flatMap((pair, pairIdx) =>
-                ['c1', 'c2', 'c3', 'c4', 'c5'].map((cKey, cIdx) => (
+      <Box sx={{ width: '100%', height: 500 }}>
+        {loading ? (
+          <Typography>Loading allocation data...</Typography>
+        ) : error && !availablePairs.length ? (
+          <Typography >{error}</Typography>
+        ) : selectedPairs.length === 0 ? (
+          <Typography>No sites selected. Please select sites to view data.</Typography>
+        ) : (
+          <ResponsiveContainer width="100%" height="100%">
+            {graphType === 'line' ? (
+              <LineChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 50 }}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="month" angle={-45} tick={{ fontSize: 12 }} height={70} />
+                <YAxis />
+                <Tooltip
+                  formatter={(value, name) => {
+                    const i = name.lastIndexOf('_');
+                    const pair = name.substring(0, i);
+                    const cat = name.substring(i + 1);
+                    return [value, `${pair} ${cat.toUpperCase()}`];
+                  }}
+                  labelFormatter={label => `Month: ${label}`}
+                />
+                <Legend
+                  formatter={name => {
+                    const i = name.lastIndexOf('_');
+                    const pair = name.substring(0, i);
+                    const cat = name.substring(i + 1);
+                    return `${pair} ${cat.toUpperCase()}`;
+                  }}
+                />
+                {seriesKeys.map(({ key, color }) => (
                   <Line
-                    key={`${pair.key}_${cKey}`}
+                    key={key}
                     type="monotone"
-                    dataKey={`${pair.label}_${cKey}`}
-                    name={`${pair.label} ${cKey.toUpperCase()}`}
-                    stroke={palette[(pairIdx * 5 + cIdx) % palette.length]}
+                    dataKey={key}
+                    stroke={color}
                     strokeWidth={2}
                     dot={{ r: 2 }}
                     activeDot={{ r: 4 }}
                   />
-                ))
-              )}
-            </LineChart>
-          ) : (
-            <BarChart data={chartData} margin={{ top: 10, right: 30, left: 20, bottom: 50 }}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis
-                dataKey="month"
-                angle={-45}
-                textAnchor="end"
-                height={70}
-                tick={{ fontSize: 12 }}
-              />
-              <YAxis />
-              <Tooltip />
-              <Legend />
-              {selectedPairs.flatMap((pair, pairIdx) =>
-                ['c1', 'c2', 'c3', 'c4', 'c5'].map((cKey, cIdx) => (
+                ))}
+              </LineChart>
+            ) : (
+              <BarChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 50 }}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="month" angle={-45} tick={{ fontSize: 12 }} height={70} />
+                <YAxis />
+                <Tooltip
+                  formatter={(value, name) => {
+                    const i = name.lastIndexOf('_');
+                    const pair = name.substring(0, i);
+                    const cat = name.substring(i + 1);
+                    return [value, `${pair} ${cat.toUpperCase()}`];
+                  }}
+                  labelFormatter={label => `Month: ${label}`}
+                />
+                <Legend
+                  formatter={name => {
+                    const i = name.lastIndexOf('_');
+                    const pair = name.substring(0, i);
+                    const cat = name.substring(i + 1);
+                    return `${pair} ${cat.toUpperCase()}`;
+                  }}
+                />
+                {seriesKeys.map(({ key, color }) => (
                   <Bar
-                    key={`${pair.key}_${cKey}`}
-                    dataKey={`${pair.label}_${cKey}`}
-                    name={`${pair.label} ${cKey.toUpperCase()}`}
-                    fill={palette[(pairIdx * 5 + cIdx) % palette.length]}
+                    key={key}
+                    dataKey={key}
+                    fill={color}
                     radius={[4, 4, 0, 0]}
-                    stack={pair.key}
+                    stack={key.split('_')[0]}
                   />
-                ))
-              )}
-            </BarChart>
-          )}
-        </ResponsiveContainer>
+                ))}
+              </BarChart>
+            )}
+          </ResponsiveContainer>
+        )}
       </Box>
     </Paper>
   );
