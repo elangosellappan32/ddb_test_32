@@ -374,7 +374,7 @@ const ConsumptionUnitsTable = ({
               startIcon={<EditIcon />}
               disabled={isLoading}
             >
-              Edit Allocation
+              Edit
             </Button>
           </Box>
         </Box>

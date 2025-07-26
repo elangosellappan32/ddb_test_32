@@ -85,8 +85,14 @@ const Production = () => {
         return sitesData;
       }
       
-      // If no accessible sites, return empty array
-      if (!accessibleSites.length) {
+      // If no accessible sites data, check permissions
+      if (!accessibleSites || accessibleSites.length === 0) {
+        // For viewer and user roles with READ permission, show all sites
+        if (user.role && ['VIEWER', 'USER'].includes(user.role.toUpperCase()) && 
+            hasPermission(user, 'production', 'READ')) {
+          console.log(`${user.role} with READ permission, returning all sites`);
+          return sitesData;
+        }
         console.log('No accessible sites found for user');
         return [];
       }
@@ -94,9 +100,11 @@ const Production = () => {
       console.log('Filtering sites. Accessible site IDs:', accessibleSites);
       
       const filtered = sitesData.filter(site => {
-        const hasAccess = hasSiteAccess(site.productionSiteId, 'production');
+        // Format the site ID to match the stored format (companyId_siteId)
+        const siteId = `${site.companyId}_${site.productionSiteId}`;
+        const hasAccess = hasSiteAccess(siteId, 'production');
         if (!hasAccess) {
-          console.log(`User does not have access to site ${site.productionSiteId}`);
+          console.log(`User does not have access to site ${siteId}`);
         }
         return hasAccess;
       });

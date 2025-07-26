@@ -319,11 +319,58 @@ const deleteProductionSite = async (req, res) => {
 
         // Delete site and handle cleanup
         let result;
+        let siteAccessRemoved = false;
+
         try {
+            // 1. Remove site access first to prevent new operations during deletion
+            try {
+                await removeSiteAccess(companyId, productionSiteId, 'production');
+                logger.info(`[SUCCESS] Site access removed for production site: ${companyId}_${productionSiteId}`);
+                siteAccessRemoved = true;
+            } catch (accessError) {
+                logger.error('[ProductionSiteController] Error removing site access:', {
+                    error: accessError,
+                    companyId,
+                    productionSiteId
+                });
+                // Continue with deletion even if access removal fails
+            }
+
+            // 2. Delete the site and its related data
             result = await productionSiteDAL.deleteItem(companyId, productionSiteId);
-        } catch (error) {
-            logger.error('[ProductionSiteController] Error during site deletion:', error);
             
+            if (!result) {
+                throw new Error('Deletion failed - no result returned from DAL');
+            }
+
+            // 3. Log the successful deletion
+            logger.info('[SUCCESS] Site deletion completed:', {
+                siteId: productionSiteId,
+                cleanupStats: result.relatedDataCleanup || {},
+                siteAccessRemoved
+            });
+
+            // 4. Return success response
+            return res.json({
+                success: true,
+                message: 'Production site deleted successfully',
+                data: {
+                    ...result,
+                    siteAccessRemoved
+                }
+            });
+
+        } catch (error) {
+            // Log the complete error for debugging
+            logger.error('[ProductionSiteController] Error during site deletion:', {
+                error,
+                stack: error.stack,
+                companyId,
+                productionSiteId,
+                siteAccessRemoved
+            });
+
+            // Handle specific error cases
             if (error.code === 'ConditionalCheckFailedException') {
                 return res.status(409).json({
                     success: false,
@@ -332,42 +379,23 @@ const deleteProductionSite = async (req, res) => {
                 });
             }
 
+            if (error.code === 'ResourceNotFoundException' || error.message.includes('not found')) {
+                return res.status(404).json({
+                    success: false,
+                    message: 'Production site not found',
+                    code: 'NOT_FOUND'
+                });
+            }
+
+            // Generic error response
             return res.status(500).json({
                 success: false,
                 message: 'Failed to delete production site',
                 code: 'DELETE_ERROR',
-                error: error.message
+                error: error.message,
+                details: process.env.NODE_ENV === 'development' ? error.stack : undefined
             });
         }
-
-        if (!result) {
-            return res.status(500).json({
-                success: false,
-                message: 'Deletion failed - no result returned',
-                code: 'DELETE_ERROR'
-            });
-        }
-
-        // Remove site access for all users
-        try {
-            await removeSiteAccess(companyId, productionSiteId, 'production');
-            logger.info(`[SUCCESS] Site access removed for production site: ${companyId}_${productionSiteId}`);
-        } catch (accessError) {
-            logger.error('Error removing site access:', accessError);
-            // Continue with the response even if access removal fails
-        }
-
-        // Log the successful deletion
-        logger.info('[SUCCESS] Site deletion completed:', {
-            siteId: productionSiteId,
-            cleanupStats: result.relatedDataCleanup || {}
-        });
-
-        return res.json({
-            success: true,
-            message: 'Production site deleted successfully',
-            data: result
-        });
     } catch (error) {
         logger.error('[ProductionSiteController] Unexpected error during deletion:', error);
         return res.status(500).json({

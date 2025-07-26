@@ -19,6 +19,26 @@ export const hasAccessToSite = (user, siteId, siteType) => {
         return true;
     }
 
+    // For viewer and user roles, check if they have READ permission
+    if (user.role && ['VIEWER', 'USER'].includes(user.role.toUpperCase())) {
+        // Get permissions based on site type
+        const siteTypeKey = siteType === 'production' ? 'production' : 'consumption';
+        const userPermissions = user.permissions?.[siteTypeKey];
+        
+        // Check for READ permission in the specific site type permissions
+        if (Array.isArray(userPermissions) && userPermissions.includes('READ')) {
+            // For consumption sites, also check accessibleSites
+            if (siteType === 'consumption') {
+                const consumptionSites = user.accessibleSites?.consumptionSites?.L;
+                if (Array.isArray(consumptionSites) && consumptionSites.length > 0) {
+                    return true;
+                }
+            } else {
+                return true;
+            }
+        }
+    }
+
     // Check if user has accessible sites configuration
     if (!user.accessibleSites) {
         console.warn('No accessibleSites found in user object');
@@ -72,23 +92,54 @@ export const hasAccessToSite = (user, siteId, siteType) => {
 export const getAccessibleSiteIds = (user, siteType) => {
     if (!user || !siteType) return [];
 
+    // Check if user has required permissions first
+    if (user.role && ['VIEWER', 'USER'].includes(user.role.toUpperCase())) {
+        const siteTypeKey = siteType === 'production' ? 'production' : 'consumption';
+        const userPermissions = user.permissions?.[siteTypeKey];
+        
+        if (!Array.isArray(userPermissions) || !userPermissions.includes('READ')) {
+            console.log(`[SiteAccess] User ${user.id || user.email} lacks READ permission for ${siteType} sites`);
+            return [];
+        }
+    }
+
     // Admin users: fetch all site IDs from accessibleSites
     if (user.role === 'admin' || user.roleName === 'ADMIN' || user.isAdmin) {
         if (!user.accessibleSites) return [];
         const sitesList = siteType === 'production'
             ? user.accessibleSites.productionSites?.L
             : user.accessibleSites.consumptionSites?.L;
-        if (!Array.isArray(sitesList)) return [];
+        if (!Array.isArray(sitesList)) {
+            console.log(`[SiteAccess] Invalid sites list structure for admin user:`, sitesList);
+            return [];
+        }
         return sitesList.map(site => site.S).filter(Boolean);
     }
 
     // Non-admin users
-    if (!user.accessibleSites) return [];
+    if (!user.accessibleSites) {
+        console.log(`[SiteAccess] No accessibleSites found for user:`, user.id || user.email);
+        return [];
+    }
+    
     const sitesList = siteType === 'production'
         ? user.accessibleSites.productionSites?.L
         : user.accessibleSites.consumptionSites?.L;
-    if (!Array.isArray(sitesList)) return [];
-    return sitesList.map(site => site.S).filter(Boolean);
+        
+    if (!Array.isArray(sitesList)) {
+        console.log(`[SiteAccess] Invalid sites list structure:`, sitesList);
+        return [];
+    }
+
+    // Handle different site formats
+    return sitesList.map(site => {
+        if (site.S) return site.S;
+        if (site.M?.S?.S) return site.M.S.S;
+        if (typeof site === 'string') return site;
+        if (site.siteId) return site.siteId;
+        if (site[`${siteType}SiteId`]) return site[`${siteType}SiteId`];
+        return null;
+    }).filter(Boolean);
 };
 
 /**

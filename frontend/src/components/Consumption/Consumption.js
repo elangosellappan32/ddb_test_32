@@ -8,17 +8,28 @@ import {
   Alert,
   Button,
   CircularProgress,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  IconButton,
   Paper
 } from '@mui/material';
-import { Add as AddIcon, Refresh as RefreshIcon } from '@mui/icons-material';
+import { 
+  Add as AddIcon, 
+  Refresh as RefreshIcon,
+  ViewList as ViewListIcon,
+  ViewModule as ViewModuleIcon,
+  Delete as DeleteIcon,
+  Edit as EditIcon,
+} from '@mui/icons-material';
 import consumptionSiteApi from '../../services/consumptionSiteapi';
 import ConsumptionSiteCard from './ConsumptionSiteCard';
 import ConsumptionSiteDialog from './ConsumptionSiteDialog';
 import { useAuth } from '../../context/AuthContext';
 import { hasPermission } from '../../utils/permissions';
-
-const MAX_RETRIES = 3;
-const RETRY_DELAY = 1000;
 
 const Consumption = () => {
   const navigate = useNavigate();
@@ -27,27 +38,16 @@ const Consumption = () => {
     user, 
     isAdmin,
     getAccessibleSites,
-    hasSiteAccess,
-    refreshAccessibleSites
+    hasSiteAccess
   } = useAuth() || {};
   
-  const [sites, setSites] = useState([]);
   const [filteredSites, setFilteredSites] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedSite, setSelectedSite] = useState(null);
   const [isDialogLoading, setIsDialogLoading] = useState(false);
-  
-  // Get accessible sites for the current user
-  const { consumptionSites: accessibleSites } = useMemo(() => {
-    return getAccessibleSites ? getAccessibleSites() : { consumptionSites: [] };
-  }, [getAccessibleSites]);
-  
-  // Check if user has access to any consumption sites
-  const hasAccessToSites = useMemo(() => {
-    return isAdmin?.() || (accessibleSites && accessibleSites.length > 0);
-  }, [isAdmin, accessibleSites]);
+  const [viewMode, setViewMode] = useState('card'); // 'card' or 'table'
   
   // Permissions
   const permissions = useMemo(() => ({
@@ -57,22 +57,73 @@ const Consumption = () => {
     delete: hasPermission(user, 'consumption', 'DELETE')
   }), [user]);
 
+  // Get accessible sites for the current user
+  const { consumptionSites: accessibleSites } = useMemo(() => {
+    return getAccessibleSites ? getAccessibleSites() : { consumptionSites: [] };
+  }, [getAccessibleSites]);
+  
+  // Check if user has access to any consumption sites
+  const hasAccessToSites = useMemo(() => {
+    // Log current access state for debugging
+    console.log('Checking site access:', {
+      isAdmin: isAdmin?.(),
+      userRole: user?.role,
+      hasReadPermission: permissions?.read,
+      accessibleSitesCount: accessibleSites?.length || 0,
+      permissions: user?.permissions
+    });
+
+    // Admin always has full access
+    if (isAdmin?.()) {
+      console.log('User has admin access');
+      return true;
+    }
+
+    // Check for READ permission
+    if (permissions?.read) {
+      console.log('User has READ permission');
+      return true;
+    }
+
+    // Check for explicitly assigned sites
+    const hasAssignedSites = accessibleSites && accessibleSites.length > 0;
+    if (hasAssignedSites) {
+      console.log('User has assigned sites:', accessibleSites);
+      return true;
+    }
+    
+    console.log('Access check result:', {
+      hasAssignedSites,
+      permissions: permissions?.read,
+      isAdmin: isAdmin?.(),
+      accessibleSitesCount: accessibleSites?.length,
+      user: {
+        role: user?.role,
+        hasPermissions: Boolean(user?.permissions)
+      }
+    });
+
+    return false;
+  }, [isAdmin, accessibleSites, permissions?.read, user]);
+
   // Fetch sites
   const fetchSites = useCallback(async () => {
     try {
       setLoading(true);
       const response = await consumptionSiteApi.fetchAll();
       const data = response.data || [];
-      setSites(data);
-      
       // Filter sites based on user access
-      if (isAdmin?.()) {
+      if (isAdmin || permissions?.read) {
+        // Admin or users with READ permission can see all sites
+        console.log('User has full access to sites');
         setFilteredSites(data);
-      } else {
-        const accessibleSiteIds = new Set(accessibleSites?.map(s => s.id) || []);
+      } else if (accessibleSites?.length > 0) {
+        // Filter sites that the user has access to
         const filtered = data.filter(site => 
-          accessibleSiteIds.has(`${site.companyId}_${site.consumptionSiteId}`)
+          hasSiteAccess?.(site.companyId, site.consumptionSiteId)
         );
+        
+        console.log('Filtered accessible sites');
         setFilteredSites(filtered);
       }
       
@@ -83,7 +134,7 @@ const Consumption = () => {
     } finally {
       setLoading(false);
     }
-  }, [accessibleSites, enqueueSnackbar, isAdmin]);
+  }, [enqueueSnackbar, getAccessibleSites, isAdmin, permissions?.read, hasSiteAccess]);
 
   // Initial data fetch
   useEffect(() => {
@@ -153,6 +204,18 @@ const Consumption = () => {
       setIsDialogLoading(false);
     }
   }, [enqueueSnackbar, selectedSite, user, fetchSites]);
+
+  // Handle site refresh
+  const handleRefreshSite = useCallback(async (site) => {
+    try {
+      await consumptionSiteApi.fetchOne(site.companyId, site.consumptionSiteId);
+      await fetchSites();
+      enqueueSnackbar('Site data refreshed', { variant: 'success' });
+    } catch (error) {
+      console.error('Error refreshing site:', error);
+      enqueueSnackbar('Failed to refresh site data', { variant: 'error' });
+    }
+  }, [enqueueSnackbar, fetchSites]);
 
   // Handle edit click
   const handleEditClick = useCallback((site) => {
@@ -235,24 +298,40 @@ const Consumption = () => {
   // Render no sites message
   if (!loading && filteredSites.length === 0) {
     return (
-      <Box p={3}>
-        <Paper elevation={0} sx={{ p: 4, textAlign: 'center' }}>
-          <Typography variant="h6" gutterBottom>
-            No consumption sites found
-          </Typography>
-          {permissions.create && (
-            <Button
-              variant="contained"
-              color="primary"
-              startIcon={<AddIcon />}
-              onClick={handleAddClick}
-              sx={{ mt: 2 }}
-            >
-              Add Consumption Site
-            </Button>
-          )}
-        </Paper>
-      </Box>
+      <Alert 
+        severity="info" 
+        sx={{ 
+          mt: 3,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          '& .MuiAlert-message': {
+            display: 'flex',
+            alignItems: 'center',
+            gap: 2
+          }
+        }}
+      >
+        <Typography>
+          {user?.isAdmin ? 'No consumption sites found.' : 'No accessible consumption sites found.'}
+        </Typography>
+        {permissions?.create && hasAccessToSites && (
+          <Button 
+            variant="text" 
+            color="primary" 
+            onClick={handleAddClick}
+            size="small"
+            sx={{ 
+              ml: 2,
+              fontWeight: 500,
+              textTransform: 'none'
+            }}
+            startIcon={<AddIcon />}
+          >
+            Add New Site
+          </Button>
+        )}
+      </Alert>
     );
   }
 
@@ -269,26 +348,47 @@ const Consumption = () => {
       />
 
       {/* Header */}
-      <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
-        <Typography variant="h4" component="h1">
+      <Box sx={{ 
+        display: 'flex', 
+        justifyContent: 'space-between', 
+        mb: 3,
+        borderBottom: '2px solid #1976d2',
+        pb: 2
+      }}>
+        <Typography variant="h5" sx={{ fontWeight: 'bold', color: '#1976d2' }}>
           Consumption Sites
         </Typography>
-        <Box>
-          <Button
-            variant="contained"
-            color="primary"
-            startIcon={<AddIcon />}
-            onClick={handleAddClick}
-            disabled={!permissions.create}
-            sx={{ mr: 2 }}
-          >
-            Add Site
-          </Button>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          <IconButton onClick={() => setViewMode(prev => prev === 'card' ? 'table' : 'card')}>
+            {viewMode === 'card' ? <ViewListIcon /> : <ViewModuleIcon />}
+          </IconButton>
+          {permissions?.create && hasAccessToSites && (
+            <Button
+              variant="contained"
+              color="primary"
+              startIcon={<AddIcon />}
+              onClick={handleAddClick}
+              size="medium"
+              sx={{ 
+                fontWeight: 500,
+                textTransform: 'none',
+                borderRadius: 1.5
+              }}
+            >
+              Add Site
+            </Button>
+          )}
           <Button
             variant="outlined"
             startIcon={<RefreshIcon />}
             onClick={fetchSites}
             disabled={loading}
+            size="medium"
+            sx={{ 
+              fontWeight: 500,
+              textTransform: 'none',
+              borderRadius: 1.5
+            }}
           >
             Refresh
           </Button>
@@ -297,25 +397,146 @@ const Consumption = () => {
 
       {/* Error message */}
       {error && (
-        <Alert severity="error" sx={{ mb: 3 }}>
+        <Alert 
+          severity="error" 
+          sx={{ 
+            mb: 3,
+            borderRadius: 1,
+            boxShadow: 1,
+            '& .MuiAlert-message': {
+              display: 'flex',
+              alignItems: 'center'
+            },
+            '& .MuiAlert-icon': {
+              fontSize: 24
+            }
+          }}
+          action={
+            <Button
+              color="inherit"
+              size="small"
+              onClick={() => setError(null)}
+            >
+              Dismiss
+            </Button>
+          }
+        >
           {error}
         </Alert>
       )}
 
-      {/* Sites grid */}
-      <Grid container spacing={3}>
-        {filteredSites.map((site) => (
-          <Grid item key={`${site.companyId}-${site.consumptionSiteId}`} xs={12} sm={6} md={4}>
-            <ConsumptionSiteCard
-              site={site}
-              onView={() => handleViewClick(site)}
-              onEdit={() => handleEditClick(site)}
-              onDelete={() => handleDeleteClick(site)}
-              permissions={permissions}
-            />
-          </Grid>
-        ))}
-      </Grid>
+      {/* Table View */}
+      {viewMode === 'table' ? (
+        <TableContainer component={Paper} sx={{ mt: 3, maxHeight: '70vh', overflow: 'auto' }}>
+          <Table stickyHeader>
+            <TableHead>
+              <TableRow>
+                <TableCell>Name</TableCell>
+                <TableCell>Location</TableCell>
+                <TableCell>Type</TableCell>
+                <TableCell align="right">Annual Consumption (MWh)</TableCell>
+                <TableCell>Status</TableCell>
+                <TableCell align="right">Actions</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {filteredSites.map((site) => {
+                const statusColor = site.status?.toLowerCase() === 'active' ? 'success' : 
+                                  site.status?.toLowerCase() === 'inactive' ? 'error' : 'warning';
+                
+                return (
+                  <TableRow 
+                    key={`${site.companyId}-${site.consumptionSiteId}`}
+                    hover
+                    sx={{ '&:hover': { cursor: 'pointer' } }}
+                    onClick={() => handleViewClick(site)}
+                  >
+                    <TableCell>{site.name}</TableCell>
+                    <TableCell>{site.location}</TableCell>
+                    <TableCell sx={{ textTransform: 'capitalize' }}>{site.type}</TableCell>
+                    <TableCell align="right">{Number(site.annualConsumption || 0).toLocaleString()}</TableCell>
+                    <TableCell>
+                      <Box
+                        component="span"
+                        sx={{
+                          px: 2,
+                          py: 0.5,
+                          borderRadius: 1,
+                          backgroundColor: `${statusColor}.light`,
+                          color: `${statusColor}.dark`,
+                          fontWeight: 'medium',
+                          display: 'inline-block',
+                          minWidth: 80,
+                          textAlign: 'center',
+                          textTransform: 'capitalize'
+                        }}
+                      >
+                        {site.status}
+                      </Box>
+                    </TableCell>
+                    <TableCell align="right">
+                      <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end' }}>
+                        {permissions?.update && (
+                          <IconButton 
+                            size="small" 
+                            color="primary"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleEditClick(site);
+                            }}
+                          >
+                            <EditIcon fontSize="small" />
+                          </IconButton>
+                        )}
+                        {permissions?.delete && (
+                          <IconButton 
+                            size="small" 
+                            color="error"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteClick(site);
+                            }}
+                          >
+                            <DeleteIcon fontSize="small" />
+                          </IconButton>
+                        )}
+                      </Box>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      ) : (
+        /* Card View */
+        <Grid container spacing={3} sx={{ mt: 1 }}>
+          {filteredSites.map((site) => (
+            <Grid 
+              item 
+              key={`${site.companyId}-${site.consumptionSiteId}`} 
+              xs={12} 
+              sm={6} 
+              md={4}
+              lg={3}
+              sx={{
+                display: 'flex',
+                flexDirection: 'column'
+              }}
+            >
+              <ConsumptionSiteCard
+                site={site}
+                onEdit={permissions?.update ? () => handleEditClick(site) : null}
+                onDelete={permissions?.delete ? () => handleDeleteClick(site) : null}
+                permissions={permissions}
+                onRefresh={() => handleRefreshSite(site)}
+                lastUpdated={site.updatedAt || site.createdAt}
+                onClick={() => handleViewClick(site)}
+              />
+            </Grid>
+          ))}
+        </Grid>
+      )}
     </Box>
   );
 };

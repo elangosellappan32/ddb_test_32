@@ -3,7 +3,25 @@ import { API_CONFIG } from '../config/api.config';
 
 const handleApiError = (error) => {
   console.error('[ConsumptionSiteAPI] Error:', error);
-  throw new Error(error.response?.data?.message || error.message || 'An error occurred');
+  
+  if (error.message === 'The site was modified by another user. Please refresh and try again.') {
+    // This is our custom version conflict message, pass it through
+    throw error;
+  }
+  
+  // If it's a version conflict from the server
+  if (error.response?.status === 409) {
+    // Clear any cached data to force a fresh fetch
+    if (siteCache) {
+      siteCache.data = [];
+      siteCache.lastUpdated = null;
+    }
+    throw new Error('The site was modified by another user. Please refresh and try again.');
+  }
+  
+  // Handle other errors
+  const errorMessage = error.response?.data?.message || error.message || 'An error occurred';
+  throw new Error(errorMessage);
 };
 
 const formatSiteData = (data) => {
@@ -44,9 +62,6 @@ const formatSiteData = (data) => {
       version: Number(data.version || 1),
       createdat: data.createdat || new Date().toISOString(),
       updatedat: data.updatedat || new Date().toISOString(),
-      drawalVoltage_KV: Number(data.drawalVoltage_KV || 0),
-      contractDemand_KVA: Number(data.contractDemand_KVA || 0),
-      description: data.description ? String(data.description).trim() : ''
     };    
     
     // Validate required fields after formatting
@@ -255,12 +270,8 @@ class ConsumptionSiteApi {
         name: String(data.name || '').trim(),
         type: String(data.type || 'Industry').trim(),
         location: String(data.location || '').trim(),
-        drawalVoltage_KV: Number(data.drawalVoltage_KV || 0),
-        contractDemand_KVA: Number(data.contractDemand_KVA || 0),
         annualConsumption_L: Number(data.annualConsumption_L || 0),
-        htscNo: data.htscNo ? String(data.htscNo).trim() : '',
-        status: String(data.status || 'Active').trim(),
-        description: data.description ? String(data.description).trim() : ''
+        status: String(data.status || 'Active').trim()
       };
 
       console.log('[ConsumptionSiteAPI] Creating consumption site with:', siteData);
@@ -291,15 +302,25 @@ class ConsumptionSiteApi {
     }
   }
 
-  async update(companyId, consumptionSiteId, data) {
+  async update(companyId, consumptionSiteId, data, retryCount = 3, originalVersion = null) {
     try {
       if (!companyId || !consumptionSiteId) {
         throw new Error('Company ID and Site ID are required');
       }
 
       // Get current data to preserve any fields not being updated
-      const current = await this.fetchOne(companyId, consumptionSiteId);
+      const current = await this.fetchOne(companyId, consumptionSiteId, true); // Force refresh
       const currentData = current.data;
+
+      // Check if this is a retry and the version has changed from our original attempt
+      if (originalVersion !== null && originalVersion !== currentData.version) {
+        throw new Error('The site was modified by another user. Please refresh and try again.');
+      }
+
+      // Store original version on first attempt
+      if (originalVersion === null) {
+        originalVersion = currentData.version;
+      }
 
       // Handle annual consumption from different possible field names
       let annualConsumption = 0;
@@ -325,15 +346,11 @@ class ConsumptionSiteApi {
         companyId: String(companyId),
         consumptionSiteId: String(consumptionSiteId),
         name: String(data.name || currentData.name || '').trim(),
-        type: String(data.type || currentData.type || 'Industry').trim(),
+        type: String(data.type || currentData.type || 'industrial').trim().toLowerCase(),
         location: String(data.location || currentData.location || '').trim(),
-        drawalVoltage_KV: Number(data.drawalVoltage_KV || currentData.drawalVoltage_KV || 0),
-        contractDemand_KVA: Number(data.contractDemand_KVA || currentData.contractDemand_KVA || 0),
         annualConsumption: annualConsumption,
-        annualConsumption_L: annualConsumption, // Keep both for backward compatibility
-        htscNo: data.htscNo ? String(data.htscNo).trim() : (currentData.htscNo || ''),
-        status: String(data.status || currentData.status || 'Active').trim(),
-        description: data.description ? String(data.description).trim() : (currentData.description || ''),
+        annualConsumption_L: annualConsumption,
+        status: String(data.status || currentData.status || 'active').trim().toLowerCase(),
         version: (currentData.version || 0) + 1,
         updatedat: new Date().toISOString()
       };
@@ -350,9 +367,37 @@ class ConsumptionSiteApi {
       // Invalidate the cache
       this.invalidateCache();
       
-      return response.data;
+      // Cache the successful response
+      const successData = response.data;
+      
+      // Update the cache with the new version
+      const cacheIndex = siteCache.data.findIndex(
+        site => site.companyId === String(companyId) && site.consumptionSiteId === String(consumptionSiteId)
+      );
+      if (cacheIndex !== -1) {
+        siteCache.data[cacheIndex] = successData;
+      }
+      
+      return successData;
     } catch (error) {
       console.error(`[ConsumptionSiteAPI] Error updating site ${companyId}/${consumptionSiteId}:`, error);
+      
+      // Handle version conflict with retry
+      if (error.response?.status === 409 && retryCount > 0) {
+        console.log(`[ConsumptionSiteAPI] Version conflict detected, retrying... (${retryCount} attempts left)`);
+        
+        // Clear the cache to ensure we get fresh data
+        this.invalidateCache();
+        
+        // Wait a short time before retrying to allow other operations to complete
+        await new Promise(resolve => setTimeout(resolve, Math.random() * 1000 + 500));
+        
+        // Retry the update with one less retry attempt, passing the original version
+        return this.update(companyId, consumptionSiteId, data, retryCount - 1, originalVersion);
+      }
+      
+      // If we're out of retries or it's not a version conflict
+      this.invalidateCache(); // Clear cache on error
       throw handleApiError(error);
     }
   }

@@ -23,6 +23,14 @@ const validateSiteAccess = (siteType) => {
                 return next();
             }
 
+            // Viewer and User roles with READ permission can access all sites for GET requests
+            if (['VIEWER', 'USER'].includes(req.user.role?.toUpperCase()) && 
+                req.method === 'GET' && 
+                req.user.permissions?.[siteType]?.includes('READ')) {
+                logger.info(`${req.user.role} with READ permission accessing ${siteType} site`);
+                return next();
+            }
+
             // Check if this is a GET request for site details
             if (req.method === 'GET') {
                 logger.info('[validateSiteAccess] Allowing GET request for site details');

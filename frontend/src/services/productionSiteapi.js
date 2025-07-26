@@ -313,7 +313,6 @@ class ProductionSiteApi {
         htscNo: data.htscNo ? String(data.htscNo).trim() : '',
         injectionSubstation: data.injectionSubstation ? String(data.injectionSubstation).trim() : '',
         feederName: data.feederName ? String(data.feederName).trim() : '',
-        description: data.description ? String(data.description).trim() : '',
         createdat: new Date().toISOString(),
         updatedat: new Date().toISOString(),
         version: 1

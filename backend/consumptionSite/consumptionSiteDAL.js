@@ -62,10 +62,10 @@ const createConsumptionSite = async (item) => {
             timetolive: 0
         };
 
+        // Create the new item
         await docClient.send(new PutCommand({
             TableName,
-            Item: newItem,
-            ConditionExpression: 'attribute_not_exists(companyId) AND attribute_not_exists(consumptionSiteId)'
+            Item: newItem
         }));
 
         // Add the siteKey to the response
@@ -118,6 +118,7 @@ const getConsumptionSite = async (companyId, consumptionSiteId) => {
 
 const updateConsumptionSite = async (companyId, consumptionSiteId, updates) => {
     try {
+        // First get the existing item
         const existing = await getConsumptionSite(companyId, consumptionSiteId);
         if (!existing) {
             const error = new Error('Consumption site not found');
@@ -125,33 +126,78 @@ const updateConsumptionSite = async (companyId, consumptionSiteId, updates) => {
             throw error;
         }
 
-        if (existing.version !== updates.version) {
-            const error = new Error('Version mismatch');
-            error.statusCode = 409;
-            throw error;
+        const currentVersion = Number(existing.version) || 1;
+        const newVersion = currentVersion + 1;
+
+        // Process updates with proper type conversion
+        let processedUpdates = {};
+        for (const [key, value] of Object.entries(updates)) {
+            if (value !== undefined) {
+                switch (key) {
+                    case 'annualConsumption':
+                    case 'annualConsumption_L':
+                    case 'contractDemand_KVA':
+                    case 'drawalVoltage_KV':
+                        processedUpdates[key] = Number(value) || 0;
+                        break;
+                    case 'type':
+                    case 'status':
+                        processedUpdates[key] = String(value).toLowerCase();
+                        break;
+                    case 'name':
+                    case 'location':
+                    case 'description':
+                    case 'htscNo':
+                        processedUpdates[key] = String(value).trim();
+                        break;
+                    default:
+                        processedUpdates[key] = value;
+                }
+            }
         }
 
+        // Construct the updated item
         const updatedItem = {
             ...existing,
-            name: updates.name || existing.name,
-            location: updates.location || existing.location,
-            type: updates.type ? updates.type.toLowerCase() : existing.type,
-            annualConsumption: updates.annualConsumption ? 
-                new Decimal(updates.annualConsumption).toString() : 
-                existing.annualConsumption,
-            status: updates.status || existing.status,
-            version: existing.version + 1,
+            ...processedUpdates,
+            version: newVersion,
             updatedat: new Date().toISOString()
         };
 
-        await docClient.send(new PutCommand({
-            TableName,
-            Item: updatedItem,
-            ConditionExpression: 'version = :expectedVersion',
-            ExpressionAttributeValues: {
-                ':expectedVersion': updates.version
+        // Keep annualConsumption and annualConsumption_L in sync
+        if (updatedItem.annualConsumption !== undefined) {
+            updatedItem.annualConsumption_L = updatedItem.annualConsumption;
+        } else if (updatedItem.annualConsumption_L !== undefined) {
+            updatedItem.annualConsumption = updatedItem.annualConsumption_L;
+        }
+
+        // Ensure all numeric fields are numbers
+        const numericFields = ['annualConsumption', 'annualConsumption_L', 'contractDemand_KVA', 'drawalVoltage_KV'];
+        for (const field of numericFields) {
+            if (updatedItem[field] !== undefined) {
+                updatedItem[field] = Number(updatedItem[field]) || 0;
             }
-        }));
+        }
+
+        try {
+            await docClient.send(new PutCommand({
+                TableName,
+                Item: updatedItem,
+                ConditionExpression: 'version = :expectedVersion',
+                ExpressionAttributeValues: {
+                    ':expectedVersion': currentVersion
+                }
+            }));
+        } catch (error) {
+            if (error.name === 'ConditionalCheckFailedException') {
+                const versionError = new Error('Version conflict. The record has been modified by another user.');
+                versionError.code = 'VERSION_CONFLICT';
+                versionError.currentVersion = currentVersion;
+                versionError.status = 409;
+                throw versionError;
+            }
+            throw error;
+        }
 
         return updatedItem;
     } catch (error) {
