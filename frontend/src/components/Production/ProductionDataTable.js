@@ -9,9 +9,14 @@ import {
   TableRow,
   IconButton,
   Typography,
-  Paper
+  Paper,
+  Tooltip
 } from '@mui/material';
-import { Edit as EditIcon, Delete as DeleteIcon } from '@mui/icons-material';
+import { 
+  Edit as EditIcon, 
+  Delete as DeleteIcon, 
+  ContentCopy as CopyIcon 
+} from '@mui/icons-material';
 import { formatNumber } from '../../utils/numberFormat';
 import { format } from 'date-fns';
 
@@ -20,6 +25,7 @@ const ProductionDataTable = ({
   type, 
   onEdit, 
   onDelete, 
+  onCopy,
   permissions,
   isProductionPage = false 
 }) => {
@@ -132,7 +138,7 @@ const ProductionDataTable = ({
 
   const renderUnitValues = (row) => (
     <>
-      {['c1', 'c2', 'c3', 'c4', 'c5'].map((field) => (
+            {['c1', 'c2', 'c3', 'c4', 'c5'].map((field) => (
         <TableCell 
           key={`${row.uniqueId}_${field}`} 
           align="right" 
@@ -146,32 +152,53 @@ const ProductionDataTable = ({
           {formatNumber(row[field] || 0)}
         </TableCell>
       ))}
+      <TableCell 
+        align="right"
+        sx={{
+          fontWeight: 'bold',
+          color: 'primary.main'
+        }}
+      >
+        {formatNumber(
+          ['c1', 'c2', 'c3', 'c4', 'c5'].reduce((sum, field) => sum + (row[field] || 0), 0)
+        )}
+      </TableCell>
     </>
-  );
-
-  const renderChargeValues = (row) => (
+  );  const renderChargeValues = (row) => (
     <>
-      {[...Array(10)].map((_, i) => {
-        const field = `c${(i + 1).toString().padStart(3, '0')}`;
-        return (
-          <TableCell 
-            key={`${row.uniqueId}_${field}`} 
-            align="right" 
-            sx={{ 
-              color: 'warning.dark',
-              '&:hover': {
-                color: 'warning.main'
-              }
-            }}
-          >
-            {formatNumber(row[field] || 0)}
-          </TableCell>
-        );
-      })}
-    </>
-  );
-
-  // Add function to check if date exists for site
+            {[...Array(10)].map((_, i) => {
+              const field = `c${(i + 1).toString().padStart(3, '0')}`;
+              return (
+                <TableCell 
+                  key={`${row.uniqueId}_${field}`} 
+                  align="right" 
+                  sx={{ 
+                    color: 'warning.dark',
+                    '&:hover': {
+                      color: 'warning.main'
+                    }
+                  }}
+                >
+                  {formatNumber(row[field] || 0)}
+                </TableCell>
+              );
+            })}
+            <TableCell 
+              align="right"
+              sx={{
+                fontWeight: 'bold',
+                color: 'primary.main'
+              }}
+            >
+              {formatNumber(
+                [...Array(10)].reduce((sum, _, i) => {
+                  const field = `c${(i + 1).toString().padStart(3, '0')}`;
+                  return sum + (row[field] || 0);
+                }, 0)
+              )}
+            </TableCell>
+          </>
+        );  // Add function to check if date exists for site
   const checkDateExistsForSite = (dateToCheck, siteId) => {
     if (!data?.data || !Array.isArray(data.data)) return false;
     
@@ -244,14 +271,43 @@ const ProductionDataTable = ({
     return (
       <TableCell align="right">
         {permissions?.update && onEdit && (
-          <IconButton onClick={() => onEdit(row)}>
-            <EditIcon />
-          </IconButton>
+          <Tooltip title="Edit">
+            <IconButton 
+              onClick={() => onEdit(row)}
+              sx={{ 
+                color: 'primary.main',
+                '&:hover': { color: 'primary.dark' }
+              }}
+            >
+              <EditIcon />
+            </IconButton>
+          </Tooltip>
         )}
         {permissions?.delete && onDelete && (
-          <IconButton onClick={() => onDelete(row)}>
-            <DeleteIcon />
-          </IconButton>
+          <Tooltip title="Delete">
+            <IconButton 
+              onClick={() => onDelete(row)}
+              sx={{ 
+                color: 'error.main',
+                '&:hover': { color: 'error.dark' }
+              }}
+            >
+              <DeleteIcon />
+            </IconButton>
+          </Tooltip>
+        )}
+        {permissions?.update && onCopy && (
+          <Tooltip title="Copy to Next Month">
+            <IconButton 
+              onClick={() => onCopy(row)}
+              sx={{ 
+                color: 'success.main',
+                '&:hover': { color: 'success.dark' }
+              }}
+            >
+              <CopyIcon />
+            </IconButton>
+          </Tooltip>
         )}
       </TableCell>
     );
@@ -287,6 +343,15 @@ const ProductionDataTable = ({
                     {header}
                   </TableCell>
                 ))}
+                <TableCell 
+                  align="right"
+                  sx={{ 
+                    color: 'primary.main',
+                    fontWeight: 'bold'
+                  }}
+                >
+                  Total
+                </TableCell>
               </>
             ) : (
               <>
@@ -302,6 +367,15 @@ const ProductionDataTable = ({
                     {`C${(i + 1).toString().padStart(3, '0')}`}
                   </TableCell>
                 ))}
+                <TableCell 
+                  align="right"
+                  sx={{ 
+                    color: 'primary.main',
+                    fontWeight: 'bold'
+                  }}
+                >
+                  Total
+                </TableCell>
               </>
             )}
             <TableCell align="right">Actions</TableCell>

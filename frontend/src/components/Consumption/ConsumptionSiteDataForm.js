@@ -19,7 +19,8 @@ import Tooltip from '@mui/material/Tooltip';
 
 const ConsumptionSiteDataForm = ({ 
   type = 'unit', 
-  initialData = null, 
+  initialData = null,
+  copiedData = null, 
   onSubmit, 
   onCancel,
   onEdit,
@@ -84,11 +85,40 @@ const ConsumptionSiteDataForm = ({
     }).reduce((acc, curr) => ({ ...acc, ...curr }), {});
   }
 
-  const [formData, setFormData] = useState(() => ({
-    date: initialData?.date ? new Date(initialData.date) : new Date(),
-    version: initialData?.version || 1,
-    ...generateInitialValues(type, initialData)
-  }));
+  // Helper function to get next month's date
+  const getNextMonthDate = (currentDate) => {
+    const nextMonth = new Date(currentDate);
+    nextMonth.setMonth(nextMonth.getMonth() + 1);
+    return nextMonth;
+  };
+
+  const [formData, setFormData] = useState(() => {
+    let initialDate;
+    let version = 1;
+    let values;
+
+    if (copiedData) {
+      // If we're copying data, use next month's date
+      initialDate = new Date(copiedData.date);
+      initialDate = getNextMonthDate(initialDate);
+      values = generateInitialValues(type, copiedData);
+    } else if (initialData) {
+      // If we're editing existing data
+      initialDate = new Date(initialData.date);
+      version = initialData.version || 1;
+      values = generateInitialValues(type, initialData);
+    } else {
+      // New data
+      initialDate = new Date();
+      values = generateInitialValues(type, null);
+    }
+
+    return {
+      date: initialDate,
+      version: version,
+      ...values,
+    };
+  });
 
   const [errors, setErrors] = useState({});
 
@@ -258,13 +288,14 @@ const ConsumptionSiteDataForm = ({
             views={['year', 'month']}
             value={formData.date}
             onChange={handleDateChange}
+            disabled={!canEdit || initialData}
             renderInput={(params) => (
               <TextField
                 {...params}
                 fullWidth
                 required
                 helperText={formatDateForDisplay(formData.date)}
-                disabled={!canEdit}
+                disabled={!canEdit || initialData}
               />
             )}
           />
