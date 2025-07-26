@@ -17,6 +17,7 @@ import { hasPermission } from '../../utils/permissions';
 const ProductionSiteDataForm = ({ 
   type = 'unit', 
   initialData = null, 
+  copiedData = null, // New prop for copied data
   onSubmit, 
   onCancel, 
   loading = false,
@@ -73,6 +74,13 @@ const ProductionSiteDataForm = ({
     setErrors((prev) => ({ ...prev, date: undefined }));
   };
 
+  // Helper function to get next month's date
+  const getNextMonthDate = (currentDate) => {
+    const nextMonth = new Date(currentDate);
+    nextMonth.setMonth(nextMonth.getMonth() + 1);
+    return nextMonth;
+  };
+
   const formatDateForDisplay = (date) => {
     if (!date || isNaN(date.getTime())) {
       return '';
@@ -100,11 +108,30 @@ const ProductionSiteDataForm = ({
 
   // Initialize form data with proper date handling
   const [formData, setFormData] = useState(() => {
-    const initialDate = initialData?.sk ? parseSKToDate(initialData.sk) : new Date();
+    let initialDate;
+    let version = 1;
+    let values;
+
+    if (copiedData) {
+      // If we're copying data, use next month's date
+      initialDate = parseSKToDate(copiedData.sk);
+      initialDate = getNextMonthDate(initialDate);
+      values = generateInitialValues(type, copiedData);
+    } else if (initialData) {
+      // If we're editing existing data
+      initialDate = parseSKToDate(initialData.sk);
+      version = initialData.version || 1;
+      values = generateInitialValues(type, initialData);
+    } else {
+      // New data
+      initialDate = new Date();
+      values = generateInitialValues(type, null);
+    }
+
     return {
       date: initialDate,
-      version: initialData?.version || 1,
-      ...generateInitialValues(type, initialData),
+      version: version,
+      ...values,
     };
   });
 

@@ -38,7 +38,8 @@ const ProductionSiteDetails = () => {
     open: false,
     type: null,
     mode: 'create',
-    data: null
+    data: null,
+    isCopy: false
   });
 
   // Define fetchData first
@@ -118,6 +119,21 @@ const ProductionSiteDetails = () => {
     setDialog({ open: true, type, mode: 'edit', data });
   }, [permissions, enqueueSnackbar]);
 
+  const handleCopyClick = useCallback((type, data) => {
+    const canCreate = type === 'unit' ? 
+      permissions.units.create : 
+      permissions.charges.create;
+
+    if (!canCreate) {
+      enqueueSnackbar('You do not have permission to create new records', { 
+        variant: 'error' 
+      });
+      return;
+    }
+
+    setDialog({ open: true, type, mode: 'create', data, isCopy: true });
+  }, [permissions, enqueueSnackbar]);
+
   const handleDeleteClick = useCallback(async (type, data) => {
     const canDelete = type === 'unit' ? 
       permissions.units.delete : 
@@ -191,6 +207,7 @@ const ProductionSiteDetails = () => {
             type={type}
             onEdit={typePermissions.update ? (row) => handleEditClick(type, row) : undefined}
             onDelete={typePermissions.delete ? (row) => handleDeleteClick(type, row) : undefined}
+            onCopy={typePermissions.create ? (row) => handleCopyClick(type, row) : undefined}
             permissions={typePermissions}
             isProductionPage={false}
             userRole={user?.role}
@@ -389,7 +406,8 @@ const ProductionSiteDetails = () => {
             <DialogContent>
               <ProductionSiteDataForm
                 type={dialog.type}
-                initialData={dialog.data}
+                initialData={dialog.mode === 'edit' ? dialog.data : null}
+                copiedData={dialog.mode === 'create' && dialog.data ? dialog.data : null}
                 onSubmit={handleSubmit}
                 onCancel={() => setDialog({ open: false, type: null, mode: 'create', data: null })}
                 companyId={companyId}

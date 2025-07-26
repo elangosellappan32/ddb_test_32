@@ -39,7 +39,8 @@ const ConsumptionSiteDetails = () => {
   const [dialog, setDialog] = useState({
     open: false,
     mode: 'create',
-    data: null
+    data: null,
+    isCopy: false
   });
 
   const fetchData = useCallback(async () => {
@@ -157,6 +158,17 @@ const ConsumptionSiteDetails = () => {
 
     setDialog({ open: true, mode: 'edit', data });
   }, [permissions.update, enqueueSnackbar]);
+
+  const handleCopyClick = useCallback((data) => {
+    if (!permissions.create) {
+      enqueueSnackbar('You do not have permission to create new records', { 
+        variant: 'error' 
+      });
+      return;
+    }
+
+    setDialog({ open: true, mode: 'create', data, isCopy: true });
+  }, [permissions.create, enqueueSnackbar]);
 
   const handleDeleteClick = useCallback(async (data) => {
     if (!permissions.delete) {
@@ -296,6 +308,7 @@ const ConsumptionSiteDetails = () => {
                 data={siteData.units}
                 onEdit={handleEditClick}
                 onDelete={handleDeleteClick}
+                onCopy={handleCopyClick}
                 permissions={permissions}
               />
             )}
@@ -313,9 +326,10 @@ const ConsumptionSiteDetails = () => {
             <DialogContent>
               <ConsumptionSiteDataForm
                 type="unit"
-                initialData={dialog.data}
+                initialData={dialog.mode === 'edit' ? dialog.data : null}
+                copiedData={dialog.mode === 'create' && dialog.data ? dialog.data : null}
                 onSubmit={handleSubmit}
-                onCancel={() => setDialog({ open: false, mode: 'create', data: null })}
+                onCancel={() => setDialog({ open: false, mode: 'create', data: null, isCopy: false })}
                 companyId={companyId}
                 consumptionSiteId={consumptionSiteId}
               />

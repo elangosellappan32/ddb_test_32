@@ -9,9 +9,14 @@ import {
   TableRow,
   IconButton,
   Typography,
-  Paper
+  Paper,
+  Tooltip
 } from '@mui/material';
-import { Edit as EditIcon, Delete as DeleteIcon } from '@mui/icons-material';
+import { 
+  Edit as EditIcon, 
+  Delete as DeleteIcon, 
+  ContentCopy as CopyIcon 
+} from '@mui/icons-material';
 import { formatNumber } from '../../utils/numberFormat';
 import { format } from 'date-fns';
 
@@ -20,6 +25,7 @@ const ProductionDataTable = ({
   type, 
   onEdit, 
   onDelete, 
+  onCopy,
   permissions,
   isProductionPage = false 
 }) => {
@@ -265,14 +271,43 @@ const ProductionDataTable = ({
     return (
       <TableCell align="right">
         {permissions?.update && onEdit && (
-          <IconButton onClick={() => onEdit(row)}>
-            <EditIcon />
-          </IconButton>
+          <Tooltip title="Edit">
+            <IconButton 
+              onClick={() => onEdit(row)}
+              sx={{ 
+                color: 'primary.main',
+                '&:hover': { color: 'primary.dark' }
+              }}
+            >
+              <EditIcon />
+            </IconButton>
+          </Tooltip>
         )}
         {permissions?.delete && onDelete && (
-          <IconButton onClick={() => onDelete(row)}>
-            <DeleteIcon />
-          </IconButton>
+          <Tooltip title="Delete">
+            <IconButton 
+              onClick={() => onDelete(row)}
+              sx={{ 
+                color: 'error.main',
+                '&:hover': { color: 'error.dark' }
+              }}
+            >
+              <DeleteIcon />
+            </IconButton>
+          </Tooltip>
+        )}
+        {permissions?.update && onCopy && (
+          <Tooltip title="Copy to Next Month">
+            <IconButton 
+              onClick={() => onCopy(row)}
+              sx={{ 
+                color: 'success.main',
+                '&:hover': { color: 'success.dark' }
+              }}
+            >
+              <CopyIcon />
+            </IconButton>
+          </Tooltip>
         )}
       </TableCell>
     );
