@@ -132,7 +132,7 @@ const ProductionDataTable = ({
 
   const renderUnitValues = (row) => (
     <>
-      {['c1', 'c2', 'c3', 'c4', 'c5'].map((field) => (
+            {['c1', 'c2', 'c3', 'c4', 'c5'].map((field) => (
         <TableCell 
           key={`${row.uniqueId}_${field}`} 
           align="right" 
@@ -146,32 +146,53 @@ const ProductionDataTable = ({
           {formatNumber(row[field] || 0)}
         </TableCell>
       ))}
+      <TableCell 
+        align="right"
+        sx={{
+          fontWeight: 'bold',
+          color: 'primary.main'
+        }}
+      >
+        {formatNumber(
+          ['c1', 'c2', 'c3', 'c4', 'c5'].reduce((sum, field) => sum + (row[field] || 0), 0)
+        )}
+      </TableCell>
     </>
-  );
-
-  const renderChargeValues = (row) => (
+  );  const renderChargeValues = (row) => (
     <>
-      {[...Array(10)].map((_, i) => {
-        const field = `c${(i + 1).toString().padStart(3, '0')}`;
-        return (
-          <TableCell 
-            key={`${row.uniqueId}_${field}`} 
-            align="right" 
-            sx={{ 
-              color: 'warning.dark',
-              '&:hover': {
-                color: 'warning.main'
-              }
-            }}
-          >
-            {formatNumber(row[field] || 0)}
-          </TableCell>
-        );
-      })}
-    </>
-  );
-
-  // Add function to check if date exists for site
+            {[...Array(10)].map((_, i) => {
+              const field = `c${(i + 1).toString().padStart(3, '0')}`;
+              return (
+                <TableCell 
+                  key={`${row.uniqueId}_${field}`} 
+                  align="right" 
+                  sx={{ 
+                    color: 'warning.dark',
+                    '&:hover': {
+                      color: 'warning.main'
+                    }
+                  }}
+                >
+                  {formatNumber(row[field] || 0)}
+                </TableCell>
+              );
+            })}
+            <TableCell 
+              align="right"
+              sx={{
+                fontWeight: 'bold',
+                color: 'primary.main'
+              }}
+            >
+              {formatNumber(
+                [...Array(10)].reduce((sum, _, i) => {
+                  const field = `c${(i + 1).toString().padStart(3, '0')}`;
+                  return sum + (row[field] || 0);
+                }, 0)
+              )}
+            </TableCell>
+          </>
+        );  // Add function to check if date exists for site
   const checkDateExistsForSite = (dateToCheck, siteId) => {
     if (!data?.data || !Array.isArray(data.data)) return false;
     
@@ -287,6 +308,15 @@ const ProductionDataTable = ({
                     {header}
                   </TableCell>
                 ))}
+                <TableCell 
+                  align="right"
+                  sx={{ 
+                    color: 'primary.main',
+                    fontWeight: 'bold'
+                  }}
+                >
+                  Total
+                </TableCell>
               </>
             ) : (
               <>
@@ -302,6 +332,15 @@ const ProductionDataTable = ({
                     {`C${(i + 1).toString().padStart(3, '0')}`}
                   </TableCell>
                 ))}
+                <TableCell 
+                  align="right"
+                  sx={{ 
+                    color: 'primary.main',
+                    fontWeight: 'bold'
+                  }}
+                >
+                  Total
+                </TableCell>
               </>
             )}
             <TableCell align="right">Actions</TableCell>
