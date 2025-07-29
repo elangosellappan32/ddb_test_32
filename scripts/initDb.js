@@ -468,39 +468,49 @@ const createCaptiveTable = async () => {
 const createDefaultCaptiveData = async () => {
     const captiveData = [
         {
-            generatorCompanyId: 1,  // STRIO KAIZEN HITECH RESEARCH LABS PVT LTD
-            shareholderCompanyId: 2, // POLYSPIN EXPORTS LTD
-            consumptionSiteId: '1',
+            generatorCompanyId: 1,  // STRIO KAIZEN
+            shareholderCompanyId: 2, // POLYSPIN EXPORTS
+            consumptionSiteId: '2_1', // Format: companyId_siteId
+            productionSiteId: '1_1',  // Format: companyId_siteId
             effectiveFrom: '2024-01-02',
-            shareholdingPercentage: 27
+            shareholdingPercentage: 27,
+            status: 'active'
         },
         {
-            generatorCompanyId: 1,  // STRIO KAIZEN HITECH RESEARCH LABS PVT LTD
+            generatorCompanyId: 1,  // STRIO KAIZEN
             shareholderCompanyId: 3, // PEL TEXTILES
-            consumptionSiteId: '2',
+            consumptionSiteId: '3_2',
+            productionSiteId: '1_1',
             effectiveFrom: '2024-01-02',
-            shareholdingPercentage: 12
+            shareholdingPercentage: 12,
+            status: 'active'
         },
         {
-            generatorCompanyId: 1,  // STRIO KAIZEN HITECH RESEARCH LABS PVT LTD
+            generatorCompanyId: 1,  // STRIO KAIZEN
             shareholderCompanyId: 4, // A RAMAR AND SONS
-            consumptionSiteId: '3',
+            consumptionSiteId: '4_3',
+            productionSiteId: '1_2',
             effectiveFrom: '2024-01-02',
-            shareholdingPercentage: 61
+            shareholdingPercentage: 61,
+            status: 'active'
         },
         {
-            generatorCompanyId: 5,  // STRIO KAIZEN HITECH RESEARCH LABS PVT LTD
-            shareholderCompanyId: 3, // A RAMAR AND SONS
-            consumptionSiteId: '2',
+            generatorCompanyId: 5,  // SMR ENERGY
+            shareholderCompanyId: 3, // PEL TEXTILES
+            consumptionSiteId: '3_2',
+            productionSiteId: '5_3',
             effectiveFrom: '2024-01-02',
-            shareholdingPercentage: 23
+            shareholdingPercentage: 23,
+            status: 'active'
         },
         {
-            generatorCompanyId: 5,  // STRIO KAIZEN HITECH RESEARCH LABS PVT LTD
-            shareholderCompanyId: 2, // A RAMAR AND SONS
-            consumptionSiteId: '1',
+            generatorCompanyId: 5,  // SMR ENERGY
+            shareholderCompanyId: 2, // POLYSPIN EXPORTS
+            consumptionSiteId: '2_1',
+            productionSiteId: '5_3',
             effectiveFrom: '2024-01-02',
-            shareholdingPercentage: 33
+            shareholdingPercentage: 33,
+            status: 'active'
         }
     ];
 
@@ -659,6 +669,7 @@ const createDefaultUsers = async () => {
             metadata: {
                 department: 'IT Administration',
                 accessLevel: 'ADMIN',
+                companyId: '1', // STRIO KAIZEN
                 accessibleSites: {
                     productionSites: { L: [
                         { S: '1_1' }, { S: '1_2' }
@@ -683,6 +694,7 @@ const createDefaultUsers = async () => {
             metadata: {
                 department: 'Operations',
                 accessLevel: 'MANAGER',
+                companyId: '1', // STRIO KAIZEN
                 accessibleSites: {
                     productionSites: { L: [
                         { S: '1_1' }, { S: '1_2' }
@@ -707,6 +719,7 @@ const createDefaultUsers = async () => {
             metadata: {
                 department: 'Monitoring',
                 accessLevel: 'VIEWER',
+                companyId: '1', // STRIO KAIZEN
                 accessibleSites: {
                     productionSites: { L: [
                         { S: '1_1' }
