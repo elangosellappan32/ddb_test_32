@@ -25,7 +25,8 @@ const Production = () => {
     isAdmin, 
     getAccessibleSites, 
     hasSiteAccess,
-    refreshAccessibleSites 
+    refreshAccessibleSites,
+    updateUser
   } = useAuth();
   
   const [sites, setSites] = useState([]);
@@ -58,11 +59,6 @@ const Production = () => {
     };
   }, [user, isAdmin, hasSiteAccess]);
 
-  // Check if user has access to any production sites
-  const hasAccessToSites = useMemo(() => {
-    return isAdmin() || accessibleSites.length > 0;
-  }, [isAdmin, accessibleSites]);
-
   // Check permissions
   const permissions = useMemo(() => ({
     create: hasPermission(user, 'production', 'CREATE'),
@@ -70,7 +66,53 @@ const Production = () => {
     update: hasPermission(user, 'production', 'UPDATE'),
     delete: hasPermission(user, 'production', 'DELETE')
   }), [user]);
-  
+
+  // Check if user has access to any production sites or can create new ones
+  const hasAccessToSites = useMemo(() => {
+    // Log current access state for debugging
+    console.log('Checking production site access:', {
+      isAdmin: isAdmin(),
+      userRole: user?.role,
+      hasReadPermission: permissions?.read,
+      hasCreatePermission: permissions?.create,
+      accessibleSitesCount: accessibleSites?.length || 0,
+      permissions: user?.permissions
+    });
+
+    // Admin always has full access
+    if (isAdmin()) {
+      console.log('User has admin access');
+      return true;
+    }
+
+    // Check for READ or CREATE permission
+    if (permissions?.read || permissions?.create) {
+      console.log('User has READ or CREATE permission');
+      return true;
+    }
+
+    // Check for explicitly assigned sites
+    const hasAssignedSites = accessibleSites && accessibleSites.length > 0;
+    if (hasAssignedSites) {
+      console.log('User has assigned sites:', accessibleSites);
+      return true;
+    }
+    
+    console.log('Access check result:', {
+      hasAssignedSites,
+      hasReadPermission: permissions?.read,
+      hasCreatePermission: permissions?.create,
+      isAdmin: isAdmin(),
+      accessibleSitesCount: accessibleSites?.length,
+      user: {
+        role: user?.role,
+        hasPermissions: Boolean(user?.permissions)
+      }
+    });
+
+    return false;
+  }, [isAdmin, user, permissions, accessibleSites]);
+
   // Filter sites based on user's accessible sites
   const filterSitesByAccess = useCallback((sitesData) => {
     try {
@@ -140,14 +182,20 @@ const Production = () => {
   // Fetch sites data
   const fetchSites = useCallback(async (retry = false) => {
     try {
+      // Clear existing data when starting a new fetch
       if (!retry) {
+        setSites([]);
+        setFilteredSites([]);
         setError(null);
         setLoading(true);
         setRetryCount(0);
       }
 
       console.log('[Production] Fetching sites, attempt:', retryCount + 1);
-      const response = await productionSiteApi.fetchAll();
+      
+      // Force a fresh fetch by adding a timestamp to bypass cache
+      const timestamp = new Date().getTime();
+      const response = await productionSiteApi.fetchAll(`?t=${timestamp}`);
       
       // Log the raw response for debugging
       console.log('[Production] Raw API response:', response);
@@ -162,6 +210,7 @@ const Production = () => {
       
       // Transform data to ensure consistent format
       const formattedData = sitesData.map(site => ({
+        id: `${site.companyId || '1'}_${site.productionSiteId || ''}`, // Add unique ID for React keys
         companyId: String(site.companyId || '1'),
         productionSiteId: String(site.productionSiteId || ''),
         name: site.name || 'Unnamed Site',
@@ -184,19 +233,27 @@ const Production = () => {
       const filtered = filterSitesByAccess(formattedData);
       console.log('[Production] Accessible sites for user:', filtered);
       
+      // Update state in a single batch
       setSites(formattedData);
       setFilteredSites(filtered);
+      
+      // Only show success message if not a retry
+      if (!retry) {
+        if (formattedData.length === 0) {
+          enqueueSnackbar('No production sites found', { 
+            variant: 'info',
+            autoHideDuration: 3000
+          });
+        } else {
+          enqueueSnackbar(`Successfully loaded ${filtered.length} sites`, { 
+            variant: 'success',
+            autoHideDuration: 2000
+          });
+        }
+      }
+      
       setLoading(false);
       
-      if (formattedData.length === 0) {
-        enqueueSnackbar('No production sites found', { variant: 'info' });
-      } else {
-        enqueueSnackbar(`Successfully loaded ${formattedData.length} sites`, { 
-          variant: 'success',
-          autoHideDuration: 2000
-        });
-      }
-
     } catch (err) {
       
       if (retryCount < MAX_RETRIES) {
@@ -322,30 +379,83 @@ const Production = () => {
       const confirmed = window.confirm(`Are you sure you want to delete ${site.name}?`);
       if (!confirmed) return;
       
+      // Log deletion attempt
+      console.log('Deleting production site:', { 
+        companyId: site.companyId, 
+        siteId: site.productionSiteId,
+        siteKey
+      });
+      
+      // Delete the site from the database
       await productionSiteApi.delete(site.companyId, site.productionSiteId);
       
-      // Refresh the accessible sites after deletion
-      if (refreshAccessibleSites) {
-        await refreshAccessibleSites();
-      }
+      // Refresh the site list to update the UI
+      // The fetchSites call will get the updated list from the server
+      await fetchSites();
       
-      enqueueSnackbar('Production site deleted successfully', { variant: 'success' });
-      fetchSites();
+      // Show success message
+      enqueueSnackbar('Production site deleted successfully', { 
+        variant: 'success',
+        autoHideDuration: 5000
+      });
       
     } catch (error) {
-      console.error('Error deleting production site:', error);
-      enqueueSnackbar(error.message || 'Failed to delete production site', { 
+      console.error('Error deleting production site:', {
+        error,
+        response: error.response?.data,
+        site: site ? {
+          id: site.id,
+          companyId: site.companyId,
+          productionSiteId: site.productionSiteId,
+          name: site.name
+        } : 'No site data'
+      });
+      
+      let errorMessage = 'Failed to delete production site';
+      
+      // Handle specific error cases
+      if (error.response) {
+        // Server responded with an error status code
+        errorMessage = error.response.data?.message || error.response.statusText || errorMessage;
+        
+        // Handle 404 - Not Found (already deleted)
+        if (error.response.status === 404) {
+          errorMessage = 'This site was already deleted or does not exist';
+          // Still refresh the site list to update the UI
+          await fetchSites();
+        }
+      } else if (error.request) {
+        // Request was made but no response received
+        errorMessage = 'No response from server. Please check your connection.';
+      } else {
+        // Other errors
+        errorMessage = error.message || errorMessage;
+      }
+      
+      // Show error message to user
+      enqueueSnackbar(errorMessage, { 
         variant: 'error',
+        autoHideDuration: 10000,
         action: (key) => (
           <Button color="inherit" size="small" onClick={() => enqueueSnackbar.close(key)}>
             Dismiss
           </Button>
         )
       });
+      
+      // Refresh accessible sites to ensure consistency
+      try {
+        if (refreshAccessibleSites) {
+          await refreshAccessibleSites();
+        }
+      } catch (refreshError) {
+        console.error('Error refreshing accessible sites after delete error:', refreshError);
+        // Continue execution even if refresh fails
+      }
     } finally {
       setLoading(false);
     }
-  }, [enqueueSnackbar, fetchSites, permissions.delete, hasSiteAccess, refreshAccessibleSites]);
+  }, [enqueueSnackbar, fetchSites, hasSiteAccess, refreshAccessibleSites, updateUser, user, enhancedUser]);
 
   const handleOpenDialog = (site = null) => {
     setSelectedSite(site);
@@ -365,15 +475,106 @@ const Production = () => {
         console.error('[Production] No user found');
         throw new Error(errorMsg);
       }
-      const currentUser = user;
-
-      // Get company ID - prefer from selected site, then from user context
-      const companyId = selectedSite?.companyId || 
-                       (currentUser.companyId ? String(currentUser.companyId) : null);
       
-      if (!companyId) {
+      const currentUser = user;
+      console.log('[Production] Current user object:', currentUser);
+      console.log('[Production] User metadata:', JSON.stringify(currentUser.metadata, null, 2));
+      
+      if (currentUser.metadata?.accessibleSites) {
+        console.log('[Production] Accessible sites structure:', {
+          productionSites: currentUser.metadata.accessibleSites.productionSites,
+          consumptionSites: currentUser.metadata.accessibleSites.consumptionSites
+        });
+      }
+
+      // Get company ID - try multiple sources
+      let companyId = null;
+      let source = 'none';
+      
+      // 1. Try selected site first (for edits)
+      if (selectedSite?.companyId) {
+        companyId = String(selectedSite.companyId);
+        source = 'selectedSite';
+        console.log(`[Production] Using company ID from selected site: ${companyId}`);
+      }
+      
+      // 2. Try user object's companyId
+      if (!companyId && currentUser.companyId) {
+        companyId = String(currentUser.companyId);
+        source = 'user.companyId';
+        console.log(`[Production] Using company ID from user object: ${companyId}`);
+      }
+      
+      // 3. Try to extract from accessible sites
+      if (!companyId && currentUser.metadata?.accessibleSites?.productionSites?.L?.length > 0) {
+        const firstSite = currentUser.metadata.accessibleSites.productionSites.L[0]?.S;
+        console.log('[Production] First accessible site:', firstSite);
+        
+        if (firstSite && firstSite.includes('_')) {
+          companyId = firstSite.split('_')[0];
+          source = 'accessibleSites';
+          console.log(`[Production] Extracted company ID from accessible sites: ${companyId}`);
+        }
+      }
+      
+      // 4. Try to get from user's department
+      if (!companyId && currentUser.metadata?.department) {
+        const dept = currentUser.metadata.department.toLowerCase();
+        console.log(`[Production] Checking department for company ID: ${dept}`);
+        
+        // Map department names to company IDs
+        const departmentMap = {
+          'smr': '5',
+          'strio': '1',
+          'it': '1', // Default to STRIO for IT department
+          'admin': '1', // Default to STRIO for admin
+          'administration': '1' // Default to STRIO for administration
+        };
+        
+        // Check if any department keyword matches
+        for (const [key, value] of Object.entries(departmentMap)) {
+          if (dept.includes(key)) {
+            companyId = value;
+            source = `department (${key.toUpperCase()})`;
+            console.log(`[Production] Derived company ID from department (${dept}): ${companyId}`);
+            break;
+          }
+        }
+      }
+      
+      // 5. If still no company ID, use a default (e.g., for admin users)
+      if (!companyId && currentUser.role && ['admin', 'superadmin'].includes(currentUser.role.toLowerCase())) {
+        companyId = '1'; // Default to STRIO for admin users
+        source = 'default (admin user)';
+        console.log(`[Production] Using default company ID for admin user: ${companyId}`);
+      }
+      
+      // Log final company ID and source
+      if (companyId) {
+        console.log(`[Production] Successfully determined company ID: ${companyId} (source: ${source})`);
+        
+        // Ensure the companyId is properly set in the user object for updateSiteAccess
+        const updatedUser = {
+          ...currentUser,
+          companyId: companyId,
+          company: currentUser.company || { id: companyId },
+          metadata: {
+            ...currentUser.metadata,
+            companyId: currentUser.metadata?.companyId || companyId
+          }
+        };
+        
+        // Update the user in the auth context if needed
+        if (updateUser) {
+          updateUser(updatedUser);
+        }
+        
+        // Update the currentUser reference for the rest of the function
+        currentUser.companyId = companyId;
+      } else {
         const errorMsg = 'Company ID is required to manage production sites. Please ensure your account is properly associated with a company.';
-        console.error('[Production] No company ID found in user context');
+        console.error('[Production] No company ID found in user context or accessible sites');
+        console.error('[Production] User metadata:', JSON.stringify(currentUser.metadata, null, 2));
         throw new Error(errorMsg);
       }
 
@@ -671,8 +872,39 @@ const Production = () => {
     </TableContainer>
   );
 
+  if (!hasAccessToSites) {
+    return (
+      <Box p={3}>
+        <Alert 
+          severity="info"
+          sx={{ 
+            '& .MuiAlert-message': {
+              display: 'flex',
+              alignItems: 'center'
+            }
+          }}
+        >
+          You don't have permission to view any production sites. Please contact your administrator.
+        </Alert>
+      </Box>
+    );
+  }
+
   return (
-    <Paper elevation={0} sx={{ p: 3, backgroundColor: 'transparent' }}>
+    <Box sx={{ p: 3, backgroundColor: 'background.paper', minHeight: '100vh' }}>
+      {/* Production Site Dialog */}
+      <ProductionSiteDialog
+        open={dialogOpen}
+        onClose={() => setDialogOpen(false)}
+        onSubmit={handleSubmit}
+        initialData={selectedSite}
+        loading={loading}
+        permissions={permissions}
+        user={user}
+        isEditing={isEditing}
+      />
+
+      {/* Header */}
       <Box sx={{ 
         display: 'flex', 
         justifyContent: 'space-between', 
@@ -684,65 +916,147 @@ const Production = () => {
           Production Sites
         </Typography>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-          <IconButton onClick={() => setViewMode(prev => prev === 'card' ? 'table' : 'card')}>
+          <IconButton 
+            onClick={() => setViewMode(viewMode === 'card' ? 'table' : 'card')}
+            color="primary"
+            size="large"
+          >
             {viewMode === 'card' ? <ViewListIcon /> : <ViewModuleIcon />}
           </IconButton>
+          {hasAccessToSites && (permissions.create || isAdmin()) && (
+            <Button
+              variant="contained"
+              color="primary"
+              startIcon={<AddIcon />}
+              onClick={handleAddClick}
+              size="medium"
+              sx={{ 
+                fontWeight: 500,
+                textTransform: 'none',
+                borderRadius: 1.5
+              }}
+            >
+              Add Site
+            </Button>
+          )}
           <Button
             variant="outlined"
             startIcon={<RefreshIcon />}
             onClick={fetchSites}
             disabled={loading}
+            size="medium"
+            sx={{ 
+              fontWeight: 500,
+              textTransform: 'none',
+              borderRadius: 1.5
+            }}
           >
             Refresh
           </Button>
-          {permissions.create && (
-            <Button
-              variant="contained"
-              startIcon={<AddIcon />}
-              onClick={handleAddClick}
-              disabled={loading}
-            >
-              Add Site
-            </Button>
-          )}
         </Box>
       </Box>
 
-      {error && <Alert severity="error" sx={{ mb: 3 }}>{error}</Alert>}
+      {error && (
+        <Alert 
+          severity="error" 
+          sx={{ 
+            mb: 3,
+            borderRadius: 1,
+            boxShadow: 1,
+            '& .MuiAlert-message': {
+              display: 'flex',
+              alignItems: 'center'
+            },
+            '& .MuiAlert-icon': {
+              fontSize: 24
+            }
+          }}
+          action={
+            <Button
+              color="inherit"
+              size="small"
+              onClick={() => setError(null)}
+            >
+              Dismiss
+            </Button>
+          }
+        >
+          {error}
+        </Alert>
+      )}
 
       {loading ? (
         <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
           <CircularProgress />
         </Box>
-      ) : filteredSites.length === 0 ? (
-        <Alert 
-          severity="info" 
-          sx={{ 
-            display: 'flex', 
-            justifyContent: 'center', 
-            py: 3,
-            '& .MuiAlert-message': {
-              display: 'flex',
-              alignItems: 'center',
-              gap: 2
-            }
-          }}
-        >
-          <Typography>
-            {user?.isAdmin ? 'No production sites found.' : 'No accessible production sites found.'}
+      ) : !loading && filteredSites.length === 0 ? (
+        <Box sx={{ 
+          display: 'flex', 
+          flexDirection: 'column', 
+          alignItems: 'center', 
+          justifyContent: 'center', 
+          p: 4,
+          textAlign: 'center',
+          minHeight: '50vh',
+          backgroundColor: 'background.paper',
+          borderRadius: 2,
+          boxShadow: 1,
+          mx: 'auto',
+          maxWidth: '600px',
+          my: 4
+        }}>
+          <Typography variant="h5" color="textPrimary" gutterBottom>
+            {permissions.create || isAdmin() ? 'No Production Sites Found' : 'No Access to Production Sites'}
           </Typography>
-          {permissions.create && user?.isAdmin && (
-            <Button 
-              variant="text" 
-              color="primary" 
-              onClick={handleAddClick}
-              size="small"
-              sx={{ ml: 2 }}
+          
+          <Typography variant="body1" color="textSecondary" paragraph>
+            {permissions.create || isAdmin() 
+              ? 'Get started by adding your first production site.'
+              : 'You do not have access to any production sites. Please contact your administrator for access.'}
+          </Typography>
+          
+          {(permissions.create || isAdmin()) && (
+            <Button
+              variant="contained"
+              color="primary"
+              size="large"
+              startIcon={<AddIcon />}
+              onClick={() => {
+                console.log('Opening dialog from no sites message');
+                setSelectedSite(null);
+                setIsEditing(false);
+                setDialogOpen(true);
+              }}
+              sx={{ 
+                mt: 3,
+                px: 4,
+                py: 1.5,
+                fontSize: '1.1rem',
+                textTransform: 'none',
+                whiteSpace: 'nowrap',
+                '&:hover': {
+                  transform: 'translateY(-2px)',
+                  boxShadow: 3
+                },
+                transition: 'all 0.2s ease-in-out'
+              }}
             >
-              Add New Site
+              Add New Production Site
             </Button>
           )}
-        </Alert>
+          
+          {/* Always render the dialog in the DOM to ensure it can be opened */}
+          <ProductionSiteDialog
+            open={dialogOpen}
+            onClose={() => setDialogOpen(false)}
+            onSubmit={handleSubmit}
+            initialData={selectedSite}
+            loading={loading}
+            permissions={permissions}
+            user={user}
+            isEditing={isEditing}
+          />
+        </Box>
       ) : viewMode === 'table' ? (
         renderTableView()
       ) : (
@@ -777,9 +1091,8 @@ const Production = () => {
         user={user}
         isEditing={isEditing}
       />
-    </Paper>
+    </Box>
   );
 };
 
 export default Production;
-
