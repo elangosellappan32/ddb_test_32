@@ -4,8 +4,7 @@ const TableNames = {
     PRODUCTION_CHARGE: 'ProductionChargeTable',
     CONSUMPTION_SITES: 'ConsumptionSiteTable',
     CONSUMPTION_UNIT:'ConsumptionUnitTable',
-    USERS: 'UserTable',
-    USER_METADATA: 'UserMetadataTable', // For storing user metadata including accessible sites
+    USERS: 'UserTable', // For storing user metadata including accessible sites
     ROLES: 'RoleTable',
     BANKING: 'BankingTable',
     ALLOCATION: 'AllocationTable',

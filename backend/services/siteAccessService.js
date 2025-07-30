@@ -1,4 +1,5 @@
 const { ScanCommand, GetCommand, UpdateCommand, QueryCommand } = require('@aws-sdk/lib-dynamodb');
+const { marshall } = require('@aws-sdk/util-dynamodb');  // Add this line
 const logger = require('../utils/logger');
 const TableNames = require('../constants/tableNames');
 const { docClient } = require('../config/aws-config');
@@ -369,15 +370,13 @@ const removeSiteAccess = async (companyId, siteId, siteType) => {
             TableName: TableNames.USERS,
             FilterExpression: 'contains(metadata.accessibleSites.#siteTypeSites, :siteKey)',
             ExpressionAttributeNames: {
-                '#siteTypeSites': `${siteType}Sites`
+                '#siteTypeSites': `${siteType}Sites`,
+                '#type': 'type' // In case 'type' is a reserved word
             },
             ExpressionAttributeValues: marshall({
                 ':siteKey': siteKey
             }),
-            ProjectionExpression: 'username, metadata, #type',
-            ExpressionAttributeNames: {
-                '#type': 'type' // In case 'type' is a reserved word
-            }
+            ProjectionExpression: 'username, metadata, #type'
         };
         
         let users = [];
@@ -390,7 +389,7 @@ const removeSiteAccess = async (companyId, siteId, siteType) => {
                 scanParams.ExclusiveStartKey = lastEvaluatedKey;
             }
             
-            const scanResult = await dynamoDB.scan(scanParams);
+            const scanResult = await ddbDocClient.send(new ScanCommand(scanParams));
             users = users.concat(scanResult.Items || []);
             lastEvaluatedKey = scanResult.LastEvaluatedKey;
             scanCount++;

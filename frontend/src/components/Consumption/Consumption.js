@@ -62,13 +62,14 @@ const Consumption = () => {
     return getAccessibleSites ? getAccessibleSites() : { consumptionSites: [] };
   }, [getAccessibleSites]);
   
-  // Check if user has access to any consumption sites
+  // Check if user has access to any consumption sites or can create new ones
   const hasAccessToSites = useMemo(() => {
     // Log current access state for debugging
     console.log('Checking site access:', {
       isAdmin: isAdmin?.(),
       userRole: user?.role,
       hasReadPermission: permissions?.read,
+      hasCreatePermission: permissions?.create,
       accessibleSitesCount: accessibleSites?.length || 0,
       permissions: user?.permissions
     });
@@ -79,9 +80,9 @@ const Consumption = () => {
       return true;
     }
 
-    // Check for READ permission
-    if (permissions?.read) {
-      console.log('User has READ permission');
+    // Check for READ or CREATE permission
+    if (permissions?.read || permissions?.create) {
+      console.log('User has READ or CREATE permission');
       return true;
     }
 
@@ -94,7 +95,8 @@ const Consumption = () => {
     
     console.log('Access check result:', {
       hasAssignedSites,
-      permissions: permissions?.read,
+      hasReadPermission: permissions?.read,
+      hasCreatePermission: permissions?.create,
       isAdmin: isAdmin?.(),
       accessibleSitesCount: accessibleSites?.length,
       user: {
@@ -297,41 +299,60 @@ const Consumption = () => {
 
   // Render no sites message
   if (!loading && filteredSites.length === 0) {
+    const canCreate = permissions?.create || isAdmin?.();
+    
     return (
-      <Alert 
-        severity="info" 
-        sx={{ 
-          mt: 3,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          '& .MuiAlert-message': {
+      <Box sx={{ p: 3 }}>
+        <Alert 
+          severity="info"
+          sx={{ 
             display: 'flex',
             alignItems: 'center',
-            gap: 2
-          }
-        }}
-      >
-        <Typography>
-          {user?.isAdmin ? 'No consumption sites found.' : 'No accessible consumption sites found.'}
-        </Typography>
-        {permissions?.create && hasAccessToSites && (
-          <Button 
-            variant="text" 
-            color="primary" 
-            onClick={handleAddClick}
-            size="small"
-            sx={{ 
-              ml: 2,
-              fontWeight: 500,
-              textTransform: 'none'
-            }}
-            startIcon={<AddIcon />}
-          >
-            Add New Site
-          </Button>
-        )}
-      </Alert>
+            justifyContent: 'space-between',
+            '& .MuiAlert-message': {
+              width: '100%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 2
+            }
+          }}
+        >
+          <Typography>
+            {user?.isAdmin || canCreate 
+              ? 'No consumption sites found. Would you like to add one?' 
+              : 'No accessible consumption sites found. Please contact your administrator.'}
+          </Typography>
+          
+          {canCreate && (
+            <Button 
+              variant="contained" 
+              color="primary" 
+              onClick={handleAddClick}
+              size="medium"
+              sx={{ 
+                ml: 2,
+                fontWeight: 500,
+                textTransform: 'none',
+                whiteSpace: 'nowrap'
+              }}
+              startIcon={<AddIcon />}
+            >
+              Add New Site
+            </Button>
+          )}
+        </Alert>
+        
+        {/* Consumption Site Dialog - Moved here to ensure it's always in the DOM */}
+        <ConsumptionSiteDialog
+          open={dialogOpen}
+          onClose={handleDialogClose}
+          onSubmit={handleSubmit}
+          initialData={selectedSite || null}
+          loading={isDialogLoading}
+          permissions={permissions}
+        />
+      </Box>
     );
   }
 

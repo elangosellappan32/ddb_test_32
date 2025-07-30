@@ -17,11 +17,13 @@ const cleanupRelatedData = async (companyId, productionSiteId) => {
     
     const cleanupStats = {
         deletedUnits: 0,
-        deletedCharges: 0
+        deletedCharges: 0,
+        deletedBanking: 0,
+        deletedLapse: 0
     };
 
     try {
-        // 1. Delete all production units for this site
+        // 1. Delete all production units
         const { Items: unitItems } = await docClient.send(new QueryCommand({
             TableName: TableNames.PRODUCTION_UNIT,
             KeyConditionExpression: 'pk = :pk',
@@ -30,7 +32,6 @@ const cleanupRelatedData = async (companyId, productionSiteId) => {
             }
         }));
 
-        // Delete units in batches of 25 to avoid throttling
         if (unitItems?.length > 0) {
             for (let i = 0; i < unitItems.length; i += 25) {
                 const batch = unitItems.slice(i, i + 25);
@@ -44,7 +45,7 @@ const cleanupRelatedData = async (companyId, productionSiteId) => {
             cleanupStats.deletedUnits = unitItems.length;
         }
 
-        // 2. Delete all production charges for this site
+        // 2. Delete all production charges
         const { Items: chargeItems } = await docClient.send(new QueryCommand({
             TableName: TableNames.PRODUCTION_CHARGE,
             KeyConditionExpression: 'pk = :pk',
@@ -53,7 +54,6 @@ const cleanupRelatedData = async (companyId, productionSiteId) => {
             }
         }));
 
-        // Delete charges in batches of 25 to avoid throttling
         if (chargeItems?.length > 0) {
             for (let i = 0; i < chargeItems.length; i += 25) {
                 const batch = chargeItems.slice(i, i + 25);
@@ -65,6 +65,50 @@ const cleanupRelatedData = async (companyId, productionSiteId) => {
                 ));
             }
             cleanupStats.deletedCharges = chargeItems.length;
+        }
+
+        // 3. Delete all banking records
+        const { Items: bankingItems } = await docClient.send(new QueryCommand({
+            TableName: TableNames.BANKING,
+            KeyConditionExpression: 'pk = :pk',
+            ExpressionAttributeValues: {
+                ':pk': siteId
+            }
+        }));
+
+        if (bankingItems?.length > 0) {
+            for (let i = 0; i < bankingItems.length; i += 25) {
+                const batch = bankingItems.slice(i, i + 25);
+                await Promise.all(batch.map(item =>
+                    docClient.send(new DeleteCommand({
+                        TableName: TableNames.BANKING,
+                        Key: { pk: item.pk, sk: item.sk }
+                    }))
+                ));
+            }
+            cleanupStats.deletedBanking = bankingItems.length;
+        }
+
+        // 4. Delete all lapse records
+        const { Items: lapseItems } = await docClient.send(new QueryCommand({
+            TableName: TableNames.LAPSE,
+            KeyConditionExpression: 'pk = :pk',
+            ExpressionAttributeValues: {
+                ':pk': siteId
+            }
+        }));
+
+        if (lapseItems?.length > 0) {
+            for (let i = 0; i < lapseItems.length; i += 25) {
+                const batch = lapseItems.slice(i, i + 25);
+                await Promise.all(batch.map(item =>
+                    docClient.send(new DeleteCommand({
+                        TableName: TableNames.LAPSE,
+                        Key: { pk: item.pk, sk: item.sk }
+                    }))
+                ));
+            }
+            cleanupStats.deletedLapse = lapseItems.length;
         }
 
         logger.info(`[ProductionSiteDAL] Cleanup completed for site ${siteId}:`, cleanupStats);
