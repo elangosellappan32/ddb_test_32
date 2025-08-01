@@ -63,10 +63,11 @@ const Allocation = () => {
   // Get company ID from the logged-in user
   const companyId = user?.companyId || (user?.metadata?.companyId?.S || null);
   
-  // Year range for the year dropdown (1950 to current year)
+  // Year range for the year dropdown (1970 to next year)
+  const currentYear = new Date().getFullYear();
   const yearRange = {
-    start: 1950,
-    end: new Date().getFullYear()
+    start: 1970,           // Starting from 1970
+    end: currentYear + 1   // Up to next year (2026)
   };
 
   // Fetch shareholdings for a company

@@ -44,9 +44,35 @@ const ConsumptionDataTable = ({
 
   const sortedData = useMemo(() => {
     if (!Array.isArray(data)) return [];
-    return [...data].sort((a, b) => {
-      // Sort by SK in descending order (most recent first)
-      return b.sk.localeCompare(a.sk);
+    
+    return data.map(row => {
+      // Calculate sort key for financial year sorting
+      let sortKey = 0;
+      try {
+        if (row.sk) {
+          const month = parseInt(row.sk.substring(0, 2), 10);
+          const year = parseInt(row.sk.substring(2), 10);
+          // Convert to financial year month (April=1, May=2, ..., March=12)
+          const financialMonth = month >= 4 ? month - 3 : month + 9;
+          const financialYear = month >= 4 ? year : year - 1;
+          sortKey = financialYear * 100 + financialMonth;
+        }
+      } catch (e) {
+        console.error('[ConsumptionDataTable] Error calculating sort key:', e);
+      }
+      
+      return {
+        ...row,
+        _sortKey: sortKey
+      };
+    }).sort((a, b) => {
+      // Sort by the pre-calculated sort key (oldest first for financial year)
+      if (a._sortKey !== b._sortKey) {
+        return a._sortKey - b._sortKey;
+      }
+      
+      // If same date, sort by site ID (ascending)
+      return (a.productionSiteId || 0) - (b.productionSiteId || 0);
     });
   }, [data]);
 
