@@ -4,24 +4,49 @@ const API_BASE_URL = 'http://localhost:3333/api';
 
 export const fetchFormVAData = async (financialYear) => {
   try {
+    console.log(`Fetching Form V-A data for financial year: ${financialYear}`);
     const response = await axios.get(`${API_BASE_URL}/form/formva`, {
       params: { financialYear },
     });
     
-    // Log the raw response for debugging
-    console.log('Form V-A API Response:', response.data);
+    // Log the complete response for debugging
+    console.group('Form V-A API Response:');
+    console.log('Full Response:', response);
+    console.log('Response Data:', response.data);
+    console.log('Response Status:', response.status);
+    console.log('Response Headers:', response.headers);
+    
+    if (response.data && response.data.data) {
+      console.log('Form V-A Data Structure:');
+      console.table({
+        'totalGeneratedUnits': response.data.data.totalGeneratedUnits,
+        'auxiliaryConsumption': response.data.data.auxiliaryConsumption,
+        'aggregateGeneration': response.data.data.aggregateGeneration,
+        'percentage51': response.data.data.percentage51,
+        'totalAllocatedUnits': response.data.data.totalAllocatedUnits,
+        'percentageAdjusted': response.data.data.percentageAdjusted,
+        'hasSiteMetrics': Array.isArray(response.data.data.siteMetrics)
+      });
+    }
+    console.groupEnd();
 
     if (response.status === 200) {
       // Check if we have a valid response structure
-      if (!response.data || (!response.data.success && !response.data.data)) {
-        console.error('Invalid Form V-A response format:', response.data);
-        throw new Error('Invalid response format');
+      if (!response.data) {
+        console.error('Empty response data from Form V-A API');
+        throw new Error('Empty response from server');
       }
+
+      // Handle both response structures: {success, data} or direct data object
+      const responseData = response.data.data || response.data;
+      
+      // Log the data being returned
+      console.log('Processed Form V-A data for worksheet:', responseData);
 
       // Always return the complete response with success and data properties
       return {
         success: true,
-        data: response.data.data || response.data
+        data: responseData
       };
     }
     throw new Error('No data found for the selected financial year');

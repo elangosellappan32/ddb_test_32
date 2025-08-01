@@ -37,10 +37,10 @@ import {
   Legend
 } from 'recharts';
 
-import productionSiteApi   from '../../services/productionSiteapi';
-import consumptionSiteApi  from '../../services/consumptionSiteapi';
-import productionUnitApi   from '../../services/productionUnitapi';
-import consumptionUnitApi  from '../../services/consumptionUnitapi';
+import productionSiteApi   from '../../services/productionSiteApi';
+import consumptionSiteApi  from '../../services/consumptionSiteApi';
+import productionUnitApi   from '../../services/productionUnitApi';
+import consumptionUnitApi  from '../../services/consumptionUnitApi';
 import allocationService   from '../../services/allocationService';
 import bankingApi          from '../../services/bankingApi';
 import lapseApi            from '../../services/lapseApi';

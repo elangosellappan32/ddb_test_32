@@ -8,7 +8,7 @@ import {
   FormControl, InputLabel, Select, MenuItem, Switch, Typography,
   Box, Autocomplete, TextField, Paper
 } from '@mui/material';
-import productionSiteApi from '../../services/productionSiteapi';
+import productionSiteApi from '../../services/productionSiteApi';
 import lapseApi from '../../services/lapseApi';
 
 // Get months from April of start year to March of next year

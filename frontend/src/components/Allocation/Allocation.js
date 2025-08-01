@@ -20,12 +20,12 @@ import {
   Autorenew as AutorenewIcon
 } from '@mui/icons-material';
 import { useSnackbar } from 'notistack';
-import productionUnitApi from '../../services/productionUnitapi';
-import consumptionUnitApi from '../../services/consumptionUnitapi';
-import productionSiteapi from '../../services/productionSiteapi';
-import consumptionSiteapi from '../../services/consumptionSiteapi';
+import productionUnitApi from '../../services/productionUnitApi';
+import consumptionUnitApi from '../../services/consumptionUnitApi';
+import productionSiteapi from '../../services/productionSiteApi';
+import consumptionSiteapi from '../../services/consumptionSiteApi';
 import bankingApi from '../../services/bankingApi';
-import allocationApi from '../../services/allocationapi';
+import allocationApi from '../../services/allocationApi';
 import captiveApi from '../../services/captiveApi';
 import ProductionUnitsTable from './ProductionUnitsTable';
 import BankingUnitsTable from './BankingUnitsTable';
@@ -63,10 +63,11 @@ const Allocation = () => {
   // Get company ID from the logged-in user
   const companyId = user?.companyId || (user?.metadata?.companyId?.S || null);
   
-  // Year range for the year dropdown (1950 to current year)
+  // Year range for the year dropdown (1970 to next year)
+  const currentYear = new Date().getFullYear();
   const yearRange = {
-    start: 1950,
-    end: new Date().getFullYear()
+    start: 1970,           // Starting from 1970
+    end: currentYear + 1   // Up to next year (2026)
   };
 
   // Fetch shareholdings for a company

@@ -25,7 +25,7 @@ import {
   Delete as DeleteIcon,
   Edit as EditIcon,
 } from '@mui/icons-material';
-import consumptionSiteApi from '../../services/consumptionSiteapi';
+import consumptionSiteApi from '../../services/consumptionSiteApi';
 import ConsumptionSiteCard from './ConsumptionSiteCard';
 import ConsumptionSiteDialog from './ConsumptionSiteDialog';
 import { useAuth } from '../../context/AuthContext';

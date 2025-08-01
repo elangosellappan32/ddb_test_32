@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import consumptionSiteApi from '../services/consumptionSiteapi';
-import consumptionUnitApi from '../services/consumptionUnitapi';
+import consumptionSiteApi from '../services/consumptionSiteApi';
+import consumptionUnitApi from '../services/consumptionUnitApi';
 
 export const useConsumptionStats = () => {
     const [stats, setStats] = useState({

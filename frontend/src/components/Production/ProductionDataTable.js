@@ -40,37 +40,36 @@ const ProductionDataTable = ({
       return [];
     }
 
-    return dataArray.map(row => ({
-      ...row,
-      // Create a truly unique identifier using multiple fields
-      uniqueId: `${row.sk || ''}_${row.productionSiteId || ''}_${type}_${row.id || Date.now()}_${Math.random().toString(36).substr(2, 9)}`
-    })).sort((a, b) => {
-      // Handle cases where date might be undefined
-      if (!a.date || !b.date) {
-        return !a.date ? 1 : -1;
-      }
-
-      // Safe substring operations with validation
+    return dataArray.map(row => {
+      // Calculate sort key for financial year sorting
+      let sortKey = 0;
       try {
-        const yearA = a.date.substring(2);
-        const yearB = b.date.substring(2);
-        const monthA = a.date.substring(0, 2);
-        const monthB = b.date.substring(0, 2);
-        
-        // Sort by year first
-        if (yearA !== yearB) {
-          return parseInt(yearB, 10) - parseInt(yearA, 10);
+        if (row.date) {
+          const month = parseInt(row.date.substring(0, 2), 10);
+          const year = parseInt(row.date.substring(2), 10);
+          // Convert to financial year month (April=1, May=2, ..., March=12)
+          const financialMonth = month >= 4 ? month - 3 : month + 9;
+          const financialYear = month >= 4 ? year : year - 1;
+          sortKey = financialYear * 100 + financialMonth;
         }
-        // Then by month
-        if (monthA !== monthB) {
-          return parseInt(monthB, 10) - parseInt(monthA, 10);
-        }
-      } catch (error) {
-        console.error('[ProductionDataTable] Sorting error:', error);
+      } catch (e) {
+        console.error('[ProductionDataTable] Error calculating sort key:', e);
       }
       
-      // Finally by site ID
-      return (b.productionSiteId || 0) - (a.productionSiteId || 0);
+      return {
+        ...row,
+        // Create a truly unique identifier using multiple fields
+        uniqueId: `${row.sk || ''}_${row.productionSiteId || ''}_${type}_${row.id || Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        _sortKey: sortKey
+      };
+    }).sort((a, b) => {
+      // Sort by the pre-calculated sort key (oldest first for financial year)
+      if (a._sortKey !== b._sortKey) {
+        return a._sortKey - b._sortKey;
+      }
+      
+      // If same date, sort by site ID (ascending)
+      return (a.productionSiteId || 0) - (b.productionSiteId || 0);
     });
   }, [data, type]);
 
