@@ -7,7 +7,7 @@ import {
   Switch, FormControlLabel
 } from '@mui/material';
 import { Add as AddIcon, Refresh as RefreshIcon, Edit as EditIcon, Delete as DeleteIcon, ViewModule as ViewModuleIcon, ViewList as ViewListIcon } from '@mui/icons-material';
-import productionSiteApi from '../../services/productionSiteapi';
+import productionSiteApi from '../../services/productionSiteApi';
 import ProductionSiteCard from './ProductionSiteCard';
 import ProductionSiteDialog from './ProductionSiteDialog';
 import { useAuth } from '../../context/AuthContext';

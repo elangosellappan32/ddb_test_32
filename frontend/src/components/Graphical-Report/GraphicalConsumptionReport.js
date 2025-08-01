@@ -26,7 +26,7 @@ import {
 import { getAccessibleSiteIds } from "../../utils/siteAccessUtils";
 import { useAuth } from "../../context/AuthContext";
 import { fetchAllConsumptionUnits } from "../../utils/siteUnitApi";
-import consumptionSiteApi from "../../services/consumptionSiteapi";
+import consumptionSiteApi from "../../services/consumptionSiteApi";
 
 // ---- Helpers ----
 const getFinancialYearMonths = (fy) => {

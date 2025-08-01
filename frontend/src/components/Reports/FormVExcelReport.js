@@ -4,7 +4,7 @@ import { FileDownload as ExcelIcon } from '@mui/icons-material';
 import * as XLSX from 'xlsx';
 import { fetchFormVAData, fetchFormVBData } from '../../services/reportService';
 import { createFormVAWorksheet } from './FormVAWorksheet';
-import { createFormVBWorksheet } from './FormVBWorksheet.excel';
+import { createFormVBWorksheet } from './FormVBWorksheet';
 
 const FormVExcelReport = ({ 
   downloading,
@@ -25,20 +25,43 @@ const FormVExcelReport = ({
       const workbook = XLSX.utils.book_new();
 
       // Handle Form V-A
+      console.group('Fetching Form V-A Data');
       const formVAResponse = await fetchFormVAData(financialYear);
+      
+      // Log the complete response for debugging
+      console.log('Form V-A Response:', JSON.stringify(formVAResponse, null, 2));
       
       // Validate Form V-A response
       if (!formVAResponse) {
-        throw new Error('No response received from Form V-A API');
+        const error = new Error('No response received from Form V-A API');
+        console.error(error.message);
+        throw error;
       }
       
       if (!formVAResponse.success) {
-        throw new Error('Form V-A API request was not successful');
+        const error = new Error('Form V-A API request was not successful');
+        console.error(error.message, 'Response:', formVAResponse);
+        throw error;
       }
       
       if (!formVAResponse.data) {
-        throw new Error('No data received from Form V-A API');
+        const error = new Error('No data received from Form V-A API');
+        console.error(error.message);
+        throw error;
       }
+      
+      // Log the data being passed to the worksheet
+      console.log('Data being passed to Form V-A worksheet:', JSON.stringify({
+        totalGeneratedUnits: formVAResponse.data.totalGeneratedUnits,
+        auxiliaryConsumption: formVAResponse.data.auxiliaryConsumption,
+        aggregateGeneration: formVAResponse.data.aggregateGeneration,
+        percentage51: formVAResponse.data.percentage51,
+        totalAllocatedUnits: formVAResponse.data.totalAllocatedUnits,
+        percentageAdjusted: formVAResponse.data.percentageAdjusted,
+        hasSiteMetrics: Array.isArray(formVAResponse.data.siteMetrics)
+      }, null, 2));
+      
+      console.groupEnd();
 
       const requiredFields = [
         'totalGeneratedUnits',
@@ -58,13 +81,14 @@ const FormVExcelReport = ({
         throw new Error(`Missing required fields in Form V-A data: ${missingFields.join(', ')}`);
       }
 
-      // Log the response for debugging
-      console.log('Form V-A API Response:', formVAResponse);
-
-      // Create Form V-A worksheet with the API response directly
+      // Create Form V-A worksheet with the API response
+      console.group('Creating Form V-A Worksheet');
       const formVASuccess = await createFormVAWorksheet(workbook, formVAResponse, financialYear);
+      console.groupEnd();
       if (!formVASuccess) {
-        throw new Error('Failed to create Form V-A worksheet');
+        const error = new Error('Failed to create Form V-A worksheet');
+        console.error(error.message);
+        throw error;
       }
 
       // Handle Form V-B if enabled

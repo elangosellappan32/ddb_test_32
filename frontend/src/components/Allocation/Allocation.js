@@ -20,12 +20,12 @@ import {
   Autorenew as AutorenewIcon
 } from '@mui/icons-material';
 import { useSnackbar } from 'notistack';
-import productionUnitApi from '../../services/productionUnitapi';
-import consumptionUnitApi from '../../services/consumptionUnitapi';
-import productionSiteapi from '../../services/productionSiteapi';
-import consumptionSiteapi from '../../services/consumptionSiteapi';
+import productionUnitApi from '../../services/productionUnitApi';
+import consumptionUnitApi from '../../services/consumptionUnitApi';
+import productionSiteapi from '../../services/productionSiteApi';
+import consumptionSiteapi from '../../services/consumptionSiteApi';
 import bankingApi from '../../services/bankingApi';
-import allocationApi from '../../services/allocationapi';
+import allocationApi from '../../services/allocationApi';
 import captiveApi from '../../services/captiveApi';
 import ProductionUnitsTable from './ProductionUnitsTable';
 import BankingUnitsTable from './BankingUnitsTable';

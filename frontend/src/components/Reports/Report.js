@@ -233,24 +233,78 @@ const AllocationReport = () => {
   };
 
   const prepareForm5AData = () => {
-    if (!reportData) {
+    // Helper function to safely parse and format numbers
+    const formatNumber = (value, isPercentage = false) => {
+      if (value === null || value === undefined) return 0;
+      const num = parseFloat(value);
+      if (isNaN(num)) return 0;
+      
+      if (isPercentage) {
+        return num.toFixed(2);
+      }
+      return num.toLocaleString('en-IN', {
+        maximumFractionDigits: 2,
+        minimumFractionDigits: 2
+      });
+    };
+
+    // Default data structure when no report data is available
+    if (!reportData || !reportData.data) {
       return [
-        { 'Sl.No.': 1, 'Particulars': 'Total Generated units of a generating plant / Station identified for captive use', 'Energy in Units': 0 },
-        { 'Sl.No.': 2, 'Particulars': 'Less : Auxiliary Consumption in the above in units', 'Energy in Units': 0 },
-        { 'Sl.No.': 3, 'Particulars': 'Net units available for captive consumption (Aggregate generation for captive use)', 'Energy in Units': 0 },
-        { 'Sl.No.': 4, 'Particulars': '51% of aggregate generation available for captive consumption in units', 'Energy in Units': 0 },
-        { 'Sl.No.': 5, 'Particulars': 'Actual Adjusted / Consumed units by the captive users', 'Energy in Units': 0 },
-        { 'Sl.No.': 6, 'Particulars': 'Percentage of actual adjusted / consumed units by the captive users with respect to aggregate generation for captive use', 'Energy in Units': '0%' }
+        { 'Sl.No.': 1, 'Particulars': 'Total Generated units of a generating plant / Station identified for captive use', 'Energy in Units': '0.00' },
+        { 'Sl.No.': 2, 'Particulars': 'Less : Auxiliary Consumption in the above in units', 'Energy in Units': '0.00' },
+        { 'Sl.No.': 3, 'Particulars': 'Net units available for captive consumption (Aggregate generation for captive use)', 'Energy in Units': '0.00' },
+        { 'Sl.No.': 4, 'Particulars': '51% of aggregate generation available for captive consumption in units', 'Energy in Units': '0.00' },
+        { 'Sl.No.': 5, 'Particulars': 'Actual Adjusted / Consumed units by the captive users', 'Energy in Units': '0.00' },
+        { 'Sl.No.': 6, 'Particulars': 'Percentage of actual adjusted / consumed units by the captive users with respect to aggregate generation for captive use', 'Energy in Units': '0.00%' }
       ];
     }
-  
+    
+    // Extract data from the nested structure
+    const data = reportData.data;
+    
+    // Log the data being used for debugging
+    console.log('Form V-A Data:', {
+      totalGeneratedUnits: data.totalGeneratedUnits,
+      auxiliaryConsumption: data.auxiliaryConsumption,
+      aggregateGeneration: data.aggregateGeneration,
+      percentage51: data.percentage51,
+      totalAllocatedUnits: data.totalAllocatedUnits,
+      percentageAdjusted: data.percentageAdjusted
+    });
+    
+    // Return the formatted data
     return [
-      { 'Sl.No.': 1, 'Particulars': 'Total Generated units of a generating plant / Station identified for captive use', 'Energy in Units': reportData.totalGeneratedUnits || 0 },
-      { 'Sl.No.': 2, 'Particulars': 'Less : Auxiliary Consumption in the above in units', 'Energy in Units': reportData.auxiliaryConsumption || 0 },
-      { 'Sl.No.': 3, 'Particulars': 'Net units available for captive consumption (Aggregate generation for captive use)', 'Energy in Units': reportData.aggregateGeneration || 0 },
-      { 'Sl.No.': 4, 'Particulars': '51% of aggregate generation available for captive consumption in units', 'Energy in Units': reportData.percentage51 || 0 },
-      { 'Sl.No.': 5, 'Particulars': 'Actual Adjusted / Consumed units by the captive users', 'Energy in Units': reportData.totalAllocatedUnits || 0 },
-      { 'Sl.No.': 6, 'Particulars': 'Percentage of actual adjusted / consumed units by the captive users with respect to aggregate generation for captive use', 'Energy in Units': `${(Number(reportData.percentageAdjusted || 0)).toFixed(2)}%` }
+      { 
+        'Sl.No.': 1, 
+        'Particulars': 'Total Generated units of a generating plant / Station identified for captive use', 
+        'Energy in Units': formatNumber(data.totalGeneratedUnits)
+      },
+      { 
+        'Sl.No.': 2, 
+        'Particulars': 'Less : Auxiliary Consumption in the above in units', 
+        'Energy in Units': formatNumber(data.auxiliaryConsumption)
+      },
+      { 
+        'Sl.No.': 3, 
+        'Particulars': 'Net units available for captive consumption (Aggregate generation for captive use)', 
+        'Energy in Units': formatNumber(data.aggregateGeneration)
+      },
+      { 
+        'Sl.No.': 4, 
+        'Particulars': '51% of aggregate generation available for captive consumption in units', 
+        'Energy in Units': formatNumber(data.percentage51)
+      },
+      { 
+        'Sl.No.': 5, 
+        'Particulars': 'Actual Adjusted / Consumed units by the captive users', 
+        'Energy in Units': formatNumber(data.totalAllocatedUnits)
+      },
+      { 
+        'Sl.No.': 6, 
+        'Particulars': 'Percentage of actual adjusted / consumed units by the captive users with respect to aggregate generation for captive use', 
+        'Energy in Units': `${formatNumber(data.percentageAdjusted, true)}%`
+      }
     ];
   };
 

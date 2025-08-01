@@ -13,8 +13,8 @@ import {
 } from 'recharts';
 import { getAccessibleSiteIds } from '../../utils/siteAccessUtils';
 import { useAuth } from '../../context/AuthContext';
-import productionSiteApi from '../../services/productionSiteapi';
-import consumptionSiteApi from '../../services/consumptionSiteapi';
+import productionSiteApi from '../../services/productionSiteApi';
+import consumptionSiteApi from '../../services/consumptionSiteApi';
 import allocationService from '../../services/allocationService';
 import {
   FormControl,

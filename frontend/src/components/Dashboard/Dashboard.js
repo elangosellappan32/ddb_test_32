@@ -25,7 +25,7 @@ import {
   CheckCircle as CheckCircleIcon,
   Warning as WarningIcon
 } from '@mui/icons-material';
-import productionSiteApi from '../../services/productionSiteapi';
+import productionSiteApi from '../../services/productionSiteApi';
 import { useConsumptionStats } from '../../hooks/useConsumptionStats';
 import useDashboardData from '../../hooks/useDashboardData';
 import { Factory as IndustryIcon, Settings as TextileIcon } from '@mui/icons-material';

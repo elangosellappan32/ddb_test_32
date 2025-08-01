@@ -1,217 +1,204 @@
-import React from 'react';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Paper,
-  Box,
-  Typography
-} from '@mui/material';
-import { styled } from '@mui/material/styles';
-import CheckCircleIcon from '@mui/icons-material/CheckCircle';
-import ErrorIcon from '@mui/icons-material/Error';
+import * as XLSX from 'xlsx';
+import { getCellStyle, toNumber } from '../../utils/excelUtils';
 
-// Styled components
-const StyledTableCell = styled(TableCell)(({ theme, isheader }) => ({
-  padding: theme.spacing(1),
-  ...(isheader === 'true' && {
-    backgroundColor: theme.palette.primary.main,
-    color: theme.palette.common.white,
-    fontWeight: 'bold',
-  }),
-}));
+export const createFormVBWorksheet = (workbook, data, financialYear) => {
+  try {
+    // Validate required data
+    if (!data) {
+      throw new Error('No data provided for Form V-B');
+    }
 
-const StatusBadge = styled(Box)(({ theme, status }) => ({
-  display: 'inline-flex',
-  alignItems: 'center',
-  gap: theme.spacing(0.5),
-  padding: theme.spacing(0.5, 1),
-  borderRadius: theme.shape.borderRadius,
-  color: status === 'Yes' ? theme.palette.success.main : theme.palette.error.main,
-  backgroundColor: status === 'Yes' ? theme.palette.success.lighter : theme.palette.error.lighter,
-  fontSize: '0.875rem',
-}));
+    if (!data.siteMetrics || !Array.isArray(data.siteMetrics) || data.siteMetrics.length === 0) {
+      throw new Error('No site metrics data available for Form V-B');
+    }
 
-const FormVBWorksheet = ({ data }) => {
-  if (!data || !data.siteMetrics) {
-    return (
-      <Box sx={{ p: 2 }}>
-        <Typography>No data available</Typography>
-      </Box>
-    );
+    // Log the data being processed
+    console.log('Creating Form V-B worksheet with data:', data);
+
+    // Define headers
+    const headers = [
+      ['FORMAT V-B'],
+      ['Statement showing compliance to the requirement of proportionality of consumption for Captive Status'],
+      [],
+      [`Financial Year: ${financialYear}`],
+      [],
+      // Main header row with merged cells
+      [
+        'Sl. No.',
+        'Name of the Consumption Site',
+        'No. of equity shares of value Rs. /-',
+        '',
+        '% to be consumed on pro rata basis by each captive user',
+        '100% annual generation in MUs (x)',
+        'Annual Auxiliary\nconsumption in MUs (y)',
+        'Generation considered to verify\nconsumption criteria in MUs (x-y)*51%',
+        'Permitted consumption as per norms in MUs',
+        'Permitted consumption as per norms in MUs',
+        'Permitted consumption as per norms in MUs',
+        'Actual\nconsumption in MUs',
+        'Whether\nconsumption\nnorms met'
+      ],
+      // Subheader row
+      [
+        '',
+        '',
+        'As per share certificates as on 31st March',
+        '% of ownership through shares in Company/unit of CGP',
+        '',
+        '',
+        '',
+        '',
+        'with 0% variation',
+        '-10%',
+        '+10%',
+        '',
+        ''
+      ]
+    ];
+
+
+    // Process site data
+    const siteRows = data.siteMetrics.map((site, index) => [
+      index + 1,
+      site.siteName || `Site ${index + 1}`,
+      site.equityShares,
+      site.ownershipPercentage ? site.ownershipPercentage / 100 : null,
+      site.requiredConsumptionPercentage ? site.requiredConsumptionPercentage / 100 : null,
+      site.annualGeneration,
+      site.auxiliaryConsumption ? site.auxiliaryConsumption / 100 : null,
+      site.generationForConsumption,
+      site.permittedConsumption?.withZero,
+      site.permittedConsumption?.minus10,
+      site.permittedConsumption?.plus10,
+      site.actualConsumption,
+      site.consumptionNormsMet ? 'Yes' : 'No'
+    ]);
+
+    // Add totals row
+    const totalsRow = [
+      'Total',
+      '',
+      toNumber(data.totals?.totalEquityShares),
+      data.totals?.totalOwnershipPercentage ? toNumber(data.totals.totalOwnershipPercentage) / 100 : 0,
+      data.totals?.totalRequiredConsumptionPercentage ? toNumber(data.totals.totalRequiredConsumptionPercentage) / 100 : 0,
+      toNumber(data.totals?.annualGeneration),
+      data.totals?.auxiliaryConsumption ? toNumber(data.totals.auxiliaryConsumption) / 100 : 0,
+      toNumber(data.totals?.generationForConsumption),
+      toNumber(data.totals?.permittedConsumption?.withZero),
+      toNumber(data.totals?.permittedConsumption?.minus10),
+      toNumber(data.totals?.permittedConsumption?.plus10),
+      toNumber(data.totals?.actualConsumption),
+      ''
+    ];
+
+    // Create worksheet with headers and data
+    const ws = XLSX.utils.aoa_to_sheet([...headers, ...siteRows, totalsRow]);
+
+    // Set column widths
+    ws['!cols'] = [
+      { wch: 8 },     // Sl. No.
+      { wch: 40 },    // Name
+      { wch: 15 },    // Equity shares
+      { wch: 12 },    // Ownership %
+      { wch: 12 },    // Required %
+      { wch: 15 },    // Annual generation
+      { wch: 12 },    // Auxiliary
+      { wch: 15 },    // Net generation
+      { wch: 15 },    // Base permitted
+      { wch: 15 },    // Min permitted
+      { wch: 15 },    // Max permitted
+      { wch: 15 },    // Actual
+      { wch: 12 }     // Norms met
+    ];    // Define merged ranges
+    ws['!merges'] = [
+      { s: { r: 0, c: 0 }, e: { r: 0, c: 12 } },  // Title
+      { s: { r: 1, c: 0 }, e: { r: 1, c: 12 } },  // Subtitle
+      { s: { r: 3, c: 0 }, e: { r: 3, c: 12 } },  // Financial Year
+      // Header merges
+      { s: { r: 5, c: 0 }, e: { r: 6, c: 0 } },   // Sl. No.
+      { s: { r: 5, c: 1 }, e: { r: 6, c: 1 } },   // Name of the Consumption Site
+      { s: { r: 5, c: 2 }, e: { r: 5, c: 3 } },   // Equity Pattern
+      { s: { r: 5, c: 4 }, e: { r: 6, c: 4 } },   // % of annual generation
+      { s: { r: 5, c: 5 }, e: { r: 6, c: 5 } },   // 100% annual generation
+      { s: { r: 5, c: 6 }, e: { r: 6, c: 6 } },   // Annual Auxiliary
+      { s: { r: 5, c: 7 }, e: { r: 6, c: 7 } },   // Generation considered
+      { s: { r: 5, c: 8 }, e: { r: 5, c: 10 } },  // Permitted consumption
+      { s: { r: 5, c: 11 }, e: { r: 6, c: 11 } }, // Actual consumption
+      { s: { r: 5, c: 12 }, e: { r: 6, c: 12 } }  // Whether norms met
+    ];    // Set row heights
+    ws['!rows'] = [
+      { hpt: 35 },  // Title
+      { hpt: 45 },  // Subtitle
+      { hpt: 15 },  // Empty row
+      { hpt: 30 },  // Financial year
+      { hpt: 15 },  // Empty row
+      { hpt: 60 },  // Main header row
+      { hpt: 45 },  // Subheader row
+      ...Array(siteRows.length).fill({ hpt: 25 }), // Data rows
+      { hpt: 30 }   // Total row
+    ];
+
+    // Set cell alignment and text wrapping for headers
+    for (let R = 5; R <= 6; R++) {
+      for (let C = 0; C <= 12; C++) {
+        const cell = XLSX.utils.encode_cell({ r: R, c: C });
+        if (!ws[cell]) continue;
+
+        // Ensure style object exists
+        if (!ws[cell].s) ws[cell].s = {};
+        
+        // Set alignment
+        ws[cell].s.alignment = {
+          vertical: 'center',
+          horizontal: 'center',
+          wrapText: true
+        };
+      }
+    }
+
+    // Apply styles and number formats
+    const range = XLSX.utils.decode_range(ws['!ref']);
+    for (let R = range.s.r; R <= range.e.r; R++) {
+      for (let C = range.s.c; C <= range.e.c; C++) {
+        const cell = XLSX.utils.encode_cell({ r: R, c: C });
+        if (!ws[cell]) continue;        const isTitle = R === 0 || R === 1;
+        const isFinancialYear = R === 3;
+        const isMainHeader = R === 5;
+        const isSubHeader = R === 6;
+        const isData = R > 6 && R < range.e.r;
+        const isTotalRow = R === range.e.r;
+
+        // Apply basic style
+        ws[cell].s = getCellStyle(
+          isMainHeader || isSubHeader || isTitle || isFinancialYear,
+          isTotalRow,
+          R === 0,
+          C === 1 ? 'left' : 'center'
+        );
+
+        // Apply special background color for permitted consumption header
+        if (isMainHeader && C >= 8 && C <= 10) {
+          if (!ws[cell].s.fill) ws[cell].s.fill = {};
+          ws[cell].s.fill.fgColor = { rgb: 'F0F4F8' };
+          ws[cell].s.fill.patternType = 'solid';
+        }
+
+        // Apply number formats for data rows
+        if (isData || isTotalRow) {
+          if ([3, 4, 6].includes(C)) { // Percentage columns
+            ws[cell].z = '0.00%';
+          } else if ([2, 5, 7, 8, 9, 10, 11].includes(C)) { // Numeric columns
+            ws[cell].z = '#,##0.00';
+          }
+        }
+      }
+    }
+
+    // Add worksheet to workbook
+    XLSX.utils.book_append_sheet(workbook, ws, 'Form V-B');
+    return true;
+  } catch (error) {
+    console.error('Error creating Form V-B worksheet:', error);
+    return false;
   }
-
-  return (
-    <TableContainer component={Paper} sx={{ mb: 4, mt: 2 }}>
-      <Table size="small">
-        <TableHead>
-          <TableRow>
-            <StyledTableCell isheader="true" rowSpan={2} align="center">Sl. No.</StyledTableCell>
-            <StyledTableCell isheader="true" rowSpan={2} align="center">Name of the Consumption Site</StyledTableCell>
-            <StyledTableCell isheader="true" colSpan={2} align="center">Equity Pattern</StyledTableCell>
-            <StyledTableCell isheader="true" rowSpan={2} align="center">% of annual generation to be consumed</StyledTableCell>
-            <StyledTableCell isheader="true" rowSpan={2} align="center">100% annual generation in MUs (x)</StyledTableCell>
-            <StyledTableCell isheader="true" rowSpan={2} align="center" sx={{ backgroundColor: '#e3f2fd', fontWeight: 'bold' }}>
-              <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                <span>Annual Auxiliary</span>
-                <span>consumption in MUs (y)</span>
-              </Box>
-            </StyledTableCell>
-            <StyledTableCell isheader="true" rowSpan={2} align="center">
-              <Box>Generation considered to verify</Box>
-              <Box>consumption criteria in MUs (x-y)*51%</Box>
-            </StyledTableCell>
-            <StyledTableCell isheader="true" colSpan={3} align="center" sx={{ backgroundColor: '#f0f4f8', fontWeight: 'bold', borderLeft: '2px solid #90caf9', borderRight: '2px solid #90caf9' }}>
-              <Box>Permitted consumption as per norms in MUs</Box>
-            </StyledTableCell>
-            <StyledTableCell isheader="true" rowSpan={2} align="center">
-              <Box>Actual</Box>
-              <Box>consumption in MUs</Box>
-            </StyledTableCell>
-            <StyledTableCell isheader="true" rowSpan={2} align="center">
-              <Box>Whether</Box>
-              <Box>consumption</Box>
-              <Box>norms met</Box>
-            </StyledTableCell>
-          </TableRow>
-          <TableRow>
-            <StyledTableCell isheader="true" align="center">As per share certificates as on 31st March</StyledTableCell>
-            <StyledTableCell isheader="true" align="center">% of ownership through shares in Company/unit of CGP</StyledTableCell>
-            <StyledTableCell 
-              isheader="true" 
-              align="center" 
-              sx={{ 
-                backgroundColor: '#f0f4f8', 
-                borderLeft: '2px solid #90caf9',
-                fontWeight: 'normal',
-                fontSize: '0.85rem'
-              }}
-            >
-              With -10% variation
-            </StyledTableCell>
-            <StyledTableCell 
-              isheader="true" 
-              align="center" 
-              sx={{ 
-                backgroundColor: '#f0f4f8',
-                fontWeight: 'normal',
-                fontSize: '0.85rem'
-              }}
-            >
-              With 0% variation
-            </StyledTableCell>
-            <StyledTableCell 
-              isheader="true" 
-              align="center" 
-              sx={{ 
-                backgroundColor: '#f0f4f8', 
-                borderRight: '2px solid #90caf9',
-                fontWeight: 'normal',
-                fontSize: '0.85rem'
-              }}
-            >
-              With +10% variation
-            </StyledTableCell>
-          </TableRow>
-        </TableHead>
-        <TableBody>
-          {data.siteMetrics.map((row, index) => (
-            <TableRow key={row.consumptionSiteId || index}>
-              <StyledTableCell align="center">{index + 1}</StyledTableCell>
-              <StyledTableCell>{row.consumptionSite || row.siteName}</StyledTableCell>
-              <StyledTableCell align="right" sx={{ fontFamily: 'monospace' }}>
-                {Math.round(row.equityShares || 0).toLocaleString()}
-              </StyledTableCell>
-              <StyledTableCell align="right" sx={{ fontFamily: 'monospace' }}>
-                {(row.ownershipPercentage || 0).toFixed(2)}%
-              </StyledTableCell>
-              <StyledTableCell align="right" sx={{ fontFamily: 'monospace' }}>
-                {(row.requiredConsumptionPercentage || 0).toFixed(2)}%
-              </StyledTableCell>
-              <StyledTableCell align="right" sx={{ fontFamily: 'monospace' }}>
-                {Math.round(row.annualGeneration || 0).toLocaleString()}
-              </StyledTableCell>
-              <StyledTableCell align="right" sx={{ fontFamily: 'monospace' }}>
-                {(row.auxiliaryConsumption || 0).toLocaleString()}
-              </StyledTableCell>
-              <StyledTableCell align="right" sx={{ fontFamily: 'monospace' }}>
-                {Math.round(row.generationForConsumption || 0).toLocaleString()}
-              </StyledTableCell>
-              <StyledTableCell align="right" sx={{ fontFamily: 'monospace' }}>
-                {Math.round(row.permittedConsumption?.withZero || 0).toLocaleString()}
-              </StyledTableCell>
-              <StyledTableCell align="right" sx={{ fontFamily: 'monospace' }}>
-                {Math.round(row.permittedConsumption?.minus10 || 0).toLocaleString()}
-              </StyledTableCell>
-              <StyledTableCell align="right" sx={{ fontFamily: 'monospace' }}>
-                {Math.round(row.permittedConsumption?.plus10 || 0).toLocaleString()}
-              </StyledTableCell>
-              <StyledTableCell align="right" sx={{ 
-                fontFamily: 'monospace',
-                fontWeight: 500,
-                color: 'primary.main'
-              }}>
-                {Math.round(row.actualConsumption || 0).toLocaleString()}
-              </StyledTableCell>
-              <StyledTableCell align="center">
-                <StatusBadge status={row.consumptionNormsMet ? 'Yes' : 'No'}>
-                  {row.consumptionNormsMet ? 
-                    <CheckCircleIcon fontSize="inherit" /> : 
-                    <ErrorIcon fontSize="inherit" />
-                  }
-                  {row.consumptionNormsMet ? 'Yes' : 'No'}
-                </StatusBadge>
-              </StyledTableCell>
-            </TableRow>
-          ))}
-          
-          {/* Totals Row */}
-          {data.totals && (
-            <TableRow sx={{ 
-              backgroundColor: 'rgba(0, 0, 0, 0.04)', 
-              borderTop: '2px solid rgba(224, 224, 224, 1)'
-            }}>
-              <StyledTableCell colSpan={2} sx={{ fontWeight: 'bold' }}>Total</StyledTableCell>
-              <StyledTableCell align="right" sx={{ fontFamily: 'monospace', fontWeight: 700 }}>
-                {Math.round(data.totals.totalEquityShares || 0).toLocaleString()}
-              </StyledTableCell>
-              <StyledTableCell align="right" sx={{ fontFamily: 'monospace', fontWeight: 700 }}>
-                {(data.totals.totalOwnershipPercentage || 0).toFixed(2)}%
-              </StyledTableCell>
-              <StyledTableCell align="right" sx={{ fontFamily: 'monospace', fontWeight: 700 }}>
-                {(data.totals.totalRequiredConsumptionPercentage || 0).toFixed(2)}%
-              </StyledTableCell>
-              <StyledTableCell align="right" sx={{ fontFamily: 'monospace', fontWeight: 700 }}>
-                {Math.round(data.totals.annualGeneration || 0).toLocaleString()}
-              </StyledTableCell>
-              <StyledTableCell align="right" sx={{ fontFamily: 'monospace', fontWeight: 700 }}>
-                {(data.totals.auxiliaryConsumption || 0).toLocaleString()}
-              </StyledTableCell>
-              <StyledTableCell align="right" sx={{ fontFamily: 'monospace', fontWeight: 700 }}>
-                {Math.round(data.totals.generationForConsumption || 0).toLocaleString()}
-              </StyledTableCell>
-              <StyledTableCell align="right" sx={{ fontFamily: 'monospace', fontWeight: 700 }}>
-                {Math.round(data.totals.permittedConsumption?.withZero || 0).toLocaleString()}
-              </StyledTableCell>
-              <StyledTableCell align="right" sx={{ fontFamily: 'monospace', fontWeight: 700 }}>
-                {Math.round(data.totals.permittedConsumption?.minus10 || 0).toLocaleString()}
-              </StyledTableCell>
-              <StyledTableCell align="right" sx={{ fontFamily: 'monospace', fontWeight: 700 }}>
-                {Math.round(data.totals.permittedConsumption?.plus10 || 0).toLocaleString()}
-              </StyledTableCell>
-              <StyledTableCell align="right" sx={{ fontFamily: 'monospace', fontWeight: 700 }}>
-                {Math.round(data.totals.actualConsumption || 0).toLocaleString()}
-              </StyledTableCell>
-              <StyledTableCell></StyledTableCell>
-            </TableRow>
-          )}
-        </TableBody>
-      </Table>
-    </TableContainer>
-  );
 };
-
-export default FormVBWorksheet;

@@ -9,7 +9,7 @@ import {
 } from '@mui/material';
 import { getAccessibleSiteIds } from '../../utils/siteAccessUtils';
 import { useAuth } from '../../context/AuthContext';
-import productionSiteApi from '../../services/productionSiteapi';
+import productionSiteApi from '../../services/productionSiteApi';
 import bankingApi from '../../services/bankingApi';
 
 // Helper to make array of months for financial year: ["042024", ..., "122024", "012025",..., "032025"]
