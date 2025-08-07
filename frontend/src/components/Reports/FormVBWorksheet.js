@@ -1,204 +1,229 @@
 import * as XLSX from 'xlsx';
-import { getCellStyle, toNumber } from '../../utils/excelUtils';
 
-export const createFormVBWorksheet = (workbook, data, financialYear) => {
-  try {
-    // Validate required data
-    if (!data) {
-      throw new Error('No data provided for Form V-B');
-    }
+// Safe number parser
+const num = v => {
+  const n = Number(v);
+  return Number.isNaN(n) ? 0 : n;
+};
 
-    if (!data.siteMetrics || !Array.isArray(data.siteMetrics) || data.siteMetrics.length === 0) {
-      throw new Error('No site metrics data available for Form V-B');
-    }
+// Style helper
+const getCellStyle = ({ bold = false, center = false, fill = null, vertical = 'center', horizontal = 'center' } = {}) => ({
+  font: { bold, name: 'Arial' },
+  alignment: {
+    vertical,
+    horizontal,
+    wrapText: true
+  },
+  fill: fill ? { fgColor: { rgb: fill }, patternType: 'solid' } : undefined,
+  border: {
+    top: { style: 'thin', color: { rgb: '000000' } },
+    bottom: { style: 'thin', color: { rgb: '000000' } },
+    left: { style: 'thin', color: { rgb: '000000' } },
+    right: { style: 'thin', color: { rgb: '000000' } }
+  }
+});
 
-    // Log the data being processed
-    console.log('Creating Form V-B worksheet with data:', data);
+export function createFormVBWorksheet(workbook, data, financialYear) {
+  if (!data || !Array.isArray(data.siteMetrics) || !data.siteMetrics.length) {
+    throw new Error('No site metrics data.');
+  }
 
-    // Define headers
-    const headers = [
-      ['FORMAT V-B'],
-      ['Statement showing compliance to the requirement of proportionality of consumption for Captive Status'],
-      [],
-      [`Financial Year: ${financialYear}`],
-      [],
-      // Main header row with merged cells
-      [
-        'Sl. No.',
-        'Name of the Consumption Site',
-        'No. of equity shares of value Rs. /-',
-        '',
-        '% to be consumed on pro rata basis by each captive user',
-        '100% annual generation in MUs (x)',
-        'Annual Auxiliary\nconsumption in MUs (y)',
-        'Generation considered to verify\nconsumption criteria in MUs (x-y)*51%',
-        'Permitted consumption as per norms in MUs',
-        'Permitted consumption as per norms in MUs',
-        'Permitted consumption as per norms in MUs',
-        'Actual\nconsumption in MUs',
-        'Whether\nconsumption\nnorms met'
-      ],
-      // Subheader row
-      [
-        '',
-        '',
-        'As per share certificates as on 31st March',
-        '% of ownership through shares in Company/unit of CGP',
-        '',
-        '',
-        '',
-        '',
-        'with 0% variation',
-        '-10%',
-        '+10%',
-        '',
-        ''
-      ]
-    ];
+  const preHeaders = [
+    ['FORMAT V-B'],
+    ['Statement showing compliance to the requirement of proportionality of consumption for Captive Status'],
+    [],
+    [`Financial Year: ${financialYear}`],
+    []
+  ];
 
+  const headerRow1 = [
+    'Sl. No.',
+    'Name of Shareholder',
+    'No. of equity shares of value Rs. /-',
+    '',
+    '% to be consumed on pro rata basis by each captive user',
+    '100% annual generation in MUs (x)',
+    'Annual Auxiliary consumption in MUs (y)',
+    'Generation considered to verify consumption criteria in MUs (x-y)*51%',
+    'Permitted consumption as per norms in MUs',
+    '',
+    '',
+    'Actual consumption in MUs',
+    'Whether consumption norms met'
+  ];
 
-    // Process site data
-    const siteRows = data.siteMetrics.map((site, index) => [
-      index + 1,
-      site.siteName || `Site ${index + 1}`,
-      site.equityShares,
-      site.ownershipPercentage ? site.ownershipPercentage / 100 : null,
-      site.requiredConsumptionPercentage ? site.requiredConsumptionPercentage / 100 : null,
-      site.annualGeneration,
-      site.auxiliaryConsumption ? site.auxiliaryConsumption / 100 : null,
-      site.generationForConsumption,
-      site.permittedConsumption?.withZero,
-      site.permittedConsumption?.minus10,
-      site.permittedConsumption?.plus10,
-      site.actualConsumption,
-      site.consumptionNormsMet ? 'Yes' : 'No'
-    ]);
+  const headerRow2 = [
+    '',
+    '',
+    'As per share certificates as on 31st March',
+    '% of ownership through shares in Company/unit of CGP',
+    '',
+    '',
+    '',
+    '',
+    'with 0% variation',
+    'with -10% variation',
+    'with +10% variation',
+    '',
+    ''
+  ];
 
-    // Add totals row
-    const totalsRow = [
-      'Total',
-      '',
-      toNumber(data.totals?.totalEquityShares),
-      data.totals?.totalOwnershipPercentage ? toNumber(data.totals.totalOwnershipPercentage) / 100 : 0,
-      data.totals?.totalRequiredConsumptionPercentage ? toNumber(data.totals.totalRequiredConsumptionPercentage) / 100 : 0,
-      toNumber(data.totals?.annualGeneration),
-      data.totals?.auxiliaryConsumption ? toNumber(data.totals.auxiliaryConsumption) / 100 : 0,
-      toNumber(data.totals?.generationForConsumption),
-      toNumber(data.totals?.permittedConsumption?.withZero),
-      toNumber(data.totals?.permittedConsumption?.minus10),
-      toNumber(data.totals?.permittedConsumption?.plus10),
-      toNumber(data.totals?.actualConsumption),
-      ''
-    ];
+  // Data rows
+  const rows = data.siteMetrics.map((site, i) => [
+    i + 1,
+    site.siteName || site.name || `Site ${i + 1}`,
+    num(site.equityShares),
+    ((site.ownershipPercentage ?? site.allocationPercentage ?? 0)).toFixed(0) + '%',
+    'minimum 51%',
+    num(site.annualGeneration),
+    '', // Auxiliary merged cell placeholder
+    Math.round((num(site.annualGeneration) - num(site.auxiliaryConsumption)) * 0.51),
+    '', '', '', // permitted merged placeholders
+    num(site.actualConsumption),
+    (site.consumptionNormsMet ?? site.normsCompliance) ? 'Yes' : 'No'
+  ]);
 
-    // Create worksheet with headers and data
-    const ws = XLSX.utils.aoa_to_sheet([...headers, ...siteRows, totalsRow]);
+  // Calculate totals for auxiliary and permitted consumption columns by summing siteMetrics directly
+  const totalAuxiliary = Math.round(data.siteMetrics.reduce((acc, s) => acc + num(s.auxiliaryConsumption), 0));
+  const totalPermWithZero = Math.round(data.siteMetrics.reduce((acc, s) => acc + num(s.permittedConsumption?.withZero), 0));
+  const totalPermMinus10 = Math.round(data.siteMetrics.reduce((acc, s) => acc + num(s.permittedConsumption?.minus10), 0));
+  const totalPermPlus10 = Math.round(data.siteMetrics.reduce((acc, s) => acc + num(s.permittedConsumption?.plus10), 0));
 
-    // Set column widths
-    ws['!cols'] = [
-      { wch: 8 },     // Sl. No.
-      { wch: 40 },    // Name
-      { wch: 15 },    // Equity shares
-      { wch: 12 },    // Ownership %
-      { wch: 12 },    // Required %
-      { wch: 15 },    // Annual generation
-      { wch: 12 },    // Auxiliary
-      { wch: 15 },    // Net generation
-      { wch: 15 },    // Base permitted
-      { wch: 15 },    // Min permitted
-      { wch: 15 },    // Max permitted
-      { wch: 15 },    // Actual
-      { wch: 12 }     // Norms met
-    ];    // Define merged ranges
-    ws['!merges'] = [
-      { s: { r: 0, c: 0 }, e: { r: 0, c: 12 } },  // Title
-      { s: { r: 1, c: 0 }, e: { r: 1, c: 12 } },  // Subtitle
-      { s: { r: 3, c: 0 }, e: { r: 3, c: 12 } },  // Financial Year
-      // Header merges
-      { s: { r: 5, c: 0 }, e: { r: 6, c: 0 } },   // Sl. No.
-      { s: { r: 5, c: 1 }, e: { r: 6, c: 1 } },   // Name of the Consumption Site
-      { s: { r: 5, c: 2 }, e: { r: 5, c: 3 } },   // Equity Pattern
-      { s: { r: 5, c: 4 }, e: { r: 6, c: 4 } },   // % of annual generation
-      { s: { r: 5, c: 5 }, e: { r: 6, c: 5 } },   // 100% annual generation
-      { s: { r: 5, c: 6 }, e: { r: 6, c: 6 } },   // Annual Auxiliary
-      { s: { r: 5, c: 7 }, e: { r: 6, c: 7 } },   // Generation considered
-      { s: { r: 5, c: 8 }, e: { r: 5, c: 10 } },  // Permitted consumption
-      { s: { r: 5, c: 11 }, e: { r: 6, c: 11 } }, // Actual consumption
-      { s: { r: 5, c: 12 }, e: { r: 6, c: 12 } }  // Whether norms met
-    ];    // Set row heights
-    ws['!rows'] = [
-      { hpt: 35 },  // Title
-      { hpt: 45 },  // Subtitle
-      { hpt: 15 },  // Empty row
-      { hpt: 30 },  // Financial year
-      { hpt: 15 },  // Empty row
-      { hpt: 60 },  // Main header row
-      { hpt: 45 },  // Subheader row
-      ...Array(siteRows.length).fill({ hpt: 25 }), // Data rows
-      { hpt: 30 }   // Total row
-    ];
+  // Fill merged cells only at first data row
+  if (rows.length) {
+    rows[0][6] = totalAuxiliary;
+    rows[0][8] = totalPermWithZero;
+    rows[0][9] = totalPermMinus10;
+    rows[0][10] = totalPermPlus10;
+  }
 
-    // Set cell alignment and text wrapping for headers
-    for (let R = 5; R <= 6; R++) {
-      for (let C = 0; C <= 12; C++) {
-        const cell = XLSX.utils.encode_cell({ r: R, c: C });
-        if (!ws[cell]) continue;
+  // Calculate other totals likewise from siteMetrics for accuracy
+  const totalEquityShares = Math.round(data.siteMetrics.reduce((acc, s) => acc + num(s.equityShares), 0));
+  const totalOwnershipAvg = data.siteMetrics.length > 0 ? 
+        data.siteMetrics.reduce((acc, s) => acc + (num(s.ownershipPercentage ?? s.allocationPercentage) || 0), 0) / data.siteMetrics.length : 0;
+  const totalAnnualGeneration = Math.round(data.siteMetrics.reduce((acc, s) => acc + num(s.annualGeneration), 0));
+  const totalGenerationForConsumption = Math.round(data.siteMetrics.reduce((acc, s) => acc + ((num(s.annualGeneration) - num(s.auxiliaryConsumption)) * 0.51), 0));
+  const totalActualConsumption = Math.round(data.siteMetrics.reduce((acc, s) => acc + num(s.actualConsumption), 0));
 
-        // Ensure style object exists
-        if (!ws[cell].s) ws[cell].s = {};
-        
-        // Set alignment
-        ws[cell].s.alignment = {
-          vertical: 'center',
-          horizontal: 'center',
-          wrapText: true
-        };
-      }
-    }
+  // Prepare total row with correct summed values
+  const totalsRow = [
+    'Total',
+    '',
+    totalEquityShares,
+    totalOwnershipAvg.toFixed(0) + '%',
+    '',
+    totalAnnualGeneration,
+    totalAuxiliary,
+    totalGenerationForConsumption,
+    totalPermWithZero,
+    totalPermMinus10,
+    totalPermPlus10,
+    totalActualConsumption,
+    ''
+  ];
 
-    // Apply styles and number formats
-    const range = XLSX.utils.decode_range(ws['!ref']);
-    for (let R = range.s.r; R <= range.e.r; R++) {
-      for (let C = range.s.c; C <= range.e.c; C++) {
-        const cell = XLSX.utils.encode_cell({ r: R, c: C });
-        if (!ws[cell]) continue;        const isTitle = R === 0 || R === 1;
-        const isFinancialYear = R === 3;
-        const isMainHeader = R === 5;
-        const isSubHeader = R === 6;
-        const isData = R > 6 && R < range.e.r;
-        const isTotalRow = R === range.e.r;
+  const worksheetData = [...preHeaders, headerRow1, headerRow2, ...rows, totalsRow];
+  const ws = XLSX.utils.aoa_to_sheet(worksheetData);
 
-        // Apply basic style
-        ws[cell].s = getCellStyle(
-          isMainHeader || isSubHeader || isTitle || isFinancialYear,
-          isTotalRow,
-          R === 0,
-          C === 1 ? 'left' : 'center'
-        );
+  const firstDataRow = preHeaders.length + 2;
+  const lastDataRow = firstDataRow + rows.length - 1;
 
-        // Apply special background color for permitted consumption header
-        if (isMainHeader && C >= 8 && C <= 10) {
-          if (!ws[cell].s.fill) ws[cell].s.fill = {};
-          ws[cell].s.fill.fgColor = { rgb: 'F0F4F8' };
-          ws[cell].s.fill.patternType = 'solid';
+  ws['!cols'] = [
+    { wch: 7 }, { wch: 32 }, { wch: 18 }, { wch: 15 }, { wch: 19 },
+    { wch: 18 }, { wch: 18 }, { wch: 23 }, { wch: 22 }, { wch: 22 },
+    { wch: 22 }, { wch: 20 }, { wch: 14 }
+  ];
+
+  ws['!merges'] = [
+    { s: { r: 0, c: 0 }, e: { r: 0, c: 12 } },
+    { s: { r: 1, c: 0 }, e: { r: 1, c: 12 } },
+    { s: { r: 3, c: 0 }, e: { r: 3, c: 12 } },
+
+    { s: { r: 5, c: 0 }, e: { r: 6, c: 0 } },
+    { s: { r: 5, c: 1 }, e: { r: 6, c: 1 } },
+    { s: { r: 5, c: 2 }, e: { r: 5, c: 3 } },
+    { s: { r: 5, c: 4 }, e: { r: 6, c: 4 } },
+    { s: { r: 5, c: 5 }, e: { r: 6, c: 5 } },
+    { s: { r: 5, c: 6 }, e: { r: 6, c: 6 } },
+    { s: { r: 5, c: 7 }, e: { r: 6, c: 7 } },
+    { s: { r: 5, c: 8 }, e: { r: 5, c: 10 } },
+    { s: { r: 5, c: 11 }, e: { r: 6, c: 11 } },
+    { s: { r: 5, c: 12 }, e: { r: 6, c: 12 } },
+
+    { s: { r: firstDataRow, c: 6 }, e: { r: lastDataRow, c: 6 } },
+    { s: { r: firstDataRow, c: 8 }, e: { r: lastDataRow, c: 8 } },
+    { s: { r: firstDataRow, c: 9 }, e: { r: lastDataRow, c: 9 } },
+    { s: { r: firstDataRow, c: 10 }, e: { r: lastDataRow, c: 10 } },
+  ];
+
+  ws['!rows'] = [
+    { hpt: 32 }, { hpt: 24 }, { hpt: 8 }, { hpt: 20 }, { hpt: 8 },
+    { hpt: 28 }, { hpt: 28 },
+    ...Array(rows.length).fill({ hpt: 22 }),
+    { hpt: 28 }
+  ];
+
+  const range = XLSX.utils.decode_range(ws['!ref']);
+  const ownershipColIdx = 3;
+  for (let R = 0; R <= range.e.r; R++) {
+    for (let C = 0; C <= range.e.c; C++) {
+      const cellRef = XLSX.utils.encode_cell({ r: R, c: C });
+      if (!ws[cellRef]) continue;
+
+      const isTitleRow = R < preHeaders.length;
+      const isHeaderRow = R === 5 || R === 6;
+      const isDataRow = R >= firstDataRow && R < range.e.r;
+      const isTotalsRow = R === range.e.r;
+
+      if (isTitleRow) {
+        ws[cellRef].s = getCellStyle({ bold: true, center: true, fill: 'E3F2FD' });
+      } else if (isHeaderRow) {
+        ws[cellRef].s = getCellStyle({ bold: true, center: true, fill: 'F0F4F8' });
+      } else if (isTotalsRow) {
+        // Numeric cells bottom-right in totals row
+        const isNumericColumn = [2, 5, 6, 7, 8, 9, 10, 11].includes(C);
+        const isOwnershipCol = (C === ownershipColIdx);
+        if (isNumericColumn) {
+          ws[cellRef].s = getCellStyle({ bold: true, center: false, vertical: 'bottom', horizontal: 'right', fill: 'F8F9FA' });
+          ws[cellRef].z = '#,##0';
+          if (typeof ws[cellRef].v === 'number') ws[cellRef].v = Math.round(ws[cellRef].v);
+        } else if (isOwnershipCol) {
+          ws[cellRef].s = getCellStyle({ bold: true, center: false, vertical: 'bottom', horizontal: 'right', fill: 'F8F9FA' });
+          ws[cellRef].z = '0%';
+          if (typeof ws[cellRef].v === 'string' && ws[cellRef].v.includes('%')) {
+            ws[cellRef].v = parseFloat(ws[cellRef].v.replace('%', '')) / 100;
+            ws[cellRef].t = 'n';
+          }
+        } else {
+          ws[cellRef].s = getCellStyle({ bold: true, center: C === 0, fill: 'F8F9FA' });
+          ws[cellRef].s.alignment.horizontal = C === 1 ? 'left' : (C === 0 ? 'center' : 'left');
+          ws[cellRef].s.alignment.vertical = 'bottom';
         }
-
-        // Apply number formats for data rows
-        if (isData || isTotalRow) {
-          if ([3, 4, 6].includes(C)) { // Percentage columns
-            ws[cell].z = '0.00%';
-          } else if ([2, 5, 7, 8, 9, 10, 11].includes(C)) { // Numeric columns
-            ws[cell].z = '#,##0.00';
+      } else if (isDataRow) {
+        const isNameCol = C === 1;
+        const isOwnershipColData = C === ownershipColIdx;
+        if (isOwnershipColData) {
+          ws[cellRef].s = getCellStyle({ bold: false, center: false, vertical: 'bottom', horizontal: 'right' });
+          ws[cellRef].z = '0%';
+          if (typeof ws[cellRef].v === 'string' && ws[cellRef].v.includes('%')) {
+            ws[cellRef].v = parseFloat(ws[cellRef].v.replace('%', '')) / 100;
+            ws[cellRef].t = 'n';
+          }
+        } else if (isNameCol) {
+          ws[cellRef].s = getCellStyle({ bold: false, center: false, vertical: 'bottom', horizontal: 'left' });
+        } else {
+          ws[cellRef].s = getCellStyle({ bold: false, center: false, vertical: 'bottom', horizontal: 'right' });
+          if ([2, 5, 6, 7, 8, 9, 10, 11].includes(C)) {
+            ws[cellRef].z = '#,##0';
+            if (typeof ws[cellRef].v === 'number') ws[cellRef].v = Math.round(ws[cellRef].v);
           }
         }
+      } else {
+        ws[cellRef].s = getCellStyle();
       }
     }
-
-    // Add worksheet to workbook
-    XLSX.utils.book_append_sheet(workbook, ws, 'Form V-B');
-    return true;
-  } catch (error) {
-    console.error('Error creating Form V-B worksheet:', error);
-    return false;
   }
-};
+
+  XLSX.utils.book_append_sheet(workbook, ws, 'Form V-B');
+  return true;
+}

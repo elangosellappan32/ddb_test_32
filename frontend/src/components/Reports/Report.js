@@ -117,7 +117,7 @@ const StatusBadge = styled(Box)(({ status }) => ({
   }
 }));
 
-const AllocationReport = () => {
+const Report = () => {
   const { enqueueSnackbar } = useSnackbar();
   const [isForm5B, setIsForm5B] = useState(false);
   const [reportData, setReportData] = useState(null);
@@ -1048,4 +1048,4 @@ const AllocationReport = () => {
   );
 };
 
-export default AllocationReport;
+export default Report;
