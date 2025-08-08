@@ -42,38 +42,76 @@ const FormVCsvReport = ({
       if (isForm5B) {
         // Prepare FORMAT V-B data
         const formVB = prepareForm5BData();
-        const rows = formVB.rows || [];
+        
+        // Log the data being used
+        console.log('Form V-B Data:', {
+          rows: formVB.rows,
+          totals: formVB.totals
+        });
+
+        // Verify data structure
+        if (!formVB.rows || !Array.isArray(formVB.rows)) {
+          throw new Error('Invalid data structure: rows data is missing or invalid');
+        }
+
+        const rows = formVB.rows;
         const totals = formVB.totals;
 
-        // Header rows with simulated vertical and horizontal merges
+        // Log sample calculations for first row if exists
+        if (rows.length > 0) {
+          const sampleRow = rows[0];
+          console.log('Sample Row Calculations:', {
+            name: sampleRow.name,
+            annualGeneration: sampleRow.generation,
+            auxConsumption: sampleRow.auxiliary,
+            generationCriteria: (sampleRow.generation - sampleRow.auxiliary) * 0.51,
+            ownership: sampleRow.shares?.ownership,
+            certificates: sampleRow.shares?.certificates
+          });
+        }
+
+        // Log totals calculations
+        if (totals) {
+          console.log('Totals Calculations:', {
+            totalGeneration: totals.generation,
+            totalAuxiliary: totals.auxiliary,
+            totalCriteria: (totals.generation - totals.auxiliary) * 0.51,
+            totalShares: totals.shares?.certificates,
+            totalOwnership: totals.shares?.ownership
+          });
+        }
+
+        // Header rows
         const headerRow1 = [
-          'Sl. No.',
-          'Name of shareholder',
-          'No. of equity shares of value Rs. /-', // spans 2 cols horizontally
-          '',
+          'Sl.No.',
+          'Name of share holder',
+          'No. of equity shares of value Rs. /-',
+          '% of ownership through shares in Company/unit of CGP',
           '% to be consumed on pro rata basis by each captive user',
           '100% annual generation in MUs (x)',
-          'Annual Auxiliary consumption in MUs (y)', // vertical merge (rowSpan=2)
+          'Annual Auxiliary consumption in MUs (y)',
           'Generation considered to verify consumption criteria in MUs (x-y)*51%',
-          'Permitted consumption as per norms in MUs', '', '',
-          'Actual consumption in MUs', // vertical merge (rowSpan=2)
-          'Whether consumption norms met', // vertical merge (rowSpan=2)
+          'Permitted consumption as per norms in MUs',
+          '',
+          '',
+          'Actual consumption in MUs',
+          'Whether consumption norms met'
         ];
 
         const headerRow2 = [
           '',
           '',
           'As per share certificates as on 31st March',
-          '% of ownership through shares in Company/unit of CGP',
           '',
           '',
-          '', // empty under vertical merged "Annual Auxiliary consumption in MUs (y)"
-          '',
-          'With -10% variation',
-          'With 0% variation',
-          'With +10% variation',
           '',
           '',
+          '',
+          'with -10% variation',
+          'with 0% variation',
+          'with +10% variation',
+          '',
+          ''
         ];
 
         // Compose CSV content
@@ -81,64 +119,81 @@ const FormVCsvReport = ({
         csvContent += headerRow1.map(wrapCsvCell).join(',') + '\r\n';
         csvContent += headerRow2.map(wrapCsvCell).join(',') + '\r\n';
 
-        // Now write all data rows with correct alignment
+        // Data rows
         rows.forEach((row, idx) => {
-          // Extract and safely format values
-          const slNo = row.slNo ?? idx + 1;
-          const name = row.name ?? '';
-          const certShares = formatNumber(row.shares?.certificates);
-          const ownershipPercent = formatNumber(row.shares?.ownership, 2);
-          const proRata = row.proRata ?? 'minimum 51%'; // static text or dynamic as needed
-          const generation = formatNumber(row.generation);
-          const auxiliary = formatNumber(row.auxiliary);
-          const criteria = formatNumber(row.criteria, 2);
-          const permittedMinus10 = formatNumber(row.permittedConsumption?.minus10);
-          const permittedWithZero = formatNumber(row.permittedConsumption?.withZero);
-          const permittedPlus10 = formatNumber(row.permittedConsumption?.plus10);
-          const actual = formatNumber(row.actual);
-          const norms = row.norms ?? '';
-
+          // Parse numeric values correctly
+          const annualGeneration = Math.round(parseFloat(row.generation?.replace(/,/g, '')) || 0);
+          const auxConsumption = Math.round(parseFloat(row.auxiliary?.replace(/,/g, '')) || 0);
+          const generationCriteria = Math.round((annualGeneration - auxConsumption) * 0.51);
+          
+          // Format permitted consumption values without decimals
+          const permittedMinus10 = formatNumber(Math.round(generationCriteria * 0.9));
+          const permittedZero = formatNumber(generationCriteria);
+          const permittedPlus10 = formatNumber(Math.round(generationCriteria * 1.1));
+          
           const dataRow = [
-            slNo,
-            name,
-            certShares,
-            '', // empty cell to simulate horizontal merge for "No. of equity shares..." spanning two cols
-            proRata,
-            generation,
-            auxiliary,
-            criteria,
+            row.slNo,
+            row.name,
+            formatNumber(row.shares?.certificates),
+            row.shares?.ownership || '0%',
+            row.proRata || 'minimum 51%',
+            formatNumber(annualGeneration),
+            formatNumber(auxConsumption),
+            formatNumber(generationCriteria),
             permittedMinus10,
-            permittedWithZero,
+            permittedZero,
             permittedPlus10,
-            actual,
-            norms,
+            formatNumber(Math.round(parseFloat(row.actual?.replace(/,/g, '')) || 0)),
+            row.norms || ''
           ];
-
           csvContent += dataRow.map(wrapCsvCell).join(',') + '\r\n';
         });
 
-        // Add totals row, aligned similarly
+        // Total row
         if (totals) {
+          const totalGeneration = Math.round(parseFloat(totals.generation?.replace(/,/g, '')) || 0);
+          const totalAuxiliary = Math.round(parseFloat(totals.auxiliary?.replace(/,/g, '')) || 0);
+          const totalCriteria = Math.round((totalGeneration - totalAuxiliary) * 0.51);
+          
+          const totalPermittedMinus10 = formatNumber(Math.round(totalCriteria * 0.9));
+          const totalPermittedZero = formatNumber(totalCriteria);
+          const totalPermittedPlus10 = formatNumber(Math.round(totalCriteria * 1.1));
+
           const totalRow = [
-            'Total',
+            totals.slNo || 'Total',
             '',
             formatNumber(totals.shares?.certificates),
+            totals.shares?.ownership || '0%',
             '',
-            '', // no total for proRata
-            formatNumber(totals.generation),
-            formatNumber(totals.auxiliary),
-            formatNumber(totals.criteria, 2),
-            formatNumber(totals.permittedConsumption?.minus10),
-            formatNumber(totals.permittedConsumption?.withZero),
-            formatNumber(totals.permittedConsumption?.plus10),
-            formatNumber(totals.actual),
-            totals.norms ?? '',
+            formatNumber(totalGeneration),
+            formatNumber(totalAuxiliary),
+            formatNumber(totalCriteria),
+            totalPermittedMinus10,
+            totalPermittedZero,
+            totalPermittedPlus10,
+            formatNumber(Math.round(parseFloat(totals.actual?.replace(/,/g, '')) || 0)),
+            totals.norms || ''
           ];
           csvContent += totalRow.map(wrapCsvCell).join(',') + '\r\n';
         }
+
+        // Log formatted CSV preview
+        console.log('CSV Data Preview:', {
+          headers: headerRow1,
+          firstRow: rows[0],
+          calculatedValues: {
+            generation: formatNumber(parseFloat(rows[0]?.generation?.replace(/,/g, '')), 2),
+            auxiliary: formatNumber(parseFloat(rows[0]?.auxiliary?.replace(/,/g, '')), 2),
+            criteria: formatNumber((parseFloat(rows[0]?.generation?.replace(/,/g, '')) - 
+                      parseFloat(rows[0]?.auxiliary?.replace(/,/g, '')) * 0.51), 2)
+          }
+        });
       } else {
         // FORMAT V-A (simple flat structure)
         const formVA = prepareForm5AData();
+
+        // FORMAT V-A data logging
+        console.log('Form V-A Data:', formVA);
 
         const infoRows = [
           ['FORMAT V-A'],
