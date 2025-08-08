@@ -103,11 +103,10 @@ const formatMonthDisplay = (monthKey) => {
   const yearNum = monthKey.slice(2);
   const monthNames = [
     "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
   ];
   const monthIdx = monthNum - 1;
-  const isNewFY = monthNum === 4;
-  return `${monthNames[monthIdx]}${isNewFY ? ` FY${yearNum}` : ""}`;
+  return `${monthNames[monthIdx]} ${yearNum}`;
 };
 
 const getSortedFinancialYearMonths = (fy) => {

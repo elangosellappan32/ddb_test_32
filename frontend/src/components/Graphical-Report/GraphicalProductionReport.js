@@ -94,8 +94,7 @@ const processUnitData = (units, siteObj, siteKey, months) => {
     if (existingData) return existingData;
     return {
       sk: month,
-      siteKey: siteKey,
-      siteName: siteObj.name,
+      siteKey: siteObj.name,
       companyId: siteObj.companyId,
       period: month,
       month: monthNum,
@@ -116,8 +115,7 @@ const formatMonthDisplay = (monthKey) => {
     "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
   ];
   const monthIdx = monthNum - 1;
-  const isNewFY = monthNum === 4;
-  return `${monthNames[monthIdx]}${isNewFY ? ` FY${yearNum}` : ''}`;
+  return `${monthNames[monthIdx]} ${yearNum}`;
 };
 
 // Sort months (April..March)

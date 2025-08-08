@@ -46,8 +46,7 @@ const formatMonthDisplay = (monthKey) => {
   ];
   const m = parseInt(monthKey.slice(0, 2), 10) - 1;
   const y = monthKey.slice(2);
-  const isFYStart = m === 3; // April
-  return `${monthNames[m]}${isFYStart ? ` FY${y}` : ''}`;
+  return `${monthNames[m]} ${y}`;
 };
 const getSortedFinancialYearMonths = (fy) => {
   const months = getFinancialYearMonths(fy);

@@ -73,7 +73,7 @@ const formatMonth = key => {
   const year = key.slice(2);
   const names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
                  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  return `${names[idx]}${idx === 3 ? ` FY${year}` : ` ${year}`}`;
+  return `${names[idx]} ${year}`;
 };
 
 // ──────────────────────────────────────────────────────────────────────────────

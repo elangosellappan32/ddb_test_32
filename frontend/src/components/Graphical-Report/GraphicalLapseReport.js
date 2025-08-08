@@ -20,15 +20,16 @@ function getFinancialYearMonths(fy) {
   return months;
 }
 
-// Format X-axis label month => e.g. Apr FY2024, May2024
-function formatMonthLabel(monthKey) {
+// Format months like "Apr 2024", "May 2024", ... "Mar 2025"
+function formatMonthDisplay(monthKey) {
   if (!monthKey || monthKey.length !== 6) return monthKey;
   const monthNum = parseInt(monthKey.slice(0, 2), 10);
-  const year = monthKey.slice(2);
-  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-                      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  const label = monthNames[monthNum - 1];
-  return `${label}${monthNum === 4 ? ` FY${year}` : year}`;
+  const yearNum = monthKey.slice(2);
+  const monthNames = [
+    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+  ];
+  const monthIdx = monthNum - 1;
+  return `${monthNames[monthIdx]} ${yearNum}`;  // Simplified format without FY prefix
 }
 
 const palette = [
@@ -147,7 +148,7 @@ const GraphicalLapseReport = () => {
   // Prepare chart data
   const months = getFinancialYearMonths(financialYear);
   const chartData = months.map(month => {
-    const row = { month: formatMonthLabel(month) };
+    const row = { month: formatMonthDisplay(month) };
     selectedSites.forEach(siteKey => {
       const siteObj = availableSites.find(s => s.key === siteKey);
       const siteName = siteObj?.name || siteKey;
