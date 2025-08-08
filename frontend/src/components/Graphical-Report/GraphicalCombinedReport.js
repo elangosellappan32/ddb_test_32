@@ -92,9 +92,6 @@ async function fetchCombinedC(financialYear, user) {
     getAccessibleSiteIds(user, 'consumption').map(id => id.split('_')[1]) // Extract siteId only
   );
 
-  console.log('User accessible production sites:', Array.from(accessibleProdSites));
-  console.log('User accessible consumption sites:', Array.from(accessibleConsSites));
-
   // 2.2 ‣ Build name look-up tables
   const [{ data: prodSites = [] }, { data: consSites = [] }] = await Promise.all([
     productionSiteApi.fetchAll(),
@@ -114,8 +111,7 @@ async function fetchCombinedC(financialYear, user) {
 
       try {
         const { data: rows = [] } = await productionUnitApi.fetchAll(companyId, siteId);
-        console.log(`Fetched ${rows.length} production units for ${label}`);
-        
+
         rows.forEach(r => {
           const m = r.sk || r.period ||
                     (r.date && (() => {
@@ -125,7 +121,6 @@ async function fetchCombinedC(financialYear, user) {
           if (months.includes(m)) {
             const cValue = sumC(r);
             output[label][m] += cValue;
-            console.log(`[PRODUCTION] ${label} | Month: ${m} | C-Sum: ${cValue}`);
           }
         });
       } catch (error) {
@@ -143,7 +138,6 @@ async function fetchCombinedC(financialYear, user) {
 
       try {
         const { data: rows = [] } = await consumptionUnitApi.fetchAll(companyId, siteId);
-        console.log(`Fetched ${rows.length} consumption units for ${label}`);
         
         rows.forEach(r => {
           const m = r.sk || r.period ||
@@ -154,7 +148,6 @@ async function fetchCombinedC(financialYear, user) {
           if (months.includes(m)) {
             const cValue = sumC(r);
             output[label][m] += cValue;
-            console.log(`[CONSUMPTION] ${label} | Month: ${m} | C-Sum: ${cValue}`);
           }
         });
       } catch (error) {
@@ -167,7 +160,6 @@ async function fetchCombinedC(financialYear, user) {
   await Promise.all(months.map(async m => {
     try {
       const rows = await allocationService.fetchAllocationsByMonth(m);
-      console.log(`Processing ${rows.length} allocation records for month ${m}`);
       
       rows.forEach(r => {
         const [, pId, cId] = (r.pk || '').split('_');
@@ -176,20 +168,16 @@ async function fetchCombinedC(financialYear, user) {
         const hasAccessToProd = accessibleProdSites.has(pId);
         const hasAccessToCons = accessibleConsSites.has(cId);
         
-        console.log(`Allocation ${pId} → ${cId}: prod access=${hasAccessToProd}, cons access=${hasAccessToCons}`);
         
         if (hasAccessToProd && hasAccessToCons) {
           const label = `${prodName[pId] ?? pId} → ${consName[cId] ?? cId}_allocation`;
           output[label] ??= { ...zeroByM };
           const cValue = sumC(r.allocated || r);
           output[label][m] += cValue;
-          console.log(`[ALLOCATION] ${label} | Month: ${m} | C-Sum: ${cValue}`);
         } else {
-          console.log(`[ALLOCATION FILTERED] Skipped ${pId} → ${cId}: insufficient access`);
         }
       });
     } catch (error) {
-      console.error(`Error fetching allocations for month ${m}:`, error);
     }
   }));
 
@@ -203,7 +191,6 @@ async function fetchCombinedC(financialYear, user) {
 
         try {
           const rows = await api.fetchAllByPk(`${companyId}_${siteId}`);
-          console.log(`Fetched ${rows.length} ${suffix} records for ${label}`);
           
           rows.forEach(r => {
             const m = r.sk || r.period ||
@@ -214,7 +201,6 @@ async function fetchCombinedC(financialYear, user) {
             if (months.includes(m)) {
               const cValue = sumC(r.allocated || r);
               output[label][m] += cValue;
-              console.log(`[${suffix.toUpperCase()}] ${label} | Month: ${m} | C-Sum: ${cValue}`);
             }
           });
         } catch (error) {
@@ -230,8 +216,6 @@ async function fetchCombinedC(financialYear, user) {
       Object.values(values).some(val => val > 0)
     )
   );
-
-  console.log('Final filtered output keys:', Object.keys(filteredOutput));
   return { months, output: filteredOutput };
 }
 
@@ -305,17 +289,7 @@ export default function GraphicalCombinedReport() {
         Site-wise Monthly Combined C Values (All Modules)
       </Typography>
       
-      {/* Enhanced info section */}
-      <Box sx={{ mb: 2, p: 2, bgcolor: 'background.default', borderRadius: 1 }}>
-        <Typography variant="body2" color="text.secondary">
-          📊 Showing data for all accessible sites. Allocation data filtered to pairs where you have access to both production and consumption sites.
-        </Typography>
-        {stats.total > 0 && (
-          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-            📈 Displaying {stats.filtered} of {stats.total} data series with non-zero values
-          </Typography>
-        )}
-      </Box>
+  
 
       {/* Controls */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>

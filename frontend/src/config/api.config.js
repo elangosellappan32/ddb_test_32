@@ -148,7 +148,8 @@ export const API_CONFIG = {
             CREATE: '/lapse',
             UPDATE: (pk, sk) => `/lapse/${pk}/${sk}`,
             DELETE: (pk, sk) => `/lapse/${pk}/${sk}`,
-            GET_BY_MONTH: (month) => `/lapse/month/${month}`
+            GET_BY_MONTH: (month) => `/lapse/month/${month}`,
+            GET_BY_PERIOD: (period) => `/lapse/month/${period}`  // Added this line
         },
         COMPANY: {
             BASE: '/company',

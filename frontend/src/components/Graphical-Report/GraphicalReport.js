@@ -6,6 +6,7 @@ import GraphicalAllocationReport from './GraphicalAllocationReport';
 import GraphicalBankingReport from './GraphicalBankingReport';
 import GraphicalLapseReport from './GraphicalLapseReport';
 import GraphicalCombinedReport from './GraphicalCombinedReport';
+import GraphicalTotalReport from './GraphicalTotalReport';
 
 // TabPanel helper function
 function TabPanel(props) {
@@ -55,32 +56,36 @@ const GraphicalReport = () => {
           aria-label="energy analytics tabs"
           variant="fullWidth"
         >
-          <Tab label="Combined Analysis" {...a11yProps(0)} />
-          <Tab label="Production Analysis" {...a11yProps(1)} />
-          <Tab label="Consumption Analysis" {...a11yProps(2)} />
-          <Tab label="Allocation Analysis" {...a11yProps(3)} />
-          <Tab label="Banking Analysis" {...a11yProps(4)} />
-          <Tab label="Lapse Analysis" {...a11yProps(5)} />
+          <Tab label="Total" {...a11yProps(0)} />
+          <Tab label="Combined Analysis" {...a11yProps(1)} />
+          <Tab label="Production Analysis" {...a11yProps(2)} />
+          <Tab label="Consumption Analysis" {...a11yProps(3)} />
+          <Tab label="Allocation Analysis" {...a11yProps(4)} />
+          <Tab label="Banking Analysis" {...a11yProps(5)} />
+          <Tab label="Lapse Analysis" {...a11yProps(6)} />
         </Tabs>
       </Box>
 
       {/* Tab Panels ordered accordingly */}
       <TabPanel value={tabValue} index={0}>
-        <GraphicalCombinedReport />
+        <GraphicalTotalReport />
       </TabPanel>
       <TabPanel value={tabValue} index={1}>
-        <GraphicalProductionReport />
+        <GraphicalCombinedReport />
       </TabPanel>
       <TabPanel value={tabValue} index={2}>
-        <GraphicalConsumptionReport />
+        <GraphicalProductionReport />
       </TabPanel>
       <TabPanel value={tabValue} index={3}>
-        <GraphicalAllocationReport />
+        <GraphicalConsumptionReport />
       </TabPanel>
       <TabPanel value={tabValue} index={4}>
-        <GraphicalBankingReport />
+        <GraphicalAllocationReport />
       </TabPanel>
       <TabPanel value={tabValue} index={5}>
+        <GraphicalBankingReport />
+      </TabPanel>
+      <TabPanel value={tabValue} index={6}>
         <GraphicalLapseReport />
       </TabPanel>
     </Paper>
