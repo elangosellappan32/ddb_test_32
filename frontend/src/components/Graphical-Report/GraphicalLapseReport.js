@@ -40,48 +40,29 @@ const cLabels = { c1: "C1", c2: "C2", c3: "C3", c4: "C4", c5: "C5" };
 
 function processLapseData(lapseData, site, siteKey, months) {
   const byMonth = {};
-  
-  // Initialize data structure for all months in the financial year
   months.forEach(month =>
     byMonth[month] = {
       month,
-      c1: 0, c2: 0, c3: 0, c4: 0, c5: 0, 
-      total: 0,
-      name: site?.name || 'Unknown Site',
-      siteKey,
-      companyId: site?.companyId,
-      productionSiteId: site?.productionSiteId
+      c1: 0, c2: 0, c3: 0, c4: 0, c5: 0, total: 0,
+      name: site?.name || 'Unknown Site', siteKey
     }
   );
-
-  // Process each lapse record
   (lapseData || []).forEach(record => {
     let month = '';
-    // Handle different date formats
     if (record.sk) month = record.sk;
     else if (record.date) {
       const d = new Date(record.date);
       month = `${String(d.getMonth() + 1).padStart(2, '0')}${d.getFullYear()}`;
     } else if (record.period) month = record.period;
-    
-    // Skip if month is invalid or not in the financial year
     if (!month || !byMonth[month]) return;
-
-    // Get allocation data
     const allocated = record.allocated || record;
-    
-    // Add each category's value
-    ['c1','c2','c3','c4','c5'].forEach(c => {
-      const value = Math.max(0, Number(allocated[c] || 0));
-      byMonth[month][c] = value;
-      byMonth[month].total += value;
-    });
-
-    // Add metadata
-    byMonth[month].createdat = record.createdat;
-    byMonth[month].updatedat = record.updatedat;
+    ['c1','c2','c3','c4','c5'].forEach(c =>
+      byMonth[month][c] += Math.max(0, Number(allocated[c] || 0))
+    );
+    byMonth[month].total =
+      byMonth[month].c1 + byMonth[month].c2 + byMonth[month].c3 +
+      byMonth[month].c4 + byMonth[month].c5;
   });
-
   return Object.values(byMonth);
 }
 
@@ -162,7 +143,7 @@ const GraphicalLapseReport = () => {
         setLoading(false);
       }
     })();
-  }, [financialYear, user, selectedSites]);
+  }, [financialYear, user]);
 
   // Prepare chart data
   const months = getFinancialYearMonths(financialYear);

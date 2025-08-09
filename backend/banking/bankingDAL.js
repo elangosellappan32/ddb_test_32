@@ -121,40 +121,44 @@ class BankingDAL {
         try {
             // Create a clean copy of updates without pk/sk and with proper values
             const cleanUpdates = {};
-            const expressionAttributeValues = {
-                ':updatedAt': new Date().toISOString(),
-                ':inc': 1
-            };
+            const now = new Date().toISOString();
+            
+            // Initialize expression attribute names and values
             const expressionAttributeNames = {};
+            const expressionAttributeValues = {
+                ':updatedAt': now,
+                ':inc': 1,
+                ':zero': 0
+            };
             
-            // Process each update field
-            Object.entries(updates).forEach(([key, value]) => {
-                if (['pk', 'sk'].includes(key)) return; // Skip primary key fields
-                
-                // Handle special cases for c1-c5 to ensure they're numbers
-                if (key.match(/^c[1-5]$/)) {
-                    cleanUpdates[key] = Number(value) || 0;
-                } else if (key !== 'updatedAt') { // Skip updatedAt as we handle it separately
-                    cleanUpdates[key] = value;
-                }
-            });
+            // Start with base update expressions
+            const updateExpressions = [
+                'SET #updatedAt = :updatedAt',
+                '#version = if_not_exists(#version, :zero) + :inc'
+            ];
             
-            // Build update expression
-            const updateExpressions = ['SET #updatedAt = :updatedAt', '#version = #version + :inc'];
-            
-            // Add all fields to update
-            Object.entries(cleanUpdates).forEach(([key, value]) => {
-                const attrKey = `#${key}`;
-                const valKey = `:${key}`;
-                
-                expressionAttributeNames[attrKey] = key;
-                expressionAttributeValues[valKey] = value;
-                updateExpressions.push(`${attrKey} = ${valKey}`);
-            });
-            
-            // Always update updatedAt and version
+            // Add reserved words to expression attribute names
             expressionAttributeNames['#updatedAt'] = 'updatedAt';
             expressionAttributeNames['#version'] = 'version';
+            
+            // Process each update field
+            for (const [key, value] of Object.entries(updates)) {
+                if (['pk', 'sk', 'updatedAt', 'version'].includes(key)) continue;
+                
+                // Handle special cases for c1-c5 to ensure they're numbers
+                const processedValue = key.match(/^c[1-5]$/) ? (Number(value) || 0) : value;
+                cleanUpdates[key] = processedValue;
+                
+                // Create unique attribute names using a prefix
+                const attrKey = `#attr_${key}`;
+                const valKey = `:val_${key}`;
+                
+                expressionAttributeNames[attrKey] = key;
+                expressionAttributeValues[valKey] = processedValue;
+                
+                // Add to update expressions
+                updateExpressions.push(`${attrKey} = ${valKey}`);
+            }
             
             // Calculate total if any c1-c5 values were updated
             if (Object.keys(cleanUpdates).some(k => k.match(/^c[1-5]$/))) {
@@ -163,9 +167,14 @@ class BankingDAL {
                     ...existingItem,
                     ...cleanUpdates
                 });
-                expressionAttributeNames['#totalBanking'] = 'totalBanking';
-                expressionAttributeValues[':totalBanking'] = totalBanking;
-                updateExpressions.push('#totalBanking = :totalBanking');
+                
+                // Use unique name for totalBanking
+                const totalKey = '#attr_totalBanking';
+                const totalValKey = ':val_totalBanking';
+                
+                expressionAttributeNames[totalKey] = 'totalBanking';
+                expressionAttributeValues[totalValKey] = totalBanking;
+                updateExpressions.push(`${totalKey} = ${totalValKey}`);
             }
 
             const response = await this.docClient.send(new UpdateCommand({

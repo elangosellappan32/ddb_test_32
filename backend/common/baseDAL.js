@@ -58,24 +58,49 @@ class BaseDAL {
 
     async updateItem(key, updateData) {
         try {
-            const updateExpression = [];
-            const expressionAttributeValues = {};
-            const expressionAttributeNames = {};
+            // Initialize with reserved words and common fields
+            const expressionAttributeNames = {
+                '#version': 'version',
+                '#updatedAt': 'updatedAt'
+            };
+            
+            // Always update version and timestamp
+            const updateExpressions = [
+                '#version = if_not_exists(#version, :zero) + :inc',
+                '#updatedAt = :now'
+            ];
+            
+            const expressionAttributeValues = {
+                ':now': new Date().toISOString(),
+                ':inc': 1,
+                ':zero': 0
+            };
 
-            Object.entries(updateData).forEach(([key, value]) => {
-                if (value !== undefined) {
-                    const attrKey = `#${key}`;
-                    const attrValue = `:${key}`;
-                    updateExpression.push(`${attrKey} = ${attrValue}`);
-                    expressionAttributeValues[attrValue] = value;
-                    expressionAttributeNames[attrKey] = key;
+            // Process each field to update
+            Object.entries(updateData).forEach(([field, value]) => {
+                if (value === undefined || field === 'pk' || field === 'sk') return;
+                
+                const attrKey = `#${field}`;
+                const valKey = `:${field}`;
+                
+                // Add to expression attribute names if not already present
+                if (!expressionAttributeNames[attrKey]) {
+                    expressionAttributeNames[attrKey] = field;
+                }
+                
+                // Add to values
+                expressionAttributeValues[valKey] = value;
+                
+                // Add to update expressions if not a reserved field
+                if (!['version', 'updatedAt'].includes(field)) {
+                    updateExpressions.push(`${attrKey} = ${valKey}`);
                 }
             });
 
             const params = {
                 TableName: this.tableName,
                 Key: key,
-                UpdateExpression: `SET ${updateExpression.join(', ')}`,
+                UpdateExpression: `SET ${updateExpressions.join(', ')}`,
                 ExpressionAttributeNames: expressionAttributeNames,
                 ExpressionAttributeValues: expressionAttributeValues,
                 ReturnValues: 'ALL_NEW'
