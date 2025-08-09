@@ -30,8 +30,7 @@ function formatMonthDisplay(monthKey) {
     'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
   ];
   const monthIdx = monthNum - 1;
-  const isNewFY = monthNum === 4;
-  return `${monthNames[monthIdx]}${isNewFY ? ` FY${yearNum}` : yearNum}`;
+  return `${monthNames[monthIdx]} ${yearNum}`;
 }
 
 function processBankingData(bankingData, site, siteKey, months) {

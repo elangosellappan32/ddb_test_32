@@ -1,20 +1,21 @@
 import React from 'react';
 import { Button, CircularProgress } from '@mui/material';
 import { Description as CsvIcon } from '@mui/icons-material';
-import { fetchFormVAData, fetchFormVBData } from '../../services/reportService';
 
-// Helper function for safer number formatting
-const formatNumber = (value, decimalPlaces = 0) => {
+// Utility: Wrap CSV fields in double quotes, including empty strings
+const wrapCsvCell = (val) => `"${val ?? ''}"`;
+
+// Example formatting helpers
+const formatNumber = (value, decimals = 0) => {
   if (value === null || value === undefined) return '0';
   const num = Number(value);
   if (isNaN(num)) return '0';
   return num.toLocaleString('en-IN', {
-    maximumFractionDigits: decimalPlaces,
-    minimumFractionDigits: decimalPlaces
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
   });
 };
 
-// Helper function to format percentage
 const formatPercentage = (value) => {
   if (value === null || value === undefined) return '0.00%';
   const num = Number(value);
@@ -22,38 +23,67 @@ const formatPercentage = (value) => {
   return `${num.toFixed(2)}%`;
 };
 
-const FormVCsvReport = ({ 
-  downloading, 
-  setDownloading, 
-  isForm5B, 
+const FormVCsvReport = ({
+  downloading,
+  setDownloading,
+  isForm5B,
   financialYear,
   showSnackbar,
-  handleOpenDialog 
+  handleOpenDialog,
+  prepareForm5AData,
+  prepareForm5BData,
 }) => {
   const downloadCSV = async () => {
     try {
-      setDownloading(prev => ({ ...prev, csv: true }));
-      
-      // Fetch data directly from API based on form type
-      const apiData = isForm5B 
-        ? await fetchFormVBData(financialYear)
-        : await fetchFormVAData(financialYear);
+      setDownloading((prev) => ({ ...prev, csv: true }));
 
-      if (!apiData || (isForm5B && !apiData.data) || (!isForm5B && !apiData)) {
-        throw new Error('No data available for the selected financial year');
-      }
-
-      const data = isForm5B ? apiData.data : apiData;
       let csvContent = '';
 
       if (isForm5B) {
-        // --- Form V-B ---
-        csvContent = 'FORMAT V-B\n';
-        csvContent += `Financial Year: ${financialYear}\n\n`;
+        // Prepare FORMAT V-B data
+        const formVB = prepareForm5BData();
+        
+        // Log the data being used
+        console.log('Form V-B Data:', {
+          rows: formVB.rows,
+          totals: formVB.totals
+        });
 
-        // Main headers with proper column alignment
-        const headers = [
-          'Sl. No.',
+        // Verify data structure
+        if (!formVB.rows || !Array.isArray(formVB.rows)) {
+          throw new Error('Invalid data structure: rows data is missing or invalid');
+        }
+
+        const rows = formVB.rows;
+        const totals = formVB.totals;
+
+        // Log sample calculations for first row if exists
+        if (rows.length > 0) {
+          const sampleRow = rows[0];
+          console.log('Sample Row Calculations:', {
+            name: sampleRow.name,
+            annualGeneration: sampleRow.generation,
+            auxConsumption: sampleRow.auxiliary,
+            generationCriteria: (sampleRow.generation - sampleRow.auxiliary) * 0.51,
+            ownership: sampleRow.shares?.ownership,
+            certificates: sampleRow.shares?.certificates
+          });
+        }
+
+        // Log totals calculations
+        if (totals) {
+          console.log('Totals Calculations:', {
+            totalGeneration: totals.generation,
+            totalAuxiliary: totals.auxiliary,
+            totalCriteria: (totals.generation - totals.auxiliary) * 0.51,
+            totalShares: totals.shares?.certificates,
+            totalOwnership: totals.shares?.ownership
+          });
+        }
+
+        // Header rows
+        const headerRow1 = [
+          'Sl.No.',
           'Name of share holder',
           'No. of equity shares of value Rs. /-',
           '% of ownership through shares in Company/unit of CGP',
@@ -61,149 +91,155 @@ const FormVCsvReport = ({
           '100% annual generation in MUs (x)',
           'Annual Auxiliary consumption in MUs (y)',
           'Generation considered to verify consumption criteria in MUs (x-y)*51%',
-          'Permitted consumption as per norms in MUs (with -10% variation)',
-          'Permitted consumption as per norms in MUs (with 0% variation)',
-          'Permitted consumption as per norms in MUs (with +10% variation)',
+          'Permitted consumption as per norms in MUs',
+          '',
+          '',
           'Actual consumption in MUs',
           'Whether consumption norms met'
         ];
-        csvContent += headers.join(',') + '\n';
 
-        // Process site metrics
-        const siteMetrics = Array.isArray(data.siteMetrics) ? data.siteMetrics : [];
-        let totalEquityShares = 0;
-        let totalOwnership = 0;
-        let totalGeneration = 0;
-        let totalAuxiliary = 0;
-        let totalCriteria = 0;
-        let totalPermittedWithZero = 0;
-        let totalPermittedMinus10 = 0;
-        let totalPermittedPlus10 = 0;
-        let totalActual = 0;
-        let totalNormsMet = 0;
+        const headerRow2 = [
+          '',
+          '',
+          'As per share certificates as on 31st March',
+          '',
+          '',
+          '',
+          '',
+          '',
+          'with -10% variation',
+          'with 0% variation',
+          'with +10% variation',
+          '',
+          ''
+        ];
 
-        // Add data rows
-        siteMetrics.forEach((site, index) => {
-          const equityShares = Number(site.equityShares) || 0;
-          const ownership = Number(site.ownershipPercentage) || 0;
-          const generation = Number(site.annualGeneration) || 0;
-          const auxiliary = Number(site.auxiliaryConsumption) || 0;
-          const criteria = (generation - auxiliary) * 0.51;
-          const permittedWithZero = Number(site.permittedConsumption?.withZero) || 0;
-          const permittedMinus10 = Number(site.permittedConsumption?.minus10) || 0;
-          const permittedPlus10 = Number(site.permittedConsumption?.plus10) || 0;
-          const actual = Number(site.actualConsumption) || 0;
-          const normsMet = site.consumptionNormsMet ? 'Yes' : 'No';
+        // Compose CSV content
+        csvContent += `"FORMAT V-B"\r\n"Financial Year: ${financialYear}"\r\n\r\n`;
+        csvContent += headerRow1.map(wrapCsvCell).join(',') + '\r\n';
+        csvContent += headerRow2.map(wrapCsvCell).join(',') + '\r\n';
 
-          // Update totals
-          totalEquityShares += equityShares;
-          totalOwnership += ownership;
-          totalGeneration += generation;
-          totalAuxiliary += auxiliary;
-          totalCriteria += criteria;
-          totalPermittedWithZero += permittedWithZero;
-          totalPermittedMinus10 += permittedMinus10;
-          totalPermittedPlus10 += permittedPlus10;
-          totalActual += actual;
-          if (site.consumptionNormsMet) totalNormsMet += 1;
-
-          // Add row
-          const row = [
-            index + 1,
-            `"${site.siteName || site.name || 'Unnamed Site'}"`,
-            formatNumber(equityShares, 0),
-            formatPercentage(ownership), // Already a percentage
-            'minimum 51%',
-            formatNumber(generation, 0),
-            formatNumber(auxiliary, 0),
-            formatNumber(criteria, 0),
-            formatNumber(permittedMinus10, 0),
-            formatNumber(permittedWithZero, 0),
-            formatNumber(permittedPlus10, 0),
-            formatNumber(actual, 0),
-            `"${normsMet}"`
+        // Data rows
+        rows.forEach((row, idx) => {
+          // Parse numeric values correctly
+          const annualGeneration = Math.round(parseFloat(row.generation?.replace(/,/g, '')) || 0);
+          const auxConsumption = Math.round(parseFloat(row.auxiliary?.replace(/,/g, '')) || 0);
+          const generationCriteria = Math.round((annualGeneration - auxConsumption) * 0.51);
+          
+          // Format permitted consumption values without decimals
+          const permittedMinus10 = formatNumber(Math.round(generationCriteria * 0.9));
+          const permittedZero = formatNumber(generationCriteria);
+          const permittedPlus10 = formatNumber(Math.round(generationCriteria * 1.1));
+          
+          const dataRow = [
+            row.slNo,
+            row.name,
+            formatNumber(row.shares?.certificates),
+            row.shares?.ownership || '0%',
+            row.proRata || 'minimum 51%',
+            formatNumber(annualGeneration),
+            formatNumber(auxConsumption),
+            formatNumber(generationCriteria),
+            permittedMinus10,
+            permittedZero,
+            permittedPlus10,
+            formatNumber(Math.round(parseFloat(row.actual?.replace(/,/g, '')) || 0)),
+            row.norms || ''
           ];
-          csvContent += row.join(',') + '\n';
+          csvContent += dataRow.map(wrapCsvCell).join(',') + '\r\n';
         });
 
-        // Add totals row with proper alignment
-        const avgOwnership = siteMetrics.length > 0 ? totalOwnership / siteMetrics.length : 0;
-        let allNormsMet = totalNormsMet === siteMetrics.length ? 'Yes' :
-                          totalNormsMet === 0 ? 'No' : 'Partial';
+        // Total row
+        if (totals) {
+          const totalGeneration = Math.round(parseFloat(totals.generation?.replace(/,/g, '')) || 0);
+          const totalAuxiliary = Math.round(parseFloat(totals.auxiliary?.replace(/,/g, '')) || 0);
+          const totalCriteria = Math.round((totalGeneration - totalAuxiliary) * 0.51);
+          
+          const totalPermittedMinus10 = formatNumber(Math.round(totalCriteria * 0.9));
+          const totalPermittedZero = formatNumber(totalCriteria);
+          const totalPermittedPlus10 = formatNumber(Math.round(totalCriteria * 1.1));
 
-        const totalRow = [
-          'Total',
-          '',
-          formatNumber(totalEquityShares, 0),
-          formatPercentage(avgOwnership), // Already a percentage
-          '',
-          formatNumber(totalGeneration, 0),
-          formatNumber(totalAuxiliary, 0),
-          formatNumber(totalCriteria, 0),
-          formatNumber(totalPermittedWithZero, 0),
-          formatNumber(totalPermittedMinus10, 0),
-          formatNumber(totalPermittedPlus10, 0),
-          formatNumber(totalActual, 0),
-          `"${allNormsMet}"`
-        ];
-        csvContent += totalRow.join(',') + '\n';
+          const totalRow = [
+            totals.slNo || 'Total',
+            '',
+            formatNumber(totals.shares?.certificates),
+            totals.shares?.ownership || '0%',
+            '',
+            formatNumber(totalGeneration),
+            formatNumber(totalAuxiliary),
+            formatNumber(totalCriteria),
+            totalPermittedMinus10,
+            totalPermittedZero,
+            totalPermittedPlus10,
+            formatNumber(Math.round(parseFloat(totals.actual?.replace(/,/g, '')) || 0)),
+            totals.norms || ''
+          ];
+          csvContent += totalRow.map(wrapCsvCell).join(',') + '\r\n';
+        }
 
+        // Log formatted CSV preview
+        console.log('CSV Data Preview:', {
+          headers: headerRow1,
+          firstRow: rows[0],
+          calculatedValues: {
+            generation: formatNumber(parseFloat(rows[0]?.generation?.replace(/,/g, '')), 2),
+            auxiliary: formatNumber(parseFloat(rows[0]?.auxiliary?.replace(/,/g, '')), 2),
+            criteria: formatNumber((parseFloat(rows[0]?.generation?.replace(/,/g, '')) - 
+                      parseFloat(rows[0]?.auxiliary?.replace(/,/g, '')) * 0.51), 2)
+          }
+        });
       } else {
-        // --- Form V-A ---
-        // Build headers and subheaders for a structured table
-        const headers = [
+        // FORMAT V-A (simple flat structure)
+        const formVA = prepareForm5AData();
+
+        // FORMAT V-A data logging
+        console.log('Form V-A Data:', formVA);
+
+        const infoRows = [
           ['FORMAT V-A'],
-          ['Statement showing compliance to the requirement of proportionality of consumption for Captive Status'],
+          ['Statement showing compliance to requirement of proportionality of consumption for Captive Status'],
           [],
           [`Financial Year: ${financialYear}`],
           [],
-          [
-            'Sl. No.',
-            'Particulars',
-            'Energy in Units'
-          ]
+          ['Sl. No.', 'Particulars', 'Energy in Units'],
         ];
-        // Data rows
-        const rows = [
-          [1, 'Total Generated units of a generating plant / Station identified for captive use', formatNumber(data.totalGeneratedUnits || 0, 0)],
-          [2, 'Less : Auxiliary Consumption in the above in units', formatNumber(data.auxiliaryConsumption || 0, 0)],
-          [3, 'Net units available for captive consumption (Aggregate generation for captive use)', formatNumber(data.aggregateGeneration || 0, 0)],
-          [4, '51% of aggregate generation available for captive consumption in units', formatNumber(data.percentage51 || 0, 0)],
-          [5, 'Actual Adjusted / Consumed units by the captive users', formatNumber(data.totalAllocatedUnits || 0, 0)],
-          [6, 'Percentage of actual adjusted / consumed units by the captive users with respect to aggregate generation for captive use', formatPercentage((data.percentageAdjusted || 0) / 100)]
-        ];
-        // Combine all rows
-        const allRows = [...headers, ...rows];
-        // Convert to CSV string
-        csvContent = allRows.map(row => row.map(cell => `"${cell ?? ''}"`).join(',')).join('\r\n');
+
+        csvContent += infoRows.map(row => row.map(wrapCsvCell).join(',')).join('\r\n') + '\r\n';
+
+        formVA.forEach((row) => {
+          const slNo = row['Sl.No.'] ?? '';
+          const particulars = row['Particulars'] ?? '';
+          const energy = row['Energy in Units'] ?? '';
+          const dataRow = [slNo, particulars, energy];
+          csvContent += dataRow.map(wrapCsvCell).join(',') + '\r\n';
+        });
       }
-  
-      // Create and trigger download
-      const blob = new Blob([
-        '\uFEFF', // UTF-8 BOM for Excel compatibility
-        csvContent
-      ], { type: 'text/csv;charset=utf-8;' });
-      
+
+      // Create and trigger download with BOM for Excel
+      const blob = new Blob(['\uFEFF', csvContent], { type: 'text/csv;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `Form_V_${isForm5B ? 'B' : 'A'}_${financialYear}_${new Date().toISOString().split('T')[0]}.csv`;
+
+      const timestamp = new Date().toISOString().split('T')[0];
+      link.download = `Form_V_${isForm5B ? 'B' : 'A'}_${financialYear}_${timestamp}.csv`;
+
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
-      
+
       showSnackbar('CSV file downloaded successfully');
-    } catch (err) {
-      console.error('Error downloading CSV:', err);
+    } catch (error) {
+      console.error('Error downloading CSV:', error);
       handleOpenDialog({
         title: 'Download Failed',
-        content: `Failed to download CSV file: ${err.message}`,
-        type: 'error'
+        content: `Failed to download CSV file: ${error.message}`,
+        type: 'error',
       });
       showSnackbar('Failed to download CSV file', { variant: 'error' });
     } finally {
-      setDownloading(prev => ({ ...prev, csv: false }));
+      setDownloading((prev) => ({ ...prev, csv: false }));
     }
   };
 
@@ -211,16 +247,15 @@ const FormVCsvReport = ({
     <Button
       variant="contained"
       onClick={downloadCSV}
-      startIcon={downloading.csv ? 
-        <CircularProgress size={20} sx={{ color: '#fff' }} /> : 
-        <CsvIcon />
+      startIcon={
+        downloading.csv ? <CircularProgress size={20} sx={{ color: '#fff' }} /> : <CsvIcon />
       }
       disabled={downloading.csv}
       sx={{
         background: 'linear-gradient(135deg, #0288d1 0%, #03a9f4 100%)',
         '&:hover': {
-          background: 'linear-gradient(135deg, #01579b 0%, #0288d1 100%)'
-        }
+          background: 'linear-gradient(135deg, #01579b 0%, #0288d1 100%)',
+        },
       }}
     >
       {downloading.csv ? 'Downloading...' : 'Export to CSV'}
