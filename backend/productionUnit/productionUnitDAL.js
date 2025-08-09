@@ -88,21 +88,28 @@ const updateItem = async (pk, sk, updates) => {
         const now = new Date().toISOString();
         const newVersion = currentVersion + 1;
 
-        // Build update expression
-        let updateExpression = 'SET version = :newVersion, updatedat = :updatedat';
-        const expressionAttributeNames = {};
+        // Build update expression using expression attribute names for all fields
+        const expressionAttributeNames = {
+            '#version': 'version',
+            '#updatedat': 'updatedat'
+        };
         const expressionAttributeValues = {
             ':newVersion': newVersion,
             ':updatedat': now,
             ':currentVersion': currentVersion
         };
 
-        // Add updated fields
+        // Start with required fields
+        let updateExpression = 'SET #version = :newVersion, #updatedat = :updatedat';
+
+        // Add updated fields with proper expression attribute names
         Object.entries(updates).forEach(([key, value]) => {
             if (!['version', 'pk', 'sk', 'createdat', 'updatedat', 'timetolive'].includes(key)) {
-                updateExpression += `, #${key} = :${key}`;
-                expressionAttributeNames[`#${key}`] = key;
-                expressionAttributeValues[`:${key}`] = value;
+                const attrKey = `#${key}`;
+                const valKey = `:${key}`;
+                updateExpression += `, ${attrKey} = ${valKey}`;
+                expressionAttributeNames[attrKey] = key;
+                expressionAttributeValues[valKey] = value;
             }
         });
 
