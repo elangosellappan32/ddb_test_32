@@ -17,9 +17,7 @@ import {
   useTheme,
   useMediaQuery
 } from '@mui/material';
-import { 
-  useLocation 
-} from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 import {
   Dashboard as DashboardIcon,
   Factory as ProductionIcon,
@@ -34,7 +32,15 @@ import {
 } from '@mui/icons-material';
 import { useAuth } from '../context/AuthContext';
 import { useNavigation } from '../context/NavigationContext';
-import logo from '../assets/logo.jpg'; // Ensure this path is correct
+import logo from '../assets/logo.png'; 
+
+
+const roleColors = {
+  admin: '#d32f2f',   // Red
+  user: '#0f235fff',    // Blue
+  viewer: '#fbc02d'   // Yellow
+};
+
 
 const Navbar = () => {
   const navigate = useNavigation();
@@ -46,61 +52,61 @@ const Navbar = () => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
 
+
   const navItems = useMemo(() => [
     { 
       icon: <DashboardIcon />, 
       label: 'Dashboard', 
       path: '/',
-      color: '#1976D2' // Blue
     },
     { 
       icon: <ProductionIcon />, 
       label: 'Production', 
       path: '/production',
-      color: '#2E7D32' // Green
     },
     { 
       icon: <ConsumptionIcon />, 
       label: 'Consumption', 
       path: '/consumption',
-      color: '#ED6C02' // Orange
     },
     {
       icon: <AssignmentTurnedInIcon />,
       label: 'Allocation',
       path: '/allocation',
-      color: '#F44336' // Red
     },
     {
       icon: <BarChartIcon />, 
       label: 'Graphical', 
       path: '/graphical-report',
-      color: '#00B8D4' // Cyan
     },
     { 
       icon: <ReportsIcon />, 
       label: 'Compliance', 
       path: '/report',
-      color: '#9C27B0' // Purple
     }
   ], []);
+
 
   const handleNavigation = (path) => {
     navigate(path);
     setMobileOpen(false);
   };
 
+
   const handleUserMenuOpen = (event) => {
     setAnchorEl(event.currentTarget);
   };
+
 
   const handleUserMenuClose = () => {
     setAnchorEl(null);
   };
 
+
   const handleMobileMenuToggle = () => {
     setMobileOpen(!mobileOpen);
   };
+
 
   const handleLogout = async () => {
     setIsLogouting(true);
@@ -114,11 +120,16 @@ const Navbar = () => {
     }
   };
 
-  // Add role-specific styling
+
+  const getRoleColor = (role) => {
+    return roleColors[role] || roleColors.user;
+  };
+
+
   const getRoleStyles = (role) => {
     return {
-      backgroundColor: role === 'admin' ? '#d32f2f' : '#1976D2',
-      color: 'white',
+      backgroundColor: getRoleColor(role),
+      color: 'black',
       padding: '4px 8px',
       borderRadius: '4px',
       fontSize: '0.75rem',
@@ -127,11 +138,11 @@ const Navbar = () => {
     };
   };
 
-  // User menu with role-specific data
+
   const UserMenu = () => (
     <Menu
       anchorEl={anchorEl}
-      open={Boolean(anchorEl)} // Fixed: Removed extra parenthesis
+      open={Boolean(anchorEl)}
       onClose={handleUserMenuClose}
       anchorOrigin={{
         vertical: 'bottom',
@@ -143,57 +154,56 @@ const Navbar = () => {
       }}
       PaperProps={{
         elevation: 3,
-        sx: {
-          minWidth: '250px',
-          mt: 1.5
-        }
+        sx: { minWidth: 250, mt: 1.5 }
       }}
     >
-      {/* User Profile Section */}
       <Box sx={{ p: 2, borderBottom: '1px solid rgba(0,0,0,0.1)' }}>
         <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
           <Avatar 
             sx={{ 
               width: 48, 
               height: 48,
-              bgcolor: user?.role === 'admin' ? '#d32f2f' : '#1976D2',
-              color: 'white',
+              bgcolor: getRoleColor(user?.role),
+              color: 'white',  // Text color white
               mr: 2
             }}
           >
-            {user?.username?.[0].toUpperCase() || 'A'}
+            {user?.username?.[0]?.toUpperCase() || 'A'}
           </Avatar>
           <Box>
-            <Typography variant="subtitle1" fontWeight="bold">
-              {user?.username || 'Admin'}
+            <Typography variant="subtitle1" fontWeight="bold" color="text.primary">
+              {user?.username || 'User'}
             </Typography>
             <Box sx={getRoleStyles(user?.role)}>
-              {user?.role || 'ADMIN'}
+              {user?.role?.toUpperCase() || 'USER'}
             </Box>
           </Box>
         </Box>
       </Box>
 
-      {/* User Details Section */}
+
       <Box sx={{ p: 2, bgcolor: 'grey.50' }}>
         <Typography variant="body2" color="text.secondary" gutterBottom>
-          Employee ID: {user?.employeeId || 'ADMIN001'}
+          Employee ID: {user?.employeeId || 'N/A'}
         </Typography>
         <Typography variant="body2" color="text.secondary" gutterBottom>
-          Department: {user?.department || 'Administration'}
+          Department: {user?.department || 'N/A'}
         </Typography>
         <Typography variant="body2" color="text.secondary">
           Access Level: {user?.role === 'admin' ? 'Full Access' : 'Limited Access'}
         </Typography>
       </Box>
 
+
       <Divider />
-      
-      {/* Menu Actions */}
+
+
       <MenuItem onClick={handleUserMenuClose}>
         <ProfileIcon sx={{ mr: 1, color: 'primary.main' }} />
         View Full Profile
       </MenuItem>
+
+
       <MenuItem 
         onClick={handleLogout} 
         disabled={isLogouting}
@@ -209,7 +219,7 @@ const Navbar = () => {
     </Menu>
   );
 
-  // Update user section in the navbar
+
   const UserSection = () => (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
       <Box 
@@ -221,68 +231,53 @@ const Navbar = () => {
       >
         <Typography 
           variant="body2" 
-          sx={{ 
-            color: 'white', 
-            fontWeight: 'medium'
-          }}
+          sx={{ color: 'white', fontWeight: 'medium' }}
         >
-          {user?.username || 'Admin'}
+          {user?.username || 'User'}
         </Typography>
-        <Box sx={getRoleStyles(user?.role)}>
-          {user?.role || 'ADMIN'}
+        <Box sx={{ 
+          ...getRoleStyles(user?.role),
+          color: 'white' // Override text color for visibility
+        }}>
+          {user?.role?.toUpperCase() || 'USER'}
         </Box>
       </Box>
-      
       <Tooltip title="Profile & Settings">
         <IconButton 
           onClick={handleUserMenuOpen} 
           sx={{ 
             p: 0,
             border: '2px solid white',
-            '&:hover': {
-              bgcolor: 'rgba(255,255,255,0.1)'
-            }
+            '&:hover': { bgcolor: 'rgba(255,255,255,0.1)' }
           }}
         >
           <Avatar 
             sx={{ 
               width: 36, 
               height: 36,
-              bgcolor: user?.role === 'admin' ? '#d32f2f' : '#1976D2',
-              color: 'white'
+              bgcolor: getRoleColor(user?.role),
+              color: 'white'  // Text color white
             }}
           >
-            {user?.username?.[0].toUpperCase() || 'A'}
+            {user?.username?.[0]?.toUpperCase() || 'U'}
           </Avatar>
         </IconButton>
       </Tooltip>
     </Box>
   );
 
+
   const MobileDrawer = () => (
     <Drawer
       variant="temporary"
       open={mobileOpen}
       onClose={handleMobileMenuToggle}
-      ModalProps={{
-        keepMounted: true, // Better open performance on mobile
-      }}
-      sx={{
-        '& .MuiDrawer-paper': { 
-          boxSizing: 'border-box', 
-          width: 240 
-        },
-      }}
+      ModalProps={{ keepMounted: true }}
+      sx={{ '& .MuiDrawer-paper': { boxSizing: 'border-box', width: 240 } }}
     >
-      <Box
-        sx={{ 
-          display: 'flex', 
-          justifyContent: 'flex-end', 
-          p: 1 
-        }}
-      >
+      <Box sx={{ display: 'flex', justifyContent: 'flex-end', p: 1 }}>
         <IconButton onClick={handleMobileMenuToggle}>
-          <ChevronLeftIcon />
+          <ChevronLeftIcon sx={{ color: 'white' }} />
         </IconButton>
       </Box>
       <Divider />
@@ -293,14 +288,22 @@ const Navbar = () => {
             button 
             onClick={() => handleNavigation(item.path)}
             selected={location.pathname === item.path}
+            sx={{
+              color: location.pathname === item.path ? 'white' : 'inherit',
+              bgcolor: location.pathname === item.path ? 'rgba(255,255,255,0.2)' : 'transparent',
+              '&:hover': { bgcolor: 'rgba(255,255,255,0.1)' }
+            }}
           >
-            <ListItemIcon>{item.icon}</ListItemIcon>
-            <ListItemText primary={item.label} />
+            <ListItemIcon sx={{ color: 'white' }}>
+              {item.icon}
+            </ListItemIcon>
+            <ListItemText primary={item.label} sx={{ color: 'white' }} />
           </ListItem>
         ))}
       </List>
     </Drawer>
   );
+
 
   return (
     <Box 
@@ -310,7 +313,7 @@ const Navbar = () => {
         left: 0,
         right: 0,
         zIndex: 1200,
-        backgroundColor: user?.role === 'admin' ? '#1a237e' : '#1976D2',
+        backgroundColor: '#1a237e', // Standard dark blue navbar background
         boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
       }}
     >
@@ -324,7 +327,6 @@ const Navbar = () => {
           height: 64
         }}
       >
-        {/* Mobile Menu Toggle */}
         {isMobile && (
           <IconButton 
             color="inherit" 
@@ -333,38 +335,23 @@ const Navbar = () => {
             onClick={handleMobileMenuToggle}
             sx={{ mr: 2 }}
           >
-            <MenuIcon />
+            <MenuIcon sx={{ color: 'white' }} />
           </IconButton>
         )}
 
-        {/* Logo and Company Name */}
-        <Box 
-          sx={{ 
-            display: 'flex', 
-            alignItems: 'center',
-            gap: 2
-          }}
-        >
+
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
           <img 
             src={logo} 
             alt="STRIO Logo" 
-            style={{ 
-              height: 40, 
-              width: 'auto' 
-            }} 
+            style={{ height: 40, width: 'auto' }} 
           />
-          <Typography 
-            variant="h6" 
-            sx={{ 
-              fontWeight: 'bold',
-              color: 'white'
-            }}
-          >
+          <Typography variant="h6" sx={{ fontWeight: 'bold', color: 'white' }}>
             STRIO
           </Typography>
         </Box>
 
-        {/* Navigation Icons */}
+
         <Box 
           sx={{ 
             display: { xs: 'none', md: 'flex' }, 
@@ -378,15 +365,14 @@ const Navbar = () => {
                 aria-label={`Go to ${item.label}`}
                 onClick={() => handleNavigation(item.path)}
                 sx={{ 
-                  color: location.pathname === item.path ? 'white' : 'rgba(255,255,255,0.7)',
+                  color: 'white',  // Set icon color to white 
                   backgroundColor: location.pathname === item.path 
                     ? 'rgba(255,255,255,0.2)' 
                     : 'transparent',
-                  '&:hover': {
-                    backgroundColor: 'rgba(255,255,255,0.1)'
-                  },
-                  p: 2,  
-                  fontSize: '1.5rem'  
+                  '&:hover': { backgroundColor: 'rgba(255,255,255,0.1)' },
+                  p: 2,   
+                  fontSize: '1.5rem',
+                  '& .MuiSvgIcon-root': { color: 'white' }  // Overriding icon color inside button
                 }}
               >
                 {React.cloneElement(item.icon, { fontSize: 'inherit' })}
@@ -395,17 +381,16 @@ const Navbar = () => {
           ))}
         </Box>
 
-        {/* Updated User Section */}
-        <UserSection />
 
-        {/* Updated User Menu */}
+        <UserSection />
         <UserMenu />
 
-        {/* Mobile Drawer */}
+
         {isMobile && <MobileDrawer />}
       </Box>
     </Box>
   );
 };
+
 
 export default Navbar;

@@ -17,7 +17,7 @@ import {
     Visibility as VisibilityIcon,
     VisibilityOff as VisibilityOffIcon,
 } from '@mui/icons-material';
-import logo from "../assets/logo.jpg";
+import logo from "../assets/logo.png";
 import { useAuth } from '../context/AuthContext';
 
 const Login = () => {

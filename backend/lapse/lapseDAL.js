@@ -163,20 +163,36 @@ class LapseDAL {
             const sk = formatMonthYearKey(month);
             this.validateSortKey(sk);
 
+            // Query for all lapses for this company in the given month
+            // The partition key is in the format: {companyId}_{productionSiteId}
             const command = new QueryCommand({
                 TableName: this.tableName,
-                KeyConditionExpression: 'pk = :pk AND sk = :sk',
+                IndexName: 'GSI1', // Assuming there's a GSI on sk (month) for this query
+                KeyConditionExpression: 'sk = :sk AND begins_with(pk, :companyPrefix)',
                 ExpressionAttributeValues: {
-                    ':pk': String(companyId),
-                    ':sk': sk
+                    ':sk': sk,
+                    ':companyPrefix': `${companyId}_`
                 }
             });
 
-            logger.debug(`[LapseDAL] Getting lapses by month: ${companyId}, ${month}`);
+            logger.debug(`[LapseDAL] Getting lapses by month: ${companyId}, ${month}`, { 
+                tableName: this.tableName,
+                keyCondition: 'sk = :sk AND begins_with(pk, :companyPrefix)',
+                expressionValues: {
+                    sk,
+                    companyPrefix: `${companyId}_`
+                }
+            });
+            
             const response = await docClient.send(command);
+            logger.debug(`[LapseDAL] Found ${response.Items?.length || 0} lapses for ${companyId}, ${month}`);
             return response.Items || [];
         } catch (error) {
-            logger.error(`[LapseDAL] Error fetching lapses by month: ${error.message}`, { error, companyId, month });
+            logger.error(`[LapseDAL] Error fetching lapses by month: ${error.message}`, { 
+                error: error.stack, 
+                companyId, 
+                month 
+            });
             throw error;
         }
     }

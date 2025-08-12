@@ -75,32 +75,57 @@ class AllocationApi {
     }
 
     async fetchByType(type, month, companyId) {
-        const typeMap = {
-            'allocations': API_CONFIG.ENDPOINTS.ALLOCATION.BASE,
-            'banking': API_CONFIG.ENDPOINTS.BANKING.BASE,
-            'lapse': API_CONFIG.ENDPOINTS.LAPSE.BASE
-        };
-        
-        const endpoint = typeMap[type];
-        if (!endpoint) {
-            throw new Error(`Invalid allocation type: ${type}`);
+        console.group(`[API] fetchByType - ${type}`);
+        try {
+            const typeMap = {
+                'allocations': API_CONFIG.ENDPOINTS.ALLOCATION.BASE,
+                'banking': API_CONFIG.ENDPOINTS.BANKING.BASE,
+                'lapse': API_CONFIG.ENDPOINTS.LAPSE.BASE
+            };
+            
+            const endpoint = typeMap[type];
+            if (!endpoint) {
+                throw new Error(`Invalid allocation type: ${type}`);
+            }
+            
+            // Add company ID as query parameter if provided
+            const queryParams = [];
+            if (month) queryParams.push(`month=${month}`);
+            if (companyId) queryParams.push(`companyId=${companyId}`);
+            
+            const queryString = queryParams.length > 0 ? `?${queryParams.join('&')}` : '';
+            const url = `${endpoint}${queryString}`;
+            
+            console.log(`Fetching ${type} data from:`, url);
+            
+            const response = await api.get(url).catch(error => {
+                console.error(`Error fetching ${type} data:`, error);
+                if (error.response) {
+                    console.error('Response data:', error.response.data);
+                    console.error('Response status:', error.response.status);
+                    console.error('Response headers:', error.response.headers);
+                }
+                throw error;
+            });
+            
+            console.log(`Received ${type} response:`, response);
+            
+            const data = response.data?.data || [];
+            console.log(`Extracted ${type} data (${data.length} items):`, data);
+            
+            // Apply company filter if needed
+            const filteredData = companyId 
+                ? data.filter(item => item.companyId === companyId)
+                : data;
+                
+            console.log(`Returning ${filteredData.length} items after filtering`);
+            return filteredData;
+        } catch (error) {
+            console.error(`Error in fetchByType(${type}):`, error);
+            throw error;
+        } finally {
+            console.groupEnd();
         }
-        
-        // Add company ID as query parameter if provided
-        const queryParams = [];
-        if (month) queryParams.push(`month=${month}`);
-        if (companyId) queryParams.push(`companyId=${companyId}`);
-        
-        const queryString = queryParams.length > 0 ? `?${queryParams.join('&')}` : '';
-        const url = `${endpoint}${queryString}`;
-        
-        const response = await api.get(url);
-        const data = response.data?.data || [];
-        
-        // Additional client-side filtering as a fallback
-        return companyId 
-            ? data.filter(item => item.companyId === companyId)
-            : data;
     }
 
     async createAllocation(data) {

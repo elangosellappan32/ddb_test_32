@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../../context/AuthContext';
 import {
   Box,
   Grid,
@@ -204,7 +205,8 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const { stats: consumptionStats, loading: consumptionLoading, error: consumptionError } = useConsumptionStats();
-  const { allocationStats, reportStats } = useDashboardData();
+  const { user } = useAuth(); // Get the user from the useAuth hook
+  const { allocationStats, reportStats } = useDashboardData(user); // Pass the user to useDashboardData
 
   const calculateStats = useCallback((response) => {
     try {
@@ -606,118 +608,32 @@ const Dashboard = () => {
               ) : (
                 <Box sx={{ '& > * + *': { mt: 2 } }}>
                   <Grid container spacing={2}>
-                    <Grid item xs={6}>
+                    <Grid item xs={12}>
                       <StatCard 
-                        value={allocationStats.totalAllocated}
-                        label="Total Allocated"
+                        value={allocationStats.totalBankingUnits || 0}
+                        label="Total Banking Units"
                         sublabel="MW"
                         icon={AllocationIcon}
-                        color="warning"
+                        color="info"
                       />
                     </Grid>
-                    <Grid item xs={6}>
+                    <Grid item xs={12}>
                       <StatCard 
-                        value={allocationStats.unitsAllocated}
-                        label="Units Allocated"
+                        value={allocationStats.totalAllocationUnits || 0}
+                        label="Total Allocation Units"
+                        sublabel="MW"
                         icon={CheckCircleIcon}
-                        color="primary"
+                        color="success"
                       />
                     </Grid>
                     <Grid item xs={12}>
-                      <Box 
-                        sx={{
-                          p: 2,
-                          borderRadius: 2,
-                          backgroundColor: (theme) => alpha(theme.palette.warning.light, 0.08),
-                          border: '1px solid',
-                          borderColor: (theme) => alpha(theme.palette.warning.light, 0.3),
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between'
-                        }}
-                      >
-                        <Box>
-                          <Typography variant="body2" color="text.secondary" gutterBottom>Pending Allocations</Typography>
-                          <Typography variant="h6" sx={{ fontWeight: 700 }}>{allocationStats.pendingAllocations}</Typography>
-                        </Box>
-                        <Box 
-                          sx={{ 
-                            width: 44, 
-                            height: 44, 
-                            borderRadius: '50%', 
-                            backgroundColor: (theme) => alpha(theme.palette.warning.light, 0.2),
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            color: (theme) => theme.palette.warning.dark,
-                          }}
-                        >
-                          <PendingIcon fontSize="small" />
-                        </Box>
-                      </Box>
-                    </Grid>
-                    <Grid item xs={12}>
-                      <Box 
-                        sx={{
-                          p: 2,
-                          borderRadius: 2,
-                          backgroundColor: (theme) => alpha(theme.palette.success.main, 0.04),
-                          border: '1px solid',
-                          borderColor: (theme) => alpha(theme.palette.success.main, 0.2),
-                        }}
-                      >
-                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-                          <Typography variant="body2" color="text.secondary">Allocation Rate</Typography>
-                          <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                            <Typography variant="h6" sx={{ fontWeight: 600, mr: 1 }}>{allocationStats.allocationRate}%</Typography>
-                            <CheckCircleIcon sx={{ color: 'success.main', fontSize: 20 }} />
-                          </Box>
-                        </Box>
-                        <Box sx={{ 
-                          width: '100%', 
-                          height: 6, 
-                          bgcolor: 'grey.200',
-                          borderRadius: 3,
-                          overflow: 'hidden',
-                          mb: 1
-                        }}>
-                          <Box 
-                            sx={{ 
-                              width: `${allocationStats.allocationRate}%`, 
-                              height: '100%', 
-                              background: (theme) => {
-                                if (allocationStats.allocationRate > 90) {
-                                  return `linear-gradient(90deg, ${theme.palette.success.light}, ${theme.palette.success.main})`;
-                                } else if (allocationStats.allocationRate > 70) {
-                                  return `linear-gradient(90deg, ${theme.palette.info.light}, ${theme.palette.info.main})`;
-                                } else if (allocationStats.allocationRate > 50) {
-                                  return `linear-gradient(90deg, ${theme.palette.warning.light}, ${theme.palette.warning.main})`;
-                                } else {
-                                  return `linear-gradient(90deg, ${theme.palette.error.light}, ${theme.palette.error.main})`;
-                                }
-                              },
-                              borderRadius: 3,
-                              transition: 'width 0.5s ease-in-out',
-                            }} 
-                          />
-                        </Box>
-                        <Typography 
-                          variant="caption" 
-                          sx={{ 
-                            fontWeight: 500,
-                            color: (theme) => {
-                              if (allocationStats.allocationRate > 90) return theme.palette.success.main;
-                              if (allocationStats.allocationRate > 70) return theme.palette.info.main;
-                              if (allocationStats.allocationRate > 50) return theme.palette.warning.dark;
-                              return theme.palette.error.main;
-                            }
-                          }}
-                        >
-                          {allocationStats.allocationRate > 90 ? 'Excellent' : 
-                           allocationStats.allocationRate > 70 ? 'Good' : 
-                           allocationStats.allocationRate > 50 ? 'Average' : 'Needs Attention'}
-                        </Typography>
-                      </Box>
+                      <StatCard 
+                        value={allocationStats.totalLapseUnits || 0}
+                        label="Total Lapse Units"
+                        sublabel="MW"
+                        icon={WarningIcon}
+                        color="error"
+                      />
                     </Grid>
                   </Grid>
                 </Box>
