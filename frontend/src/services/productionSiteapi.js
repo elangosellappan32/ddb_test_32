@@ -1,20 +1,26 @@
 import api from './apiUtils';
 import { API_CONFIG } from '../config/api.config';
 
+// Helper function for timestamped logging
+const logWithTime = (message, ...optionalParams) => {
+  const timestamp = new Date().toISOString();
+  console.log(`[${timestamp}] ${message}`, ...optionalParams);
+};
+
 const handleApiError = (error) => {
-  console.error('API Error:', error);
+  logWithTime('❌ API Error:', error);
   throw new Error(error.response?.data?.message || error.message || 'An error occurred');
 };
 
 const formatSiteData = (data) => {
   try {
-    // Ensure we have the required fields
+    logWithTime('[STEP] Formatting site data - Raw:', data);
+
     if (!data || typeof data !== 'object') {
       console.warn('[ProductionSiteAPI] Invalid data object:', data);
       return null;
     }
 
-    // Format and validate each field with strict type checking
     const formatted = {
       companyId: Number(data.companyId),
       productionSiteId: Number(data.productionSiteId),
@@ -26,21 +32,13 @@ const formatSiteData = (data) => {
       annualProduction_L: Number(data.annualProduction_L || 0),
       htscNo: data.htscNo ? Number(data.htscNo) : 0,
       banking: Number(data.banking || 0),
-      status: ['Active', 'Inactive', 'Maintenance'].includes(data.status) ? data.status : 'Active',
+      status: ['active', 'inactive', 'maintenance'].includes(String(data.status || '').toLowerCase()) ? String(data.status).toLowerCase() : 'active',
       version: Number(data.version || 1),
       createdat: data.createdat || new Date().toISOString(),
       updatedat: data.updatedat || new Date().toISOString()
     };
 
-    // Validate required fields after formatting
-    if (isNaN(formatted.companyId) || isNaN(formatted.productionSiteId)) {
-      console.warn('[ProductionSiteAPI] Invalid IDs:', {
-        companyId: data.companyId,
-        productionSiteId: data.productionSiteId
-      });
-      return null;
-    }
-
+    logWithTime('[STEP] Formatted site data:', formatted);
     return formatted;
   } catch (error) {
     console.error('[ProductionSiteAPI] Error formatting site data:', error);
@@ -60,7 +58,6 @@ const CACHE_TTL = 5 * 60 * 1000;
 
 class ProductionSiteApi {
   constructor() {
-    // Bind all methods to preserve 'this' context
     this.fetchAll = this.fetchAll.bind(this);
     this.fetchOne = this.fetchOne.bind(this);
     this.create = this.create.bind(this);
@@ -70,12 +67,12 @@ class ProductionSiteApi {
 
   async fetchAll(forceRefresh = false, retries = 3, delay = 1000) {
     const now = Date.now();
-    
-    // Return cached data if it's still fresh and not forcing refresh
-    if (!forceRefresh && 
-        productionSitesCache.lastUpdated && 
-        (now - productionSitesCache.lastUpdated) < CACHE_TTL) {
-      console.log('[ProductionSiteAPI] Returning cached data');
+
+    logWithTime(`[STEP 1] fetchAll called — forceRefresh=${forceRefresh}, retries=${retries}`);
+
+    if (!forceRefresh && productionSitesCache.lastUpdated && (now - productionSitesCache.lastUpdated) < CACHE_TTL) {
+      logWithTime('[CACHE] Returning cached data');
+      console.table(productionSitesCache.data);
       return {
         success: true,
         data: [...productionSitesCache.data],
@@ -84,9 +81,8 @@ class ProductionSiteApi {
       };
     }
 
-    // If another request is in progress, wait for it
     if (productionSitesCache.isUpdating) {
-      console.log('[ProductionSiteAPI] Update in progress, waiting...');
+      logWithTime('[INFO] Another fetch is in progress... waiting...');
       await new Promise(resolve => setTimeout(resolve, 500));
       return this.fetchAll(forceRefresh, retries, delay);
     }
@@ -95,10 +91,11 @@ class ProductionSiteApi {
 
     const attempt = async (attemptsLeft) => {
       try {
-        console.log(`[ProductionSiteAPI] Fetching all sites, attempt ${retries - attemptsLeft + 1}/${retries}`);
+        logWithTime(`[STEP 2] Fetch attempt ${retries - attemptsLeft + 1}/${retries}`);
+
         const response = await api.get(API_CONFIG.ENDPOINTS.PRODUCTION.SITE.GET_ALL);
-        
-        // Extract and validate the data
+        logWithTime('[STEP 3] Raw API response:', response);
+
         let sites = [];
         if (Array.isArray(response?.data?.data)) {
           sites = response.data.data;
@@ -107,44 +104,33 @@ class ProductionSiteApi {
         } else if (response?.data) {
           sites = [response.data];
         } else {
-          console.warn('[ProductionSiteAPI] Unexpected response format:', response);
           throw new Error('Invalid response format from server');
         }
-        
-        // Format and validate each site
-        const formattedSites = sites
-          .map(site => {
-            try {
-              return formatSiteData(site);
-            } catch (error) {
-              console.warn('[ProductionSiteAPI] Error formatting site data:', error, site);
-              return null;
-            }
-          })
-          .filter(site => {
-            const isValid = site !== null && 
-                         site.companyId !== undefined && 
-                         site.productionSiteId !== undefined;
-            if (!isValid) {
-              console.warn('[ProductionSiteAPI] Invalid site data, skipping:', site);
-            }
-            return isValid;
-          });
 
-        // Log summary of formatted data
-        console.log(`[ProductionSiteAPI] Successfully formatted ${formattedSites.length} of ${sites.length} sites`);
-        
-        if (formattedSites.length === 0 && sites.length > 0) {
-          console.warn('[ProductionSiteAPI] No valid sites found in the response');
-          throw new Error('No valid production sites found in the response');
+        logWithTime(`[STEP 4] Sites received: ${sites.length}`);
+        console.table(sites);
+
+        const formattedSites = sites
+          .map((site, index) => {
+            logWithTime(`[PROCESS] Formatting site ${index + 1}/${sites.length}`);
+            return formatSiteData(site);
+          })
+          .filter(site => site !== null);
+
+        logWithTime(`[STEP 5] Successfully formatted ${formattedSites.length} of ${sites.length} sites`);
+        console.table(formattedSites);
+
+        if (formattedSites.length === 0) {
+          throw new Error('No valid production sites found');
         }
 
-        // Update cache
         productionSitesCache = {
           data: formattedSites,
           lastUpdated: Date.now(),
           isUpdating: false
         };
+
+        logWithTime('[CACHE] Cache updated at', new Date(productionSitesCache.lastUpdated).toLocaleString());
 
         return {
           success: true,
@@ -153,63 +139,41 @@ class ProductionSiteApi {
           fromCache: false
         };
       } catch (error) {
-        console.error(`[ProductionSiteAPI] Fetch error (${attemptsLeft} attempts left):`, error);
-        
+        logWithTime(`[ERROR] Fetch failed (${attemptsLeft} attempts left):`, error);
+
         if (attemptsLeft <= 1) {
           productionSitesCache.isUpdating = false;
-          
-          // If we have cached data, return it with an error flag
           if (productionSitesCache.data.length > 0) {
-            console.warn('[ProductionSiteAPI] Using cached data due to fetch error');
+            logWithTime('[FALLBACK] Using cached data due to fetch failure');
             return {
               success: false,
               data: [...productionSitesCache.data],
               total: productionSitesCache.data.length,
               fromCache: true,
-              error: error.message || 'Failed to fetch fresh data',
+              error: error.message,
               originalError: error
             };
           }
-          
           throw error;
         }
-        
-        // Wait before retrying with exponential backoff
+
         const backoffDelay = delay * (retries - attemptsLeft + 1);
-        console.log(`[ProductionSiteAPI] Retrying in ${backoffDelay}ms...`);
+        logWithTime(`[RETRY] Retrying in ${backoffDelay} ms...`);
         await new Promise(resolve => setTimeout(resolve, backoffDelay));
         return attempt(attemptsLeft - 1);
       }
     };
 
-    try {
-      return await attempt(retries);
-    } catch (error) {
-      productionSitesCache.isUpdating = false;
-      
-      // If we have cached data, return it with an error flag
-      if (productionSitesCache.data.length > 0) {
-        console.warn('[ProductionSiteAPI] Using cached data after all retries failed');
-        return {
-          success: false,
-          data: [...productionSitesCache.data],
-          total: productionSitesCache.data.length,
-          fromCache: true,
-          error: error.message || 'Failed to fetch production sites',
-          originalError: error
-        };
-      }
-      
-      throw new Error(error.message || 'Failed to fetch production sites');
-    }
+    return attempt(retries);
   }
 
   async fetchOne(companyId, productionSiteId) {
     try {
-      console.log('[ProductionSiteAPI] Fetching site:', { companyId, productionSiteId });
+      logWithTime('[FETCH ONE] Fetching site:', { companyId, productionSiteId });
       const response = await api.get(
         API_CONFIG.ENDPOINTS.PRODUCTION.SITE.GET_ONE(companyId, productionSiteId)
       );
+      logWithTime('[FETCH ONE] API Response:', response.data);
       return response.data;
     } catch (error) {
       return handleApiError(error);
@@ -218,35 +182,23 @@ class ProductionSiteApi {
 
   async create(data, authContext = {}) {
     try {
-      console.log('[ProductionSiteAPI] Received create request with data:', data);
-      
-      // Get auth token from localStorage
+      logWithTime('[CREATE] Received create request with data:', data);
+
       const token = localStorage.getItem('auth_token');
-      if (!token) {
-        throw new Error('Authentication token not found. Please log in again.');
-      }
-      
-      // Get user info from token or auth context
+      if (!token) throw new Error('Authentication token not found. Please log in again.');
+
       const user = authContext?.user || JSON.parse(localStorage.getItem('user') || '{}');
       const userId = user.username || user.email;
-      
-      if (!userId) {
-        throw new Error('User ID not found. Please log in again.');
-      }
-      
-      // Set environment
+      if (!userId) throw new Error('User ID not found. Please log in again.');
+
       const isDevelopment = process.env.NODE_ENV === 'development' || window.location.hostname === 'localhost';
-      
-      // Get company ID from multiple sources in order of precedence
       let companyId = data.companyId;
-      
+
       if (!companyId && authContext?.user) {
-        // Try to get companyId from different possible locations in auth context
         const sources = [
           { value: authContext.user.companyId, source: 'user.companyId' },
           { value: authContext.user.metadata?.companyId, source: 'user.metadata.companyId' }
         ];
-
         if (authContext.user.accessibleSites?.productionSites?.L?.length > 0) {
           const firstSiteId = authContext.user.accessibleSites.productionSites.L[0].S;
           const siteCompanyId = parseInt(firstSiteId.split('_')[0], 10);
@@ -254,55 +206,36 @@ class ProductionSiteApi {
             sources.push({ value: siteCompanyId, source: 'user.accessibleSites[0]' });
           }
         }
-
-        console.log('[ProductionSiteAPI] Auth context:', {
-          user: authContext.user,
-          metadata: authContext.user.metadata,
-          isDevelopment
-        });
-
         for (const source of sources) {
           if (source.value) {
             companyId = source.value;
-            console.log(`[ProductionSiteAPI] Using companyId from ${source.source}:`, companyId);
+            logWithTime(`[CREATE] Using companyId from ${source.source}:`, companyId);
             break;
           }
         }
       }
 
-      // If no company ID found and we're in development, use default
       if (!companyId && isDevelopment) {
         companyId = 1;
-        console.log('[ProductionSiteAPI] Using default development companyId:', companyId);
+        logWithTime('[CREATE] Using default development companyId:', companyId);
       }
 
-      // Validate company ID
       if (companyId) {
         companyId = Number(companyId);
         if (isNaN(companyId) || companyId <= 0) {
           if (isDevelopment) {
             companyId = 1;
-            console.log('[ProductionSiteAPI] Invalid company ID, using default in development:', companyId);
-          } else {
-            throw new Error('Invalid company ID format');
-          }
+            logWithTime('[CREATE] Invalid company ID, using default in development:', companyId);
+          } else throw new Error('Invalid company ID format');
         }
       } else {
-        const error = new Error('No company association found. Please contact your administrator to set up your company association.');
-        error.code = 'NO_COMPANY_ASSOCIATION';
-        error.details = {
-          environment: process.env.NODE_ENV,
-          user: authContext?.user?.username,
-          metadata: authContext?.user?.metadata
-        };
-        throw error;
+        throw new Error('No company association found.');
       }
 
-      // Prepare the site data with proper formatting
       const siteData = {
         ...data,
         companyId,
-        createdBy: userId,  // Track which user created this site
+        createdBy: userId,
         name: String(data.name || '').trim(),
         type: String(data.type || 'Solar').trim(),
         location: String(data.location || '').trim(),
@@ -318,69 +251,37 @@ class ProductionSiteApi {
         version: 1
       };
 
-      console.log('[ProductionSiteAPI] Creating production site with:', siteData);
+      logWithTime('[CREATE] Creating production site with:', siteData);
 
       const response = await api.post(
         API_CONFIG.ENDPOINTS.PRODUCTION.SITE.CREATE,
         siteData,
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        }
+        { headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' } }
       );
-      
-      // Invalidate cache to ensure fresh data on next fetch
+
       productionSitesCache.data = [];
       productionSitesCache.lastUpdated = null;
 
-      console.log('[ProductionSiteAPI] Production site created:', response.data);
-      
-      // Schedule a refresh of all sites data after 3 seconds
+      logWithTime('[CREATE] Production site created:', response.data);
+
       setTimeout(() => {
-        console.log('[ProductionSiteAPI] Refreshing sites data after creation...');
-        this.fetchAll(true).catch(err => {
-          console.error('[ProductionSiteAPI] Error refreshing sites:', err);
-        });
+        logWithTime('[CREATE] Refreshing sites data after creation...');
+        this.fetchAll(true).catch(err => console.error('[CREATE] Error refreshing sites:', err));
       }, 3000);
 
       return response.data;
-
     } catch (error) {
-      const isDevelopment = process.env.NODE_ENV === 'development' || window.location.hostname === 'localhost';
-      // If it's a company association error in development, retry with default company
-      if (error.code === 'NO_COMPANY_ASSOCIATION' && isDevelopment) {
-        console.warn('[ProductionSiteAPI] No company association found, retrying with default company in development');
-        return this.create({ ...data, companyId: 1 }, authContext);
-      }
-      
-      // For other errors, format them properly
-      const errorMessage = error.response?.data?.message || 
-                         error.response?.data?.error || 
-                         error.message ||
-                         'Failed to create production site';
-      const serverError = new Error(errorMessage);
-      serverError.status = error.response?.status;
-      serverError.details = {
-        ...error.response?.data,
-        originalError: error.message,
-        environment: process.env.NODE_ENV
-      };
-      serverError.code = error.code || error.response?.data?.code;
-      throw serverError;
+      return handleApiError(error);
     }
   }
 
   async update(companyId, productionSiteId, data) {
     try {
-      if (!companyId) {
-        throw new Error('Company ID is required to update a production site');
-      }
+      logWithTime('[UPDATE] Updating site:', { companyId, productionSiteId, data });
 
       const siteData = {
         ...data,
-        companyId: companyId,
+        companyId,
         productionSiteId,
         updatedat: new Date().toISOString()
       };
@@ -390,12 +291,9 @@ class ProductionSiteApi {
         siteData
       );
 
-      // Schedule a refresh of all sites data after 3 seconds
       setTimeout(() => {
-        console.log('[ProductionSiteAPI] Refreshing sites data after update...');
-        this.fetchAll(true).catch(err => {
-          console.error('[ProductionSiteAPI] Error refreshing sites:', err);
-        });
+        logWithTime('[UPDATE] Refreshing sites data after update...');
+        this.fetchAll(true).catch(err => console.error('[UPDATE] Error refreshing sites:', err));
       }, 3000);
 
       return response.data;
@@ -406,24 +304,15 @@ class ProductionSiteApi {
 
   async delete(companyId, productionSiteId) {
     try {
-      if (!companyId || !productionSiteId) {
-        throw new Error('Company ID and Production Site ID are required');
-      }
-
-      // Ensure IDs are strings for the API call
-      const companyIdStr = String(companyId);
-      const productionSiteIdStr = String(productionSiteId);
+      logWithTime('[DELETE] Deleting site:', { companyId, productionSiteId });
 
       const response = await api.delete(
-        API_CONFIG.ENDPOINTS.PRODUCTION.SITE.DELETE(companyIdStr, productionSiteIdStr)
+        API_CONFIG.ENDPOINTS.PRODUCTION.SITE.DELETE(String(companyId), String(productionSiteId))
       );
 
-      // Schedule a refresh of all sites data after 3 seconds
       setTimeout(() => {
-        console.log('[ProductionSiteAPI] Refreshing sites data after deletion...');
-        this.fetchAll(true).catch(err => {
-          console.error('[ProductionSiteAPI] Error refreshing sites:', err);
-        });
+        logWithTime('[DELETE] Refreshing sites data after deletion...');
+        this.fetchAll(true).catch(err => console.error('[DELETE] Error refreshing sites:', err));
       }, 3000);
 
       return response.data;

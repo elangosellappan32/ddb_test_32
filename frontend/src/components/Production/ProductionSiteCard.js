@@ -53,18 +53,34 @@ const getStatusColor = (status) => {
 
 // Function to normalize status for display
 const normalizeStatus = (status) => {
-  if (!status) return ''; // Return empty string for missing status
+  if (!status) return 'Inactive'; // Default to Inactive for missing status
   
   const statusStr = String(status).trim().toLowerCase();
   
-  // Handle common variations
-  if (statusStr.includes('active')) return 'Active';
-  if (statusStr.includes('inactive')) return 'Inactive';
-  if (statusStr.includes('maintain') || statusStr.includes('maint')) return 'Maintenance';
+  // Direct mapping of known status values
+  const statusMap = {
+    'active': 'Active',
+    'inactive': 'Inactive',
+    'maintenance': 'Maintenance',
+    'maintain': 'Maintenance',
+    'maint': 'Maintenance'
+  };
   
-  // Return empty string for unknown statuses
-  console.warn(`[ProductionSiteCard] Unknown status value: "${status}"`);
-  return '';
+  // Check for exact match first
+  if (statusMap[statusStr]) {
+    return statusMap[statusStr];
+  }
+  
+  // Check for partial matches
+  for (const [key, value] of Object.entries(statusMap)) {
+    if (statusStr.includes(key)) {
+      return value;
+    }
+  }
+  
+  // Default to Inactive for unknown statuses
+  console.warn(`[ProductionSiteCard] Unknown status value: "${status}" - Defaulting to Inactive`);
+  return 'Inactive';
 };
 
 const getTypeIcon = (type) => {
