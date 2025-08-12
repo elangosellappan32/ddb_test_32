@@ -24,13 +24,20 @@ import {
 import { useSnackbar } from 'notistack';
 
 const SITE_TYPES = ['Industrial', 'Commercial', 'Residential'];
-const SITE_STATUS = ['Active', 'Inactive', 'Maintenance'];
+// Status configuration with display text and colors
+const STATUS_CONFIG = {
+  active: { label: 'Active', color: 'success.main' },
+  inactive: { label: 'Inactive', color: 'text.secondary' },
+  maintenance: { label: 'Maintenance', color: 'warning.main' }
+};
+
+const SITE_STATUS = Object.keys(STATUS_CONFIG);
 
 const INITIAL_FORM_STATE = {
   name: '',
   location: '',
   type: 'Industrial',
-  status: 'Active',
+  status: 'active',
   annualConsumption: '',
   annualConsumption_L: '',
   timetolive: 0,
@@ -66,7 +73,7 @@ const ConsumptionSiteForm = ({
         name: initialData.name || '',
         type: normalizeType(initialData.type),
         location: initialData.location || '',
-        status: initialData.status || 'Active',
+        status: initialData.status ? initialData.status.toLowerCase() : 'active',
         annualConsumption: initialData.annualConsumption || initialData.annualConsumption_L || '',
         timetolive: Number(initialData.timetolive || 0),
         // Important: Always include these fields for version control
@@ -108,6 +115,10 @@ const ConsumptionSiteForm = ({
     
     if (!formData.location.trim()) {
       newErrors.location = 'Location is required';
+    }
+    
+    if (!formData.status || !SITE_STATUS.includes(formData.status.toLowerCase())) {
+      newErrors.status = 'Please select a valid status';
     }
     
     if (!formData.annualConsumption) {
@@ -274,7 +285,7 @@ const ConsumptionSiteForm = ({
         </Grid>
         
         <Grid item xs={12} sm={6}>
-          <FormControl fullWidth margin="normal">
+          <FormControl fullWidth margin="normal" error={!!errors.status}>
             <InputLabel>Status</InputLabel>
             <Select
               name="status"
@@ -282,11 +293,37 @@ const ConsumptionSiteForm = ({
               onChange={handleChange}
               label="Status"
               required
+              renderValue={(selected) => (
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <Box 
+                    sx={{
+                      width: 12,
+                      height: 12,
+                      borderRadius: '50%',
+                      bgcolor: STATUS_CONFIG[selected]?.color || 'grey.500'
+                    }}
+                  />
+                  {STATUS_CONFIG[selected]?.label || selected}
+                </Box>
+              )}
             >
-              {SITE_STATUS.map(status => (
-                <MenuItem key={status} value={status}>{status}</MenuItem>
+              {SITE_STATUS.map((status) => (
+                <MenuItem key={status} value={status}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Box 
+                      sx={{
+                        width: 12,
+                        height: 12,
+                        borderRadius: '50%',
+                        bgcolor: STATUS_CONFIG[status]?.color || 'grey.500'
+                      }}
+                    />
+                    {STATUS_CONFIG[status]?.label || status}
+                  </Box>
+                </MenuItem>
               ))}
             </Select>
+            {errors.status && <FormHelperText>{errors.status}</FormHelperText>}
           </FormControl>
         </Grid>
         

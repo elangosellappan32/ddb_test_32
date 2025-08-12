@@ -58,7 +58,10 @@ const formatSiteData = (data) => {
       annualConsumption: annualConsumption,
       annualConsumption_L: annualConsumption, // Keep both for backward compatibility
       htscNo: data.htscNo ? String(data.htscNo).trim() : '',
-      status: ['Active', 'Inactive', 'Maintenance'].includes(data.status) ? data.status : 'Active',
+      // Normalize status to lowercase and ensure it's one of the valid values
+      status: ['active', 'inactive', 'maintenance'].includes(String(data.status || '').toLowerCase()) 
+        ? String(data.status).toLowerCase() 
+        : 'active',
       version: Number(data.version || 1),
       createdat: data.createdat || new Date().toISOString(),
       updatedat: data.updatedat || new Date().toISOString(),
@@ -350,7 +353,10 @@ class ConsumptionSiteApi {
         location: String(data.location || currentData.location || '').trim(),
         annualConsumption: annualConsumption,
         annualConsumption_L: annualConsumption,
-        status: String(data.status || currentData.status || 'active').trim().toLowerCase(),
+        // Ensure status is one of the valid values and normalize to lowercase
+        status: ['active', 'inactive', 'maintenance'].includes(String(data.status || currentData.status || 'active').toLowerCase())
+          ? String(data.status || currentData.status || 'active').toLowerCase()
+          : 'active',
         version: (currentData.version || 0) + 1,
         updatedat: new Date().toISOString()
       };
