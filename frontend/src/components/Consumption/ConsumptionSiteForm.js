@@ -23,7 +23,12 @@ import {
 } from '@mui/icons-material';
 import { useSnackbar } from 'notistack';
 
-const SITE_TYPES = ['Industrial', 'Commercial', 'Residential'];
+// Site type configuration with display text and icons
+const SITE_TYPES = [
+  { value: 'textile', label: 'Textile' },
+  { value: 'industrial', label: 'Industrial' },
+  { value: 'commercial', label: 'Commercial' }
+];
 // Status configuration with display text and colors
 const STATUS_CONFIG = {
   active: { label: 'Active', color: 'success.main' },
@@ -36,7 +41,7 @@ const SITE_STATUS = Object.keys(STATUS_CONFIG);
 const INITIAL_FORM_STATE = {
   name: '',
   location: '',
-  type: 'Industrial',
+  type: 'textile',
   status: 'active',
   annualConsumption: '',
   annualConsumption_L: '',
@@ -56,14 +61,13 @@ const ConsumptionSiteForm = ({
   const [formData, setFormData] = useState(INITIAL_FORM_STATE);
   const [errors, setErrors] = useState({});
 
-  // Initialize form data when initialData changes
+  // Normalize site type to ensure it's one of the valid types
   const normalizeType = (type) => {
-    if (!type) return 'Industrial';
-    return String(type)
-      .trim()
-      .split(' ')
-      .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-      .join(' ');
+    if (!type) return 'textile';
+    const normalized = String(type).trim().toLowerCase();
+    return SITE_TYPES.some(t => t.value === normalized) 
+      ? normalized 
+      : 'textile'; // Default to textile if invalid
   };
 
   useEffect(() => {
@@ -224,16 +228,23 @@ const ConsumptionSiteForm = ({
         
         <Grid item xs={12} sm={6}>
           <FormControl fullWidth margin="normal" error={!!errors.type}>
-            <InputLabel>Type</InputLabel>
+            <InputLabel>Site Type</InputLabel>
             <Select
               name="type"
               value={formData.type}
               onChange={handleChange}
-              label="Type"
+              label="Site Type"
               required
+              startAdornment={
+                <InputAdornment position="start">
+                  <CategoryIcon color="action" />
+                </InputAdornment>
+              }
             >
-              {SITE_TYPES.map(type => (
-                <MenuItem key={type} value={type}>{type}</MenuItem>
+              {SITE_TYPES.map((type) => (
+                <MenuItem key={type.value} value={type.value}>
+                  {type.label}
+                </MenuItem>
               ))}
             </Select>
             {errors.type && <FormHelperText>{errors.type}</FormHelperText>}

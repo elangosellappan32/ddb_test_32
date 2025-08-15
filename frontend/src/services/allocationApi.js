@@ -75,7 +75,6 @@ class AllocationApi {
     }
 
     async fetchByType(type, month, companyId) {
-        console.group(`[API] fetchByType - ${type}`);
         try {
             const typeMap = {
                 'allocations': API_CONFIG.ENDPOINTS.ALLOCATION.BASE,
@@ -96,49 +95,37 @@ class AllocationApi {
             const queryString = queryParams.length > 0 ? `?${queryParams.join('&')}` : '';
             const url = `${endpoint}${queryString}`;
             
-            console.log(`Fetching ${type} data from:`, url);
             
             const response = await api.get(url).catch(error => {
-                console.error(`Error fetching ${type} data:`, error);
                 if (error.response) {
-                    console.error('Response data:', error.response.data);
-                    console.error('Response status:', error.response.status);
-                    console.error('Response headers:', error.response.headers);
                 }
                 throw error;
             });
             
-            console.log(`Received ${type} response:`, response);
             
             const data = response.data?.data || [];
-            console.log(`Extracted ${type} data (${data.length} items):`, data);
             
             // Apply company filter if needed
             const filteredData = companyId 
                 ? data.filter(item => item.companyId === companyId)
                 : data;
                 
-            console.log(`Returning ${filteredData.length} items after filtering`);
             return filteredData;
         } catch (error) {
-            console.error(`Error in fetchByType(${type}):`, error);
             throw error;
         } finally {
-            console.groupEnd();
         }
     }
 
     async createAllocation(data) {
         try {
             const formattedData = this.formatAllocationData(data, 'ALLOCATION');
-            console.log('[AllocationApi] Outgoing ALLOCATION payload:', formattedData);
             const response = await api.post(API_CONFIG.ENDPOINTS.ALLOCATION.CREATE, formattedData);
             return response.data;
         } catch (error) {
             // Only log unexpected errors (not simple duplicates)
             const msg = error.response?.data?.message || '';
             if (!(error.response?.status === 400 && msg.includes('already exists'))) {
-                console.error('[AllocationApi] Backend ALLOCATION error:', error?.response?.data || error);
             }
             throw this.handleError(error);
         }
@@ -147,7 +134,6 @@ class AllocationApi {
     async createBanking(data) {
         try {
             const formattedData = this.formatAllocationData(data, 'BANKING');
-            console.log('[AllocationApi] Outgoing BANKING payload:', formattedData);
             
             // First try to update if record exists
             try {
@@ -155,7 +141,6 @@ class AllocationApi {
                 if (formattedData.pk && formattedData.sk) {
                     const existingRecord = await this.get(formattedData.pk, formattedData.sk, 'BANKING').catch(() => null);
                     if (existingRecord) {
-                        console.log('[BankingApi] Record exists, updating instead of creating');
                         return await this.update(formattedData.pk, formattedData.sk, formattedData, 'BANKING');
                     }
                 }
@@ -166,7 +151,6 @@ class AllocationApi {
                 // If create fails with a duplicate error, try to update instead
                 const errorMessage = createError?.response?.data?.message || '';
                 if (errorMessage.includes('already exists') || errorMessage.includes('conditional check failed')) {
-                    console.log('[BankingApi] Record may exist, attempting update instead');
                     if (formattedData.pk && formattedData.sk) {
                         return await this.update(formattedData.pk, formattedData.sk, formattedData, 'BANKING');
                     }
@@ -174,7 +158,6 @@ class AllocationApi {
                 throw createError;
             }
         } catch (error) {
-            console.error('[AllocationApi] Backend BANKING error:', error?.response?.data || error);
             throw this.handleError(error);
         }
     }
@@ -182,11 +165,9 @@ class AllocationApi {
     async createLapse(data) {
         try {
             const formattedData = this.formatAllocationData(data, 'LAPSE');
-            console.log('[AllocationApi] Outgoing LAPSE payload:', formattedData);
             const response = await api.post(API_CONFIG.ENDPOINTS.LAPSE.CREATE, formattedData);
             return response.data;
         } catch (error) {
-            console.error('[AllocationApi] Backend LAPSE error:', error?.response?.data || error);
             throw this.handleError(error);
         }
     }
@@ -210,7 +191,6 @@ class AllocationApi {
             const response = await api.post(endpoint, formattedData);
             return response.data;
         } catch (error) {
-            console.error('[AllocationApi] Backend error:', error?.response?.data || error);
             throw this.handleError(error);
         }
     }
@@ -303,7 +283,6 @@ class AllocationApi {
                 });
             }
         } else {
-            console.error('[Allocation API Error]:', error);
         }
         const message = error.response?.data?.message || error.message;
         throw new Error(message);

@@ -4,7 +4,7 @@ import { API_CONFIG } from '../config/api.config';
 // Helper function for timestamped logging
 const logWithTime = (message, ...optionalParams) => {
   const timestamp = new Date().toISOString();
-  console.log(`[${timestamp}] ${message}`, ...optionalParams);
+  // Removed console.log for production
 };
 
 const handleApiError = (error) => {
@@ -17,7 +17,6 @@ const formatSiteData = (data) => {
     logWithTime('[STEP] Formatting site data - Raw:', data);
 
     if (!data || typeof data !== 'object') {
-      console.warn('[ProductionSiteAPI] Invalid data object:', data);
       return null;
     }
 
@@ -72,7 +71,6 @@ class ProductionSiteApi {
 
     if (!forceRefresh && productionSitesCache.lastUpdated && (now - productionSitesCache.lastUpdated) < CACHE_TTL) {
       logWithTime('[CACHE] Returning cached data');
-      console.table(productionSitesCache.data);
       return {
         success: true,
         data: [...productionSitesCache.data],
@@ -108,8 +106,7 @@ class ProductionSiteApi {
         }
 
         logWithTime(`[STEP 4] Sites received: ${sites.length}`);
-        console.table(sites);
-
+        
         const formattedSites = sites
           .map((site, index) => {
             logWithTime(`[PROCESS] Formatting site ${index + 1}/${sites.length}`);
@@ -118,7 +115,6 @@ class ProductionSiteApi {
           .filter(site => site !== null);
 
         logWithTime(`[STEP 5] Successfully formatted ${formattedSites.length} of ${sites.length} sites`);
-        console.table(formattedSites);
 
         if (formattedSites.length === 0) {
           throw new Error('No valid production sites found');
@@ -169,11 +165,10 @@ class ProductionSiteApi {
 
   async fetchOne(companyId, productionSiteId) {
     try {
-      logWithTime('[FETCH ONE] Fetching site:', { companyId, productionSiteId });
+      logWithTime(`[FETCH ONE] Fetching site: companyId=${companyId}, productionSiteId=${productionSiteId}`);
       const response = await api.get(
         API_CONFIG.ENDPOINTS.PRODUCTION.SITE.GET_ONE(companyId, productionSiteId)
       );
-      logWithTime('[FETCH ONE] API Response:', response.data);
       return response.data;
     } catch (error) {
       return handleApiError(error);

@@ -127,7 +127,7 @@ const ConsumptionDataTable = ({
             <TableRow sx={{ backgroundColor: 'primary.main' }}>
               <TableCell>
                 <Typography variant="subtitle2" sx={{ color: 'white', fontWeight: 'bold' }}>
-                  Period
+                  Month
                 </Typography>
               </TableCell>
               <TableCell align="right">

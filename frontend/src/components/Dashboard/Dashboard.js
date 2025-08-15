@@ -646,9 +646,9 @@ const Dashboard = () => {
         <Grid item xs={12} md={6} lg={3}>
           <DashboardCard
             icon={ReportsIcon}
-            title="Reports"
+            title="invoice"
             color="info"
-            onClick={() => navigate('/report')}
+            onClick={() => navigate('/invoice')}
             content={
               reportStats.loading ? (
                 <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', minHeight: 300 }}>
@@ -662,7 +662,7 @@ const Dashboard = () => {
                     <Grid item xs={6}>
                       <StatCard 
                         value={reportStats.dailyReports}
-                        label="Daily Reports"
+                        label=" tax invoice"
                         icon={AssessmentIcon}
                         color="info"
                       />
@@ -670,7 +670,7 @@ const Dashboard = () => {
                     <Grid item xs={6}>
                       <StatCard 
                         value={reportStats.monthlyReports}
-                        label="Monthly Reports"
+                        label="montly sales"
                         icon={AssessmentOutlinedIcon}
                         color="primary"
                       />
@@ -689,7 +689,7 @@ const Dashboard = () => {
                         }}
                       >
                         <Box>
-                          <Typography variant="body2" color="text.secondary" gutterBottom>Pending Review</Typography>
+                          <Typography variant="body2" color="text.secondary" gutterBottom>monthly expense </Typography>
                           <Typography variant="h6" sx={{ fontWeight: 700 }}>{reportStats.pendingReview}</Typography>
                         </Box>
                         <Box 
