@@ -130,46 +130,16 @@ const ConsumptionDataTable = ({
                   Month
                 </Typography>
               </TableCell>
-              <TableCell align="right">
-                <Tooltip title="Non-Peak Period">
-                  <Typography variant="subtitle2" sx={{ color: 'white', fontWeight: 'bold' }}>
-                    C1
-                    <InfoIcon sx={{ ml: 0.5, fontSize: '1rem', verticalAlign: 'middle' }} />
+              {['C1', 'C2', 'C3', 'C4', 'C5'].map((header) => (
+                <TableCell key={header} align="right">
+                  <Typography variant="subtitle2" sx={{ 
+                    color: ['C2', 'C3'].includes(header) ? 'warning.light' : 'success.light', 
+                    fontWeight: 'bold' 
+                  }}>
+                    {header}
                   </Typography>
-                </Tooltip>
-              </TableCell>
-              <TableCell align="right">
-                <Tooltip title="Peak Period">
-                  <Typography variant="subtitle2" sx={{ color: 'white', fontWeight: 'bold' }}>
-                    C2
-                    <InfoIcon sx={{ ml: 0.5, fontSize: '1rem', verticalAlign: 'middle' }} />
-                  </Typography>
-                </Tooltip>
-              </TableCell>
-              <TableCell align="right">
-                <Tooltip title="Peak Period">
-                  <Typography variant="subtitle2" sx={{ color: 'white', fontWeight: 'bold' }}>
-                    C3
-                    <InfoIcon sx={{ ml: 0.5, fontSize: '1rem', verticalAlign: 'middle' }} />
-                  </Typography>
-                </Tooltip>
-              </TableCell>
-              <TableCell align="right">
-                <Tooltip title="Non-Peak Period">
-                  <Typography variant="subtitle2" sx={{ color: 'white', fontWeight: 'bold' }}>
-                    C4
-                    <InfoIcon sx={{ ml: 0.5, fontSize: '1rem', verticalAlign: 'middle' }} />
-                  </Typography>
-                </Tooltip>
-              </TableCell>
-              <TableCell align="right">
-                <Tooltip title="Non-Peak Period">
-                  <Typography variant="subtitle2" sx={{ color: 'white', fontWeight: 'bold' }}>
-                    C5
-                    <InfoIcon sx={{ ml: 0.5, fontSize: '1rem', verticalAlign: 'middle' }} />
-                  </Typography>
-                </Tooltip>
-              </TableCell>
+                </TableCell>
+              ))}
               <TableCell align="right">
                 <Typography variant="subtitle2" sx={{ color: 'white', fontWeight: 'bold' }}>
                   Total
@@ -192,15 +162,34 @@ const ConsumptionDataTable = ({
                 <TableCell>
                   <Typography>{formatSKPeriod(row.sk)}</Typography>
                 </TableCell>
-                <TableCell align="right">{formatNumber(row.c1)}</TableCell>
-                <TableCell align="right">{formatNumber(row.c2)}</TableCell>
-                <TableCell align="right">{formatNumber(row.c3)}</TableCell>
-                <TableCell align="right">{formatNumber(row.c4)}</TableCell>
-                <TableCell align="right">{formatNumber(row.c5)}</TableCell>
-                <TableCell align="right">
-                  <Typography color="primary.main" fontWeight="bold">
-                    {calculateRowTotal(row)}
-                  </Typography>
+                {['c1', 'c2', 'c3', 'c4', 'c5'].map((field) => {
+                  const isPeak = ['c2', 'c3'].includes(field);
+                  return (
+                    <TableCell 
+                      key={field}
+                      align="right" 
+                      sx={{ 
+                        color: isPeak ? 'warning.dark' : 'success.main',
+                        fontWeight: 'medium',
+                        backgroundColor: isPeak ? 'rgba(255, 152, 0, 0.08)' : 'rgba(76, 175, 80, 0.08)',
+                        '&:hover': {
+                          backgroundColor: isPeak ? 'rgba(255, 152, 0, 0.12)' : 'rgba(76, 175, 80, 0.12)'
+                        }
+                      }}
+                    >
+                      {formatNumber(row[field])}
+                    </TableCell>
+                  );
+                })}
+                <TableCell 
+                  align="right"
+                  sx={{
+                    fontWeight: 'bold',
+                    color: 'primary.main',
+                    backgroundColor: 'rgba(25, 118, 210, 0.08)'
+                  }}
+                >
+                  {calculateRowTotal(row)}
                 </TableCell>
                 <TableCell align="right">
                   <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1 }}>

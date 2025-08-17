@@ -11,10 +11,63 @@ import {
   Box,
   Tooltip
 } from '@mui/material';
+import { styled } from '@mui/material/styles';
 import {
   AccountBalance as BankingIcon,
   Info as InfoIcon
 } from '@mui/icons-material';
+
+// Styled components for consistent styling
+const StyledTableHeader = styled(TableCell)(({ theme }) => ({
+  backgroundColor: theme.palette.primary.main,
+  color: theme.palette.common.white,
+  fontWeight: 'bold',
+  '& .MuiTypography-root': {
+    color: 'inherit',
+    fontWeight: 'inherit',
+  }
+}));
+
+const StyledTableCell = styled(TableCell, {
+  shouldForwardProp: (prop) => prop !== 'isPeak' && prop !== 'isTotal'
+})(({ theme, isPeak, isTotal }) => ({
+  '&.MuiTableCell-root': {
+    padding: theme.spacing(1.5),
+    transition: 'background-color 0.2s',
+    ...(isTotal ? {
+      fontWeight: 'bold',
+      color: theme.palette.primary.main,
+      backgroundColor: 'rgba(25, 118, 210, 0.08)',
+    } : isPeak ? {
+      color: theme.palette.warning.dark,
+      backgroundColor: 'rgba(255, 152, 0, 0.08)',
+      '&:hover': {
+        backgroundColor: 'rgba(255, 152, 0, 0.12)',
+      }
+    } : {
+      color: theme.palette.success.main,
+      backgroundColor: 'rgba(76, 175, 80, 0.08)',
+      '&:hover': {
+        backgroundColor: 'rgba(76, 175, 80, 0.12)',
+      }
+    })
+  }
+}));
+
+const TotalCell = styled(TableCell)(({ theme }) => ({
+  fontWeight: 'bold',
+  color: theme.palette.primary.main,
+  backgroundColor: 'rgba(25, 118, 210, 0.08)',
+  '&.peak': {
+    color: theme.palette.warning.dark,
+  },
+  '&.non-peak': {
+    color: theme.palette.success.main,
+  },
+  '&.allocation': {
+    color: theme.palette.primary.main,
+  }
+}));
 
 const BankingUnitsTable = ({ bankingData = [], selectedYear }) => {
   const PEAK_PERIODS = ['c2', 'c3'];
@@ -57,7 +110,7 @@ const BankingUnitsTable = ({ bankingData = [], selectedYear }) => {
 
   // Show net balance in the UI
   return (
-    <TableContainer component={Paper} sx={{ mb: 4 }}>
+    <TableContainer component={Paper} sx={{ mb: 6, mt: 2, boxShadow: 2 }}>
       <Box sx={{ p: 2, borderBottom: '1px solid rgba(224, 224, 224, 1)', display: 'flex', alignItems: 'center', gap: 1 }}>
         <BankingIcon color="primary" />
         <Typography variant="h6">Banking Units</Typography>
@@ -65,83 +118,103 @@ const BankingUnitsTable = ({ bankingData = [], selectedYear }) => {
       <Table>
         <TableHead>
           <TableRow>
-            <TableCell>Site Name</TableCell>
-            {ALL_PERIODS.map(period => (
-              <TableCell key={period} align="right">
-                <Tooltip title={PEAK_PERIODS.includes(period) ? "Peak Period" : "Non-Peak Period"}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
-                    {period.toUpperCase()}
-                    <InfoIcon sx={{ ml: 0.5, fontSize: '1rem', color: PEAK_PERIODS.includes(period) ? 'warning.main' : 'primary.main' }} />
-                  </Box>
-                </Tooltip>
-              </TableCell>
-            ))}
-            <TableCell align="right">Previous Balance</TableCell>
-            <TableCell align="right">Current Balance</TableCell>
-            <TableCell align="right">Net Balance</TableCell>
+            <StyledTableHeader>Site Name</StyledTableHeader>
+            <StyledTableHeader align="right">
+              <Tooltip title="Non-Peak Period">
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
+                  C1
+                  <InfoIcon sx={{ ml: 0.5, fontSize: '1rem', color: 'success.light' }} />
+                </Box>
+              </Tooltip>
+            </StyledTableHeader>
+            <StyledTableHeader align="right">
+              <Tooltip title="Peak Period">
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
+                  C2
+                  <InfoIcon sx={{ ml: 0.5, fontSize: '1rem', color: 'warning.light' }} />
+                </Box>
+              </Tooltip>
+            </StyledTableHeader>
+            <StyledTableHeader align="right">
+              <Tooltip title="Peak Period">
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
+                  C3
+                  <InfoIcon sx={{ ml: 0.5, fontSize: '1rem', color: 'warning.light' }} />
+                </Box>
+              </Tooltip>
+            </StyledTableHeader>
+            <StyledTableHeader align="right">
+              <Tooltip title="Non-Peak Period">
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
+                  C4
+                  <InfoIcon sx={{ ml: 0.5, fontSize: '1rem', color: 'success.light' }} />
+                </Box>
+              </Tooltip>
+            </StyledTableHeader>
+            <StyledTableHeader align="right">
+              <Tooltip title="Non-Peak Period">
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
+                  C5
+                  <InfoIcon sx={{ ml: 0.5, fontSize: '1rem', color: 'success.light' }} />
+                </Box>
+              </Tooltip>
+            </StyledTableHeader>
+            <StyledTableHeader align="right">Previous Balance</StyledTableHeader>
+            <StyledTableHeader align="right">Current Balance</StyledTableHeader>
+            <StyledTableHeader align="right">Net Balance</StyledTableHeader>
           </TableRow>
         </TableHead>
         <TableBody>
-          {bankingData.map((row, index) => {
+          {bankingData.length > 0 ? bankingData.map((row, index) => {
             const netValues = calculateNetBanking(row);
             return (
-              <TableRow key={`${row.productionSiteId}-${index}`} hover>
+              <TableRow 
+                key={`${row.productionSiteId}-${index}`}
+                sx={{ 
+                  '&:nth-of-type(odd)': { backgroundColor: 'rgba(0, 0, 0, 0.02)' },
+                  transition: 'background-color 0.2s'
+                }}
+              >
                 <TableCell>
                   <Box sx={{ display: 'flex', alignItems: 'center' }}>
                     {row.siteName}
                   </Box>
                 </TableCell>
-                {ALL_PERIODS.map(period => {
-                  const value = formatValue(netValues[period]);
-                  const total = calculatePeriodTotal(row, [period]);
-                  return (
-                    <TableCell key={period} align="right">
-                      <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
-                        <Typography sx={{
-                          color: PEAK_PERIODS.includes(period) ? 'warning.main' : 'primary.main',
-                          fontWeight: PEAK_PERIODS.includes(period) ? 'bold' : 'normal'
-                        }}>
-                          {value}
-                        </Typography>
-                        <Typography variant="caption" sx={{
-                          color: 'text.secondary',
-                          fontSize: '0.75rem'
-                        }}>
-                          Total: {total}
-                        </Typography>
-                      </Box>
-                    </TableCell>
-                  );
-                })}
-                <TableCell align="right" sx={{ color: 'text.secondary' }}>
-                  <Typography variant="caption" sx={{
-                    color: 'text.secondary',
-                    fontSize: '0.75rem'
-                  }}>
-                    Previous Total: {calculatePeriodTotal(row.previousBalance, ALL_PERIODS)}
-                  </Typography>
-                </TableCell>
-                <TableCell align="right" sx={{ fontWeight: 'bold', color: 'primary.main' }}>
-                  <Typography variant="caption" sx={{
-                    color: 'primary.main',
-                    fontSize: '0.75rem'
-                  }}>
-                    Current Total: {calculatePeriodTotal(row, ALL_PERIODS)}
-                  </Typography>
-                </TableCell>
-                <TableCell align="right" sx={{ 
-                  fontWeight: 'bold', 
+                <StyledTableCell align="right" isPeak={false}>
+                  {formatValue(netValues.c1)}
+                </StyledTableCell>
+                <StyledTableCell align="right" isPeak={true}>
+                  {formatValue(netValues.c2)}
+                </StyledTableCell>
+                <StyledTableCell align="right" isPeak={true}>
+                  {formatValue(netValues.c3)}
+                </StyledTableCell>
+                <StyledTableCell align="right" isPeak={false}>
+                  {formatValue(netValues.c4)}
+                </StyledTableCell>
+                <StyledTableCell align="right" isPeak={false}>
+                  {formatValue(netValues.c5)}
+                </StyledTableCell>
+                <TotalCell align="right" className="non-peak">
+                  {calculatePeriodTotal(row.previousBalance, ALL_PERIODS)}
+                </TotalCell>
+                <TotalCell align="right" className="allocation">
+                  {calculatePeriodTotal(row, ALL_PERIODS)}
+                </TotalCell>
+                <TotalCell align="right" sx={{ 
                   color: calculateNetBalance(row) > 0 ? 'success.main' : 'error.main'
                 }}>
-                  <Typography variant="caption" sx={{
-                    fontSize: '0.75rem'
-                  }}>
-                    Net Total: {calculateNetBalance(row)}
-                  </Typography>
-                </TableCell>
+                  {calculateNetBalance(row)}
+                </TotalCell>
               </TableRow>
             );
-          })}
+          }) : (
+            <TableRow>
+              <TableCell colSpan={10} align="center" sx={{ py: 3 }}>
+                <Typography color="textSecondary">No banking data available</Typography>
+              </TableCell>
+            </TableRow>
+          )}
         </TableBody>
       </Table>
     </TableContainer>

@@ -1337,12 +1337,12 @@ const Allocation = () => {
         justifyContent: 'space-between', 
         alignItems: 'center', 
         mb: 3,
-        borderBottom: '2px solid #1976d2',
+        borderBottom: '2px solid #000000',
         pb: 2
       }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
           <AssignmentIcon color="primary" sx={{ fontSize: 32 }} />
-          <Typography variant="h4">Allocation Management</Typography>
+          <Typography variant="h4" sx={{ color: '#1976d2' }}>Allocation Management</Typography>
         </Box>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mr: 2 }}>
@@ -1415,10 +1415,12 @@ const Allocation = () => {
         onManualAllocationChange={handleManualAllocationChange}
       />
       
-      <BankingUnitsTable 
-        bankingData={aggregatedBankingData}
-        selectedYear={financialYear}
-      />
+      <Box sx={{ mt: 4 }}>
+        <BankingUnitsTable 
+          bankingData={aggregatedBankingData}
+          selectedYear={financialYear}
+        />
+      </Box>
 
       <ConsumptionUnitsTable 
         consumptionData={consumptionData}

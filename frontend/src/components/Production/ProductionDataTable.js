@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo, useCallback } from 'react';
 import { useSnackbar } from 'notistack';
 import {
   Table,
@@ -7,15 +7,22 @@ import {
   TableContainer,
   TableHead,
   TableRow,
+  Paper,
   IconButton,
   Typography,
-  Paper,
-  Tooltip
+  Box,
+  Tooltip,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Button
 } from '@mui/material';
 import { 
   Edit as EditIcon, 
   Delete as DeleteIcon, 
-  ContentCopy as CopyIcon 
+  ContentCopy as CopyIcon,
+  Info as InfoIcon
 } from '@mui/icons-material';
 import { formatNumber } from '../../utils/numberFormat';
 import { format } from 'date-fns';
@@ -30,8 +37,12 @@ const ProductionDataTable = ({
   isProductionPage = false 
 }) => {
   const { enqueueSnackbar } = useSnackbar();
+  const [deleteDialog, setDeleteDialog] = React.useState({
+    open: false,
+    selectedItem: null
+  });
 
-  const tableData = React.useMemo(() => {
+  const tableData = useMemo(() => {
     // Handle both array and object data structures
     const dataArray = Array.isArray(data) ? data : (data?.data || []);
     
@@ -137,25 +148,31 @@ const ProductionDataTable = ({
 
   const renderUnitValues = (row) => (
     <>
-            {['c1', 'c2', 'c3', 'c4', 'c5'].map((field) => (
-        <TableCell 
-          key={`${row.uniqueId}_${field}`} 
-          align="right" 
-          sx={{ 
-            color: 'success.main',
-            '&:hover': {
-              color: 'success.dark'
-            }
-          }}
-        >
-          {formatNumber(row[field] || 0)}
-        </TableCell>
-      ))}
+      {['c1', 'c2', 'c3', 'c4', 'c5'].map((field) => {
+        const isPeak = ['c2', 'c3'].includes(field);
+        return (
+          <TableCell 
+            key={`${row.uniqueId}_${field}`} 
+            align="right" 
+            sx={{ 
+              color: isPeak ? 'warning.dark' : 'success.main',
+              fontWeight: 'medium',
+              backgroundColor: isPeak ? 'rgba(255, 152, 0, 0.08)' : 'rgba(76, 175, 80, 0.08)',
+              '&:hover': {
+                backgroundColor: isPeak ? 'rgba(255, 152, 0, 0.12)' : 'rgba(76, 175, 80, 0.12)'
+              }
+            }}
+          >
+            {formatNumber(row[field] || 0)}
+          </TableCell>
+        );
+      })}
       <TableCell 
         align="right"
         sx={{
           fontWeight: 'bold',
-          color: 'primary.main'
+          color: 'primary.main',
+          backgroundColor: 'rgba(25, 118, 210, 0.08)'
         }}
       >
         {formatNumber(
@@ -165,58 +182,83 @@ const ProductionDataTable = ({
     </>
   );  const renderChargeValues = (row) => (
     <>
-            {[...Array(10)].map((_, i) => {
-              const field = `c${(i + 1).toString().padStart(3, '0')}`;
-              return (
-                <TableCell 
-                  key={`${row.uniqueId}_${field}`} 
-                  align="right" 
-                  sx={{ 
-                    color: 'warning.dark',
-                    '&:hover': {
-                      color: 'warning.main'
-                    }
-                  }}
-                >
-                  {formatNumber(row[field] || 0)}
-                </TableCell>
-              );
-            })}
-            <TableCell 
-              align="right"
-              sx={{
-                fontWeight: 'bold',
-                color: 'primary.main'
-              }}
-            >
-              {formatNumber(
-                [...Array(10)].reduce((sum, _, i) => {
-                  const field = `c${(i + 1).toString().padStart(3, '0')}`;
-                  return sum + (row[field] || 0);
-                }, 0)
-              )}
-            </TableCell>
-          </>
-        );  // Add function to check if date exists for site
-  const checkDateExistsForSite = (dateToCheck, siteId) => {
-    if (!data?.data || !Array.isArray(data.data)) return false;
-    
-    return data.data.some(row => {
-      const existingDate = row.sk || row.date;
-      // Normalize both dates to mmyyyy format for comparison
-      const normalizedExistingDate = existingDate.replace('/', '');
-      const normalizedCheckDate = dateToCheck.replace('/', '');
-      return normalizedExistingDate === normalizedCheckDate && row.productionSiteId === siteId;
-    });
-  };
+      {[...Array(10)].map((_, i) => {
+        const field = `c${(i + 1).toString().padStart(3, '0')}`;
+        return (
+          <TableCell 
+            key={`${row.uniqueId}_${field}`} 
+            align="right" 
+            sx={{ 
+              color: 'info.dark',
+              fontWeight: 'medium',
+              backgroundColor: 'rgba(0, 188, 212, 0.08)',
+              '&:hover': {
+                backgroundColor: 'rgba(0, 188, 212, 0.12)'
+              }
+            }}
+          >
+            {formatNumber(row[field] || 0)}
+          </TableCell>
+        );
+      })}
+      <TableCell 
+        align="right"
+        sx={{
+          fontWeight: 'bold',
+          color: 'primary.main',
+          backgroundColor: 'rgba(25, 118, 210, 0.08)'
+        }}
+      >
+        {formatNumber(
+          [...Array(10)].reduce((sum, _, i) => {
+            const field = `c${(i + 1).toString().padStart(3, '0')}`;
+            return sum + (row[field] || 0);
+          }, 0)
+        )}
+      </TableCell>
+    </>
+        );  const handleEditClick = useCallback((row) => {
+    if (onEdit) {
+      onEdit(row);
+    }
+  }, [onEdit]);
 
-  // Update renderTableRow to show existing data indicator
+  const handleDeleteClick = useCallback((row) => {
+    setDeleteDialog({
+      open: true,
+      selectedItem: row
+    });
+  }, []);
+
+  const handleDeleteConfirm = useCallback(() => {
+    if (onDelete && deleteDialog.selectedItem) {
+      onDelete(deleteDialog.selectedItem);
+    }
+    setDeleteDialog({ open: false, selectedItem: null });
+  }, [onDelete, deleteDialog.selectedItem]);
+
+  const handleDeleteCancel = useCallback(() => {
+    setDeleteDialog({ open: false, selectedItem: null });
+  }, []);
+
+  const formatSKPeriod = useCallback((sk) => {
+    if (!sk) return 'N/A';
+    try {
+      const month = parseInt(sk.substring(0, 2)) - 1;
+      const year = `${sk.substring(2)}`;
+      const date = new Date(year, month);
+      return format(date, 'MMMM yyyy');
+    } catch (error) {
+      console.error('Error formatting SK period:', error);
+      return 'N/A';
+    }
+  }, []);
+
   const renderTableRow = (row) => (
     <TableRow 
       key={row.uniqueId}
-      sx={{
-        backgroundColor: row.isExisting ? 'action.hover' : 'inherit'
-      }}
+      hover 
+      sx={{ '&:last-child td, &:last-child th': { border: 0 } }}
     >
       <TableCell>
         <Typography>
@@ -228,94 +270,69 @@ const ProductionDataTable = ({
             sx={{ ml: 1 }}
           >
             {`(Site ${row.productionSiteId})`}
-            {row.isExisting && (
-              <Typography 
-                component="span" 
-                color="error" 
-                sx={{ ml: 1 }}
-              >
-                • Existing Entry
-              </Typography>
-            )}
           </Typography>
         </Typography>
       </TableCell>
       {type === 'unit' ? renderUnitValues(row) : renderChargeValues(row)}
-      {renderActions(row)}
+      <TableCell align="right">
+        <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
+          {permissions?.update && onEdit && (
+            <Tooltip title="Edit Production Data">
+              <IconButton 
+                size="small" 
+                onClick={() => handleEditClick(row)}
+                sx={{
+                  color: 'primary.main',
+                  '&:hover': {
+                    backgroundColor: 'primary.lighter',
+                  }
+                }}
+              >
+                <EditIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          )}
+          {permissions?.delete && onDelete && (
+            <Tooltip title="Delete Production Data">
+              <IconButton 
+                size="small" 
+                onClick={() => handleDeleteClick(row)}
+                sx={{
+                  color: 'error.main',
+                  '&:hover': {
+                    backgroundColor: 'error.lighter',
+                  }
+                }}
+              >
+                <DeleteIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          )}
+          {permissions?.create && onCopy && (
+            <Tooltip title="Copy to Next Month">
+              <IconButton 
+                size="small" 
+                onClick={() => onCopy(row)}
+                sx={{
+                  color: 'success.main',
+                  '&:hover': {
+                    backgroundColor: 'success.lighter',
+                  }
+                }}
+              >
+                <CopyIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          )}
+        </Box>
+      </TableCell>
     </TableRow>
   );
 
-  // Add validation before adding/editing data
-  const handleDataAction = (action, rowData) => {
-    const dateExists = checkDateExistsForSite(
-      rowData.sk || rowData.date, 
-      rowData.productionSiteId
-    );
-
-    if (action === 'add' && dateExists) {
-      enqueueSnackbar(
-        `Data already exists for ${formatDisplayDate(rowData.sk || rowData.date)} in Site ${rowData.productionSiteId}`, 
-        { variant: 'error' }
-      );
-      return false;
-    }
-
-    return true;
-  };
-
-  // Render actions only if permissions allow
-  const renderActions = (row) => {
-    if (!permissions?.update && !permissions?.delete) return null;
-
-    return (
-      <TableCell align="right">
-        {permissions?.update && onEdit && (
-          <Tooltip title="Edit">
-            <IconButton 
-              onClick={() => onEdit(row)}
-              sx={{ 
-                color: 'primary.main',
-                '&:hover': { color: 'primary.dark' }
-              }}
-            >
-              <EditIcon />
-            </IconButton>
-          </Tooltip>
-        )}
-        {permissions?.delete && onDelete && (
-          <Tooltip title="Delete">
-            <IconButton 
-              onClick={() => onDelete(row)}
-              sx={{ 
-                color: 'error.main',
-                '&:hover': { color: 'error.dark' }
-              }}
-            >
-              <DeleteIcon />
-            </IconButton>
-          </Tooltip>
-        )}
-        {permissions?.update && onCopy && (
-          <Tooltip title="Copy to Next Month">
-            <IconButton 
-              onClick={() => onCopy(row)}
-              sx={{ 
-                color: 'success.main',
-                '&:hover': { color: 'success.dark' }
-              }}
-            >
-              <CopyIcon />
-            </IconButton>
-          </Tooltip>
-        )}
-      </TableCell>
-    );
-  };
-
   if (!tableData.length) {
     return (
-      <Paper sx={{ p: 2, textAlign: 'center' }}>
-        <Typography color="textSecondary">
+      <Paper sx={{ p: 3, textAlign: 'center', mt: 2, boxShadow: 2 }}>
+        <Typography variant="subtitle1" color="textSecondary">
           No {type} data available
         </Typography>
       </Paper>
@@ -323,68 +340,95 @@ const ProductionDataTable = ({
   }
 
   return (
-    <TableContainer component={Paper}>
-      <Table size="medium">
-        <TableHead>
-          <TableRow>
-            <TableCell>Month</TableCell>
-            {type === 'unit' ? (
-              <>
-                {['C1', 'C2', 'C3', 'C4', 'C5'].map((header) => (
-                  <TableCell 
-                    key={`header_${header}`}
-                    align="right" 
-                    sx={{ 
-                      color: 'success.main',
-                      fontWeight: 'bold'
-                    }}
-                  >
-                    {header}
+    <>
+      <TableContainer component={Paper} sx={{ mt: 2, boxShadow: 2 }}>
+        <Table>
+          <TableHead>
+            <TableRow sx={{ backgroundColor: 'primary.main' }}>
+              <TableCell>
+                <Typography variant="subtitle2" sx={{ color: 'white', fontWeight: 'bold' }}>
+                  Month
+                </Typography>
+              </TableCell>
+              {type === 'unit' ? (
+                <>
+                  {['C1', 'C2', 'C3', 'C4', 'C5'].map((header) => (
+                    <TableCell key={`header_${header}`} align="right">
+                      <Typography variant="subtitle2" sx={{ 
+                        color: ['C2', 'C3'].includes(header) ? 'warning.light' : 'success.light', 
+                        fontWeight: 'bold' 
+                      }}>
+                        {header}
+                      </Typography>
+                    </TableCell>
+                  ))}
+                  <TableCell align="right">
+                    <Typography variant="subtitle2" sx={{ color: 'white', fontWeight: 'bold' }}>
+                      Total
+                    </Typography>
                   </TableCell>
-                ))}
-                <TableCell 
-                  align="right"
-                  sx={{ 
-                    color: 'primary.main',
-                    fontWeight: 'bold'
-                  }}
-                >
-                  Total
-                </TableCell>
-              </>
-            ) : (
-              <>
-                {[...Array(10)].map((_, i) => (
-                  <TableCell 
-                    key={`header_c${(i + 1).toString().padStart(3, '0')}`}
-                    align="right"
-                    sx={{ 
-                      color: 'warning.dark',
-                      fontWeight: 'bold'
-                    }}
-                  >
-                    {`C${(i + 1).toString().padStart(3, '0')}`}
+                </>
+              ) : (
+                <>
+                  {[...Array(10)].map((_, i) => {
+                    const header = `C${(i + 1).toString().padStart(3, '0')}`;
+                    return (
+                      <TableCell key={`header_${header}`} align="right">
+                        <Typography variant="subtitle2" sx={{ color: 'info.light', fontWeight: 'bold' }}>
+                          {header}
+                        </Typography>
+                      </TableCell>
+                    );
+                  })}
+                  <TableCell align="right">
+                    <Typography variant="subtitle2" sx={{ color: 'white', fontWeight: 'bold' }}>
+                      Total
+                    </Typography>
                   </TableCell>
-                ))}
-                <TableCell 
-                  align="right"
-                  sx={{ 
-                    color: 'primary.main',
-                    fontWeight: 'bold'
-                  }}
-                >
-                  Total
-                </TableCell>
-              </>
-            )}
-            <TableCell align="right">Actions</TableCell>
-          </TableRow>
-        </TableHead>
-        <TableBody>
-          {tableData.map(renderTableRow)}
-        </TableBody>
-      </Table>
-    </TableContainer>
+                </>
+              )}
+              <TableCell align="right">
+                <Typography variant="subtitle2" sx={{ color: 'white', fontWeight: 'bold' }}>
+                  Actions
+                </Typography>
+              </TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {tableData.map(renderTableRow)}
+          </TableBody>
+        </Table>
+      </TableContainer>
+
+      <Dialog open={deleteDialog.open} onClose={handleDeleteCancel}>
+        <DialogTitle sx={{ color: 'error.main' }}>
+          Confirm Delete
+        </DialogTitle>
+        <DialogContent>
+          <Typography>
+            Are you sure you want to delete the production data for{' '}
+            {deleteDialog.selectedItem && formatDisplayDate(deleteDialog.selectedItem.sk || deleteDialog.selectedItem.date)}?
+            This action cannot be undone.
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ p: 2 }}>
+          <Button 
+            onClick={handleDeleteCancel}
+            color="inherit"
+          >
+            Cancel
+          </Button>
+          <Button 
+            onClick={handleDeleteConfirm}
+            variant="contained"
+            color="error"
+            autoFocus
+          >
+            Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </>
   );
 };
 

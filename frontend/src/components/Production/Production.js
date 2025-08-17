@@ -909,7 +909,7 @@ const Production = () => {
         display: 'flex', 
         justifyContent: 'space-between', 
         mb: 3,
-        borderBottom: '2px solid #1976d2',
+        borderBottom: '2px solid #000000',
         pb: 2
       }}>
         <Typography variant="h5" sx={{ fontWeight: 'bold', color: '#1976d2' }}>

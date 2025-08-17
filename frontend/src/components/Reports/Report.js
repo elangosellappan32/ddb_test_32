@@ -134,13 +134,27 @@ const Report = () => {
   const [financialYear, setFinancialYear] = useState('');
   const [financialYears, setFinancialYears] = useState([]);
 
+  // Format financial year for display (April YYYY - March YYYY)
+  const formatFinancialYear = (yearStr) => {
+    if (!yearStr) return '';
+    const [startYear] = yearStr.includes('-') ? yearStr.split('-') : [yearStr];
+    const endYear = parseInt(startYear) + 1;
+    return `April ${startYear} - March ${endYear}`;
+  };
+
   // Initialize financial years
   useEffect(() => {
     const currentYear = new Date().getFullYear();
-    const years = Array.from({ length: 10 }, (_, i) => {
-      const year = currentYear - i;
-      return `${year}-${year + 1}`;
+    const currentMonth = new Date().getMonth() + 1; // 1-12
+    
+    // If current month is Jan-Mar, show previous financial year as default
+    const baseYear = currentMonth < 4 ? currentYear - 1 : currentYear;
+    
+    const years = Array.from({ length: 5 }, (_, i) => {
+      const startYear = baseYear - i;
+      return `${startYear}-${startYear + 1}`; // Store as YYYY-YYYY
     });
+    
     setFinancialYears(years);
     setFinancialYear(years[0]);
   }, []);
@@ -699,25 +713,67 @@ const Report = () => {
         </Box>
 
         <FormControl 
+          variant="outlined"
+          size="small"
           sx={{ 
             mb: 4,
-            minWidth: 240,
+            minWidth: 220,
             '& .MuiOutlinedInput-root': {
-              borderRadius: '8px',
+              borderRadius: '6px',
+              backgroundColor: 'background.paper',
               '&:hover .MuiOutlinedInput-notchedOutline': {
                 borderColor: 'primary.main',
-                borderWidth: '2px'
+              },
+              '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                borderWidth: '1px',
+                borderColor: 'primary.main',
+              }
+            },
+            '& .MuiInputLabel-root': {
+              color: 'text.secondary',
+              '&.Mui-focused': {
+                color: 'primary.main',
               }
             }
           }}
         >
-          <InputLabel sx={{ fontWeight: 500 }}>Financial Year</InputLabel>
+          <InputLabel id="financial-year-label" shrink>Financial Year</InputLabel>
           <Select
+            labelId="financial-year-label"
             value={financialYear}
             onChange={(e) => setFinancialYear(e.target.value)}
+            label="Financial Year"
             sx={{
               '& .MuiSelect-select': {
-                py: 1.5
+                py: 1,
+                fontWeight: 500,
+                color: 'text.primary',
+              },
+              '& .MuiOutlinedInput-notchedOutline': {
+                borderColor: 'divider',
+              },
+            }}
+            MenuProps={{
+              PaperProps: {
+                sx: {
+                  mt: 1,
+                  borderRadius: '8px',
+                  boxShadow: '0 4px 20px rgba(0, 0, 0, 0.1)',
+                  '& .MuiMenuItem-root': {
+                    px: 2,
+                    py: 1,
+                    '&:hover': {
+                      backgroundColor: 'action.hover',
+                    },
+                    '&.Mui-selected': {
+                      backgroundColor: 'primary.lighter',
+                      color: 'primary.main',
+                      '&:hover': {
+                        backgroundColor: 'primary.light',
+                      }
+                    }
+                  }
+                }
               }
             }}
           >
@@ -725,20 +781,8 @@ const Report = () => {
               <MenuItem 
                 key={year} 
                 value={year}
-                sx={{
-                  py: 1,
-                  '&:hover': {
-                    backgroundColor: 'action.hover'
-                  },
-                  '&.Mui-selected': {
-                    backgroundColor: 'primary.lighter',
-                    '&:hover': {
-                      backgroundColor: 'primary.light'
-                    }
-                  }
-                }}
               >
-                {year}
+                {formatFinancialYear(year)}
               </MenuItem>
             ))}
           </Select>

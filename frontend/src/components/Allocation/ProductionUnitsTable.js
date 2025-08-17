@@ -12,7 +12,53 @@ import {
   Tooltip,
   Box
 } from '@mui/material';
-import { CheckCircle, Cancel, Info as InfoIcon } from '@mui/icons-material';
+import { CheckCircle, Cancel, Info as InfoIcon, Factory as FactoryIcon } from '@mui/icons-material';
+import { styled } from '@mui/material/styles';
+
+// Styled components for consistent styling
+const StyledTableHeader = styled(TableCell)(({ theme }) => ({
+  backgroundColor: theme.palette.primary.main,
+  color: theme.palette.common.white,
+  fontWeight: 'bold',
+  '& .MuiTypography-root': {
+    color: 'inherit',
+    fontWeight: 'inherit',
+  }
+}));
+
+const StyledTableCell = styled(TableCell, {
+  shouldForwardProp: (prop) => prop !== 'isPeak'
+})(({ theme, isPeak }) => ({
+  '&.MuiTableCell-root': {
+    padding: theme.spacing(1.5),
+    transition: 'background-color 0.2s',
+    ...(isPeak ? {
+      color: theme.palette.warning.dark,
+      backgroundColor: 'rgba(255, 152, 0, 0.08)',
+      '&:hover': {
+        backgroundColor: 'rgba(255, 152, 0, 0.12)',
+      }
+    } : {
+      color: theme.palette.success.main,
+      backgroundColor: 'rgba(76, 175, 80, 0.08)',
+      '&:hover': {
+        backgroundColor: 'rgba(76, 175, 80, 0.12)',
+      }
+    })
+  }
+}));
+
+const TotalCell = styled(TableCell)(({ theme }) => ({
+  fontWeight: 'bold',
+  color: theme.palette.primary.main,
+  backgroundColor: 'rgba(25, 118, 210, 0.08)',
+  '&.peak': {
+    color: theme.palette.warning.dark,
+  },
+  '&.non-peak': {
+    color: theme.palette.success.main,
+  }
+}));
 
 const ProductionUnitsTable = ({ data = [] }) => {
   const PEAK_PERIODS = ['c2', 'c3'];
@@ -32,58 +78,59 @@ const ProductionUnitsTable = ({ data = [] }) => {
   };
 
   return (
-    <TableContainer component={Paper} sx={{ mb: 4, mt: 2 }}>
-      <Typography variant="h6" sx={{ p: 2, borderBottom: '1px solid rgba(224, 224, 224, 1)' }}>
-        Production Units
-      </Typography>
+    <TableContainer component={Paper} sx={{ mb: 4, mt: 2, boxShadow: 2 }}>
+      <Box sx={{ p: 2, borderBottom: '1px solid rgba(224, 224, 224, 1)', display: 'flex', alignItems: 'center', gap: 1 }}>
+        <FactoryIcon color="primary" />
+        <Typography variant="h6">Production Units</Typography>
+      </Box>
       <Table>
         <TableHead>
           <TableRow>
-            <TableCell>Site Name</TableCell>
-            <TableCell>Banking Status</TableCell>
-            <TableCell align="right">
+            <StyledTableHeader>Site Name</StyledTableHeader>
+            <StyledTableHeader>Banking Status</StyledTableHeader>
+            <StyledTableHeader align="right">
               <Tooltip title="Non-Peak Period">
                 <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
                   C1
-                  <InfoIcon sx={{ ml: 0.5, fontSize: '1rem', color: 'primary.main' }} />
+                  <InfoIcon sx={{ ml: 0.5, fontSize: '1rem', color: 'success.light' }} />
                 </Box>
               </Tooltip>
-            </TableCell>
-            <TableCell align="right">
+            </StyledTableHeader>
+            <StyledTableHeader align="right">
               <Tooltip title="Peak Period">
                 <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
                   C2
-                  <InfoIcon sx={{ ml: 0.5, fontSize: '1rem', color: 'warning.main' }} />
+                  <InfoIcon sx={{ ml: 0.5, fontSize: '1rem', color: 'warning.light' }} />
                 </Box>
               </Tooltip>
-            </TableCell>
-            <TableCell align="right">
+            </StyledTableHeader>
+            <StyledTableHeader align="right">
               <Tooltip title="Peak Period">
                 <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
                   C3
-                  <InfoIcon sx={{ ml: 0.5, fontSize: '1rem', color: 'warning.main' }} />
+                  <InfoIcon sx={{ ml: 0.5, fontSize: '1rem', color: 'warning.light' }} />
                 </Box>
               </Tooltip>
-            </TableCell>
-            <TableCell align="right">
+            </StyledTableHeader>
+            <StyledTableHeader align="right">
               <Tooltip title="Non-Peak Period">
                 <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
                   C4
-                  <InfoIcon sx={{ ml: 0.5, fontSize: '1rem', color: 'primary.main' }} />
+                  <InfoIcon sx={{ ml: 0.5, fontSize: '1rem', color: 'success.light' }} />
                 </Box>
               </Tooltip>
-            </TableCell>
-            <TableCell align="right">
+            </StyledTableHeader>
+            <StyledTableHeader align="right">
               <Tooltip title="Non-Peak Period">
                 <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
                   C5
-                  <InfoIcon sx={{ ml: 0.5, fontSize: '1rem', color: 'primary.main' }} />
+                  <InfoIcon sx={{ ml: 0.5, fontSize: '1rem', color: 'success.light' }} />
                 </Box>
               </Tooltip>
-            </TableCell>
-            <TableCell align="right">Peak Total</TableCell>
-            <TableCell align="right">Non-Peak Total</TableCell>
-            <TableCell align="right">Total Units</TableCell>
+            </StyledTableHeader>
+            <StyledTableHeader align="right">Peak Total</StyledTableHeader>
+            <StyledTableHeader align="right">Non-Peak Total</StyledTableHeader>
+            <StyledTableHeader align="right">Total Units</StyledTableHeader>
           </TableRow>
         </TableHead>
         <TableBody>
@@ -106,34 +153,30 @@ const ProductionUnitsTable = ({ data = [] }) => {
                     size="small"
                   />
                 </TableCell>
-                <TableCell align="right">
-                  <Typography align="right" sx={{ color: 'primary.main' }}>{c1}</Typography>
-                </TableCell>
-                <TableCell align="right">
-                  <Typography align="right" sx={{ color: 'warning.main' }}>{c2}</Typography>
-                </TableCell>
-                <TableCell align="right">
-                  <Typography align="right" sx={{ color: 'warning.main' }}>{c3}</Typography>
-                </TableCell>
-                <TableCell align="right">
-                  <Typography align="right" sx={{ color: 'primary.main' }}>{c4}</Typography>
-                </TableCell>
-                <TableCell align="right">
-                  <Typography align="right" sx={{ color: 'primary.main' }}>{c5}</Typography>
-                </TableCell>
-                <TableCell align="right">
-                  <Typography sx={{ color: 'warning.main', fontWeight: 'bold' }}>
-                    {c2 + c3}
-                  </Typography>
-                </TableCell>
-                <TableCell align="right">
-                  <Typography sx={{ color: 'primary.main' }}>
-                    {c1 + c4 + c5}
-                  </Typography>
-                </TableCell>
-                <TableCell align="right" sx={{ fontWeight: 'bold' }}>
+                <StyledTableCell align="right" isPeak={false}>
+                  {c1}
+                </StyledTableCell>
+                <StyledTableCell align="right" isPeak={true}>
+                  {c2}
+                </StyledTableCell>
+                <StyledTableCell align="right" isPeak={true}>
+                  {c3}
+                </StyledTableCell>
+                <StyledTableCell align="right" isPeak={false}>
+                  {c4}
+                </StyledTableCell>
+                <StyledTableCell align="right" isPeak={false}>
+                  {c5}
+                </StyledTableCell>
+                <TotalCell align="right" className="peak">
+                  {c2 + c3}
+                </TotalCell>
+                <TotalCell align="right" className="non-peak">
+                  {c1 + c4 + c5}
+                </TotalCell>
+                <TotalCell align="right">
                   {c1 + c2 + c3 + c4 + c5}
-                </TableCell>
+                </TotalCell>
               </TableRow>
             );
           })}
@@ -141,23 +184,30 @@ const ProductionUnitsTable = ({ data = [] }) => {
             <TableRow sx={{ backgroundColor: 'rgba(0, 0, 0, 0.04)' }}>
               <TableCell sx={{ fontWeight: 'bold' }}>Total</TableCell>
               <TableCell />
-              {['c1', 'c2', 'c3', 'c4', 'c5'].map(period => (
-                <TableCell key={period} align="right" sx={{ 
-                  fontWeight: 'bold',
-                  color: period === 'c2' || period === 'c3' ? 'warning.main' : 'primary.main'
-                }}>
-                  {data.reduce((sum, row) => sum + (Number(row[period]) || 0), 0)}
-                </TableCell>
-              ))}
-              <TableCell align="right" sx={{ fontWeight: 'bold', color: 'warning.main' }}>
+              <TotalCell align="right">
+                {data.reduce((sum, row) => sum + (Number(row.c1) || 0), 0)}
+              </TotalCell>
+              <TotalCell align="right" className="peak">
+                {data.reduce((sum, row) => sum + (Number(row.c2) || 0), 0)}
+              </TotalCell>
+              <TotalCell align="right" className="peak">
+                {data.reduce((sum, row) => sum + (Number(row.c3) || 0), 0)}
+              </TotalCell>
+              <TotalCell align="right">
+                {data.reduce((sum, row) => sum + (Number(row.c4) || 0), 0)}
+              </TotalCell>
+              <TotalCell align="right">
+                {data.reduce((sum, row) => sum + (Number(row.c5) || 0), 0)}
+              </TotalCell>
+              <TotalCell align="right" className="peak">
                 {data.reduce((sum, row) => sum + (Number(row.c2) || 0) + (Number(row.c3) || 0), 0)}
-              </TableCell>
-              <TableCell align="right" sx={{ fontWeight: 'bold', color: 'primary.main' }}>
+              </TotalCell>
+              <TotalCell align="right">
                 {data.reduce((sum, row) => sum + (Number(row.c1) || 0) + (Number(row.c4) || 0) + (Number(row.c5) || 0), 0)}
-              </TableCell>
-              <TableCell align="right" sx={{ fontWeight: 'bold' }}>
+              </TotalCell>
+              <TotalCell align="right">
                 {data.reduce((sum, row) => sum + (Number(row.c1) || 0) + (Number(row.c2) || 0) + (Number(row.c3) || 0) + (Number(row.c4) || 0) + (Number(row.c5) || 0), 0)}
-              </TableCell>
+              </TotalCell>
             </TableRow>
           )}
         </TableBody>

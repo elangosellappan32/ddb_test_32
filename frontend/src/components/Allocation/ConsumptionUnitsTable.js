@@ -33,18 +33,64 @@ import api from "../../services/apiUtils";
 // Constants
 const PEAK_PERIODS = ['c2', 'c3'];
 const NON_PEAK_PERIODS = ['c1', 'c4', 'c5'];
+const ALL_PERIODS = ['c1', 'c2', 'c3', 'c4', 'c5'];
 
-// Styled components
-const StyledTableCell = styled(TableCell)(({ theme, isheader, ispeak }) => ({
-  padding: theme.spacing(1),
-  ...(isheader === 'true' && {
-    backgroundColor: theme.palette.primary.main,
-    color: theme.palette.common.white,
-    fontWeight: 'bold',
-  }),
-  ...(ispeak === 'true' && {
-    backgroundColor: theme.palette.warning.light,
-  }),
+// Styled components for consistent styling
+const StyledTableHeader = styled(TableCell)(({ theme }) => ({
+  backgroundColor: theme.palette.primary.main,
+  color: theme.palette.common.white,
+  fontWeight: 'bold',
+  '& .MuiTypography-root': {
+    color: 'inherit',
+    fontWeight: 'inherit',
+  }
+}));
+
+const StyledTableCell = styled(TableCell, {
+  shouldForwardProp: (prop) => prop !== 'isPeak'
+})(({ theme, isPeak }) => ({
+  '&.MuiTableCell-root': {
+    padding: theme.spacing(1.5),
+    transition: 'background-color 0.2s',
+    ...(isPeak ? {
+      color: theme.palette.warning.dark,
+      backgroundColor: 'rgba(255, 152, 0, 0.08)',
+      '&:hover': {
+        backgroundColor: 'rgba(255, 152, 0, 0.12)',
+      }
+    } : {
+      color: theme.palette.success.main,
+      backgroundColor: 'rgba(76, 175, 80, 0.08)',
+      '&:hover': {
+        backgroundColor: 'rgba(76, 175, 80, 0.12)',
+      }
+    })
+  }
+}));
+
+const TotalCell = styled(TableCell)(({ theme }) => ({
+  fontWeight: 'bold',
+  color: theme.palette.primary.main,
+  backgroundColor: 'rgba(25, 118, 210, 0.08)',
+  '&.peak': {
+    color: theme.palette.warning.dark,
+  },
+  '&.non-peak': {
+    color: theme.palette.success.main,
+  },
+  '&.allocation': {
+    color: theme.palette.primary.main,
+  }
+}));
+
+const AllocationCell = styled(TableCell)(({ theme }) => ({
+  textAlign: 'right',
+  fontWeight: 'bold',
+  color: theme.palette.primary.main,
+  backgroundColor: 'rgba(25, 118, 210, 0.04)',
+  '&:hover': {
+    backgroundColor: 'rgba(25, 118, 210, 0.08)',
+  }
 }));
 
 const MonthGroupCell = styled(TableCell)(({ theme }) => ({
@@ -54,7 +100,8 @@ const MonthGroupCell = styled(TableCell)(({ theme }) => ({
 }));
 
 const TotalRow = styled(TableRow)(({ theme }) => ({
-  backgroundColor: theme.palette.grey[200],
+  backgroundColor: 'rgba(0, 0, 0, 0.04)',
+  borderTop: '2px solid rgba(224, 224, 224, 1)',
   '& > td': {
     fontWeight: 'bold',
   },
@@ -359,11 +406,11 @@ const ConsumptionUnitsTable = ({
 
   return (
     <>
-      <TableContainer component={Paper} sx={{ mb: 4 }}>
+      <TableContainer component={Paper} sx={{ mb: 4, mt: 2, boxShadow: 2 }}>
         <Box sx={{ p: 2, borderBottom: '1px solid rgba(224, 224, 224, 1)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <TrendingDown color="primary" />
-            <Typography variant="h6">Consumption Units Allocation</Typography>
+            <Typography variant="h6">Consumption Units</Typography>
           </Box>
           <Box sx={{ display: 'flex', gap: 1 }}>
             {isLoading && <CircularProgress size={20} />}
@@ -391,35 +438,59 @@ const ConsumptionUnitsTable = ({
           <Table>
             <TableHead>
               <TableRow>
-                <TableCell>Month</TableCell>
-                <TableCell>Site Name</TableCell>
-                {['c1', 'c2', 'c3', 'c4', 'c5'].map(period => (
-                  <TableCell key={period} align="right">
-                    <Tooltip title={PEAK_PERIODS.includes(period) ? "Peak Period" : "Non-Peak Period"}>
-                      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
-                        {period.toUpperCase()}
-                        <InfoIcon 
-                          sx={{ 
-                            ml: 0.5, 
-                            fontSize: '1rem', 
-                            color: PEAK_PERIODS.includes(period) ? 'warning.main' : 'primary.main' 
-                          }} 
-                        />
-                      </Box>
-                    </Tooltip>
-                  </TableCell>
-                ))}
-                <TableCell align="right">Peak Total</TableCell>
-                <TableCell align="right">Non-Peak Total</TableCell>
-                <TableCell align="right">Total Units</TableCell>
-                <TableCell align="right">
+                <StyledTableHeader>Month</StyledTableHeader>
+                <StyledTableHeader>Site Name</StyledTableHeader>
+                <StyledTableHeader align="right">
+                  <Tooltip title="Non-Peak Period">
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
+                      C1
+                      <InfoIcon sx={{ ml: 0.5, fontSize: '1rem', color: 'success.light' }} />
+                    </Box>
+                  </Tooltip>
+                </StyledTableHeader>
+                <StyledTableHeader align="right">
+                  <Tooltip title="Peak Period">
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
+                      C2
+                      <InfoIcon sx={{ ml: 0.5, fontSize: '1rem', color: 'warning.light' }} />
+                    </Box>
+                  </Tooltip>
+                </StyledTableHeader>
+                <StyledTableHeader align="right">
+                  <Tooltip title="Peak Period">
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
+                      C3
+                      <InfoIcon sx={{ ml: 0.5, fontSize: '1rem', color: 'warning.light' }} />
+                    </Box>
+                  </Tooltip>
+                </StyledTableHeader>
+                <StyledTableHeader align="right">
+                  <Tooltip title="Non-Peak Period">
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
+                      C4
+                      <InfoIcon sx={{ ml: 0.5, fontSize: '1rem', color: 'success.light' }} />
+                    </Box>
+                  </Tooltip>
+                </StyledTableHeader>
+                <StyledTableHeader align="right">
+                  <Tooltip title="Non-Peak Period">
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
+                      C5
+                      <InfoIcon sx={{ ml: 0.5, fontSize: '1rem', color: 'success.light' }} />
+                    </Box>
+                  </Tooltip>
+                </StyledTableHeader>
+                <StyledTableHeader align="right">Peak Total</StyledTableHeader>
+                <StyledTableHeader align="right">Non-Peak Total</StyledTableHeader>
+                <StyledTableHeader align="right">Total Units</StyledTableHeader>
+                <StyledTableHeader align="right">
                   <Tooltip title="Percentage of units to be allocated from available production units">
                     <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
                       Allocation %
-                      <InfoIcon sx={{ ml: 0.5, fontSize: '1rem', color: 'primary.main' }} />
+                      <InfoIcon sx={{ ml: 0.5, fontSize: '1rem', color: 'primary.light' }} />
                     </Box>
                   </Tooltip>
-                </TableCell>
+                </StyledTableHeader>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -432,70 +503,76 @@ const ConsumptionUnitsTable = ({
                       transition: 'background-color 0.2s'
                     }}
                   >
-                    {index === 0 && (
-                      <TableCell rowSpan={rows.length} sx={{ borderRight: '1px solid rgba(224, 224, 224, 0.4)' }}>
-                        {formatMonth(month).display}
-                      </TableCell>
-                    )}
+                  {index === 0 && (
+                    <TableCell rowSpan={rows.length} sx={{ borderRight: '1px solid rgba(224, 224, 224, 0.4)' }}>
+                      {formatMonth(month).display}
+                    </TableCell>
+                  )}
                     <TableCell>{row.siteName}</TableCell>
-                    {['c1', 'c2', 'c3', 'c4', 'c5'].map(period => (
-                      <TableCell key={period} align="right">
-                        <Typography sx={{ 
-                          color: PEAK_PERIODS.includes(period) ? 'warning.main' : 'primary.main',
-                          fontWeight: PEAK_PERIODS.includes(period) ? 'bold' : 'normal'
-                        }}>
-                          {Math.round(Number(row[period]) || 0)}
-                        </Typography>
-                      </TableCell>
-                    ))}
-                    <TableCell align="right">
-                      <Typography sx={{ color: 'warning.main', fontWeight: 'bold' }}>
-                        {calculatePeakTotal(row)}
-                      </Typography>
-                    </TableCell>
-                    <TableCell align="right">
-                      <Typography sx={{ color: 'primary.main' }}>
-                        {calculateNonPeakTotal(row)}
-                      </Typography>
-                    </TableCell>
-                    <TableCell align="right" sx={{ fontWeight: 'bold' }}>
+                    <StyledTableCell align="right" isPeak={false}>
+                      {Math.round(Number(row.c1) || 0)}
+                    </StyledTableCell>
+                    <StyledTableCell align="right" isPeak={true}>
+                      {Math.round(Number(row.c2) || 0)}
+                    </StyledTableCell>
+                    <StyledTableCell align="right" isPeak={true}>
+                      {Math.round(Number(row.c3) || 0)}
+                    </StyledTableCell>
+                    <StyledTableCell align="right" isPeak={false}>
+                      {Math.round(Number(row.c4) || 0)}
+                    </StyledTableCell>
+                    <StyledTableCell align="right" isPeak={false}>
+                      {Math.round(Number(row.c5) || 0)}
+                    </StyledTableCell>
+                    <TotalCell align="right" className="peak">
+                      {calculatePeakTotal(row)}
+                    </TotalCell>
+                    <TotalCell align="right" className="non-peak">
+                      {calculateNonPeakTotal(row)}
+                    </TotalCell>
+                    <TotalCell align="right">
                       {calculateTotal(row)}
-                    </TableCell>
-                    <TableCell align="right">
-                      <Typography color="secondary.main">
-                        {getAllocationPercentage(row.consumptionSiteId)}%
-                      </Typography>
-                    </TableCell>
+                    </TotalCell>
+                    <AllocationCell>
+                      {getAllocationPercentage(row.consumptionSiteId)}%
+                    </AllocationCell>
                   </TableRow>
                 ))
               ))}
               {totals && (
-                <TotalRow sx={{ 
+                <TableRow sx={{ 
                   backgroundColor: 'rgba(0, 0, 0, 0.04)', 
                   borderTop: '2px solid rgba(224, 224, 224, 1)'
                 }}>
                   <TableCell colSpan={2} sx={{ fontWeight: 'bold' }}>Total</TableCell>
-                  {['c1', 'c2', 'c3', 'c4', 'c5'].map(period => (
-                    <TableCell key={period} align="right" sx={{ 
-                      fontWeight: 'bold',
-                      color: PEAK_PERIODS.includes(period) ? 'warning.main' : 'primary.main'
-                    }}>
-                      {totals[period]}
-                    </TableCell>
-                  ))}
-                  <TableCell align="right" sx={{ fontWeight: 'bold', color: 'warning.main' }}>
+                  <TotalCell align="right">
+                    {totals.c1}
+                  </TotalCell>
+                  <TotalCell align="right" className="peak">
+                    {totals.c2}
+                  </TotalCell>
+                  <TotalCell align="right" className="peak">
+                    {totals.c3}
+                  </TotalCell>
+                  <TotalCell align="right">
+                    {totals.c4}
+                  </TotalCell>
+                  <TotalCell align="right">
+                    {totals.c5}
+                  </TotalCell>
+                  <TotalCell align="right" className="peak">
                     {totals.peak}
-                  </TableCell>
-                  <TableCell align="right" sx={{ fontWeight: 'bold', color: 'primary.main' }}>
+                  </TotalCell>
+                  <TotalCell align="right" className="non-peak">
                     {totals.nonPeak}
-                  </TableCell>
-                  <TableCell align="right" sx={{ fontWeight: 'bold' }}>
+                  </TotalCell>
+                  <TotalCell align="right">
                     {totals.total}
-                  </TableCell>
-                  <TableCell align="right" sx={{ fontWeight: 'bold', color: 'secondary.main' }}>
+                  </TotalCell>
+                  <AllocationCell>
                     100%
-                  </TableCell>
-                </TotalRow>
+                  </AllocationCell>
+                </TableRow>
               )}
             </TableBody>
           </Table>
