@@ -576,30 +576,32 @@ const Report = () => {
   return (
     <Box 
       sx={{ 
-        p: { xs: 2, md: 4 }, 
+        p: { xs: 2, md: 3 },
         backgroundColor: '#f8fafc',
         minHeight: '100vh',
-        background: 'linear-gradient(135deg, #f8fafc 0%, #eef2f7 100%)'
+        background: 'linear-gradient(135deg, #f8fafc 0%, #eef2f7 100%)',
+        overflowX: 'hidden'
       }}
     >
+      {/* Header Section */}
       <Paper 
-        elevation={2}
+        elevation={0}
         sx={{ 
-          p: { xs: 2, md: 4 }, 
-          mb: 4, 
-          borderRadius: '16px',
-          background: '#ffffff',
-          boxShadow: '0 4px 20px rgba(0, 0, 0, 0.05)',
-          border: '1px solid rgba(230, 235, 240, 0.5)'
+          p: { xs: 2, md: 3 },
+          mb: 3,
+          borderRadius: '12px',
+          background: 'white',
+          boxShadow: '0 2px 10px rgba(0, 0, 0, 0.04)',
+          border: '1px solid rgba(0, 0, 0, 0.05)'
         }}
       >
         <Box sx={{ 
           display: 'flex', 
-          flexDirection: { xs: 'column', md: 'row' }, 
-          justifyContent: 'space-between', 
-          alignItems: { xs: 'flex-start', md: 'center' },
-          gap: 3,
-          mb: 4 
+          flexDirection: { xs: 'column', md: 'row' },
+          justifyContent: 'space-between',
+          alignItems: { xs: 'stretch', md: 'center' },
+          gap: { xs: 2, md: 3 },
+          mb: 2
         }}>
           <Box>
             <Typography 
