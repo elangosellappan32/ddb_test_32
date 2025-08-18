@@ -206,7 +206,7 @@ const Dashboard = () => {
   const [error, setError] = useState(null);
   const { stats: consumptionStats, loading: consumptionLoading, error: consumptionError } = useConsumptionStats();
   const { user } = useAuth(); // Get the user from the useAuth hook
-  const { allocationStats, reportStats } = useDashboardData(user); // Pass the user to useDashboardData
+  const { allocationStats, reportStats, refreshAllocationStats } = useDashboardData(user); // Pass the user to useDashboardData
 
   const calculateStats = useCallback((response) => {
     try {
@@ -264,7 +264,8 @@ const Dashboard = () => {
 
   useEffect(() => {
     fetchStats();
-  }, [fetchStats]);
+    refreshAllocationStats();
+  }, [fetchStats, refreshAllocationStats]);
 
   const ConsumptionCardContent = () => {
     if (consumptionLoading) {

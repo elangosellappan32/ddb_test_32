@@ -48,8 +48,8 @@ const SiteInfoCard = ({ site }) => {
   };
 
   const renderInfoItem = (label, value, icon, color = 'text.primary') => (
-    <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 2 }}>
-      {icon}
+    <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 3 }}>
+      {React.cloneElement(icon, { sx: { ...icon.props.sx, mt: 0.5 } })}
       <Box sx={{ ml: 2 }}>
         <Typography variant="body1" color={color} sx={{ fontWeight: 500, display: 'flex', alignItems: 'center' }}>
           {label}: <Box component="span" sx={{ ml: 1, fontWeight: 'normal' }}>{value}</Box>
@@ -73,26 +73,23 @@ const SiteInfoCard = ({ site }) => {
 
   return (
     <Paper sx={{ p: 3, mb: 3, borderRadius: 2, boxShadow: 2 }}>
-      <Box sx={{ mb: 2 }}>
+      <Box sx={{ py: 2 }}>
         {renderInfoItem(
           'Name',
           siteInfo.name,
           <BusinessIcon sx={{ color: 'text.secondary', mr: 1 }} />
         )}
-        <Divider sx={{ my: 1.5 }} />
         {renderInfoItem(
           'Location',
           siteInfo.location,
           <LocationIcon sx={{ color: 'error.main', mr: 1 }} />
         )}
-        <Divider sx={{ my: 1.5 }} />
         {renderInfoItem(
           'Status',
           siteInfo.status.charAt(0).toUpperCase() + siteInfo.status.slice(1),
           getStatusIcon(siteInfo.status),
           getStatusColor(siteInfo.status)
         )}
-        <Divider sx={{ my: 1.5 }} />
         {renderInfoItem(
           'Annual Consumption',
           `${siteInfo.annualConsumption} MW`,
