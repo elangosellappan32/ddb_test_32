@@ -28,7 +28,6 @@ import {
   InputLabel
 } from '@mui/material';
 import { 
-  Refresh as RefreshIcon,
   CheckCircle as CheckCircleIcon,
   Error as ErrorIcon,
   Warning as WarningIcon
@@ -211,18 +210,22 @@ const Report = () => {
   // Auto-refresh data
   useEffect(() => {
     let mounted = true;
+    let intervalId;
     
     const refreshData = async () => {
       if (!mounted) return;
       await fetchData();
     };
 
+    // Initial load
     refreshData();
-    const intervalId = setInterval(refreshData, REFRESH_INTERVAL);
+    
+    // Set up auto-refresh
+    intervalId = setInterval(refreshData, REFRESH_INTERVAL);
 
     return () => {
       mounted = false;
-      clearInterval(intervalId);
+      if (intervalId) clearInterval(intervalId);
     };
   }, [fetchData]);
 
@@ -601,33 +604,112 @@ const Report = () => {
           gap: 3,
           mb: 4 
         }}>
-          <Box>
-            <Typography 
-              variant="h4" 
-              sx={{ 
-                fontWeight: 800,
-                fontSize: { xs: '1.75rem', md: '2.25rem' },
-                background: 'linear-gradient(135deg, #1976d2 0%, #2196f3 100%)',
-                WebkitBackgroundClip: 'text',
-                WebkitTextFillColor: 'transparent',
-                mb: 1,
-                letterSpacing: '-0.02em'
-              }}
-            >
-              {isForm5B ? 'FORMAT V - B' : 'FORMAT V - A'}
-            </Typography>
-            <Typography 
-              variant="subtitle1" 
-              sx={{ 
-                color: 'text.secondary',
-                fontSize: { xs: '0.9rem', md: '1rem' },
-                fontWeight: 500,
-                opacity: 0.85
-              }}
-            >
-              {isForm5B ? 'Captive Consumption Details' : 'Alternate Details'}
-            </Typography>
+          <Box sx={{ display: 'flex', flex: 1, justifyContent: 'space-between', alignItems: 'center' }}>
+            <Box>
+              <Typography 
+                variant="h4" 
+                sx={{ 
+                  fontWeight: 800,
+                  fontSize: { xs: '1.75rem', md: '2.25rem' },
+                  background: 'linear-gradient(135deg, #1976d2 0%, #2196f3 100%)',
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                  mb: 1,
+                  letterSpacing: '-0.02em'
+                }}
+              >
+                {isForm5B ? 'FORMAT V - B' : 'FORMAT V - A'}
+              </Typography>
+              <Typography 
+                variant="subtitle1" 
+                sx={{ 
+                  color: 'text.secondary',
+                  fontSize: { xs: '0.9rem', md: '1rem' },
+                  fontWeight: 500,
+                  opacity: 0.85
+                }}
+              >
+                {isForm5B ? 'Captive Consumption Details' : 'Alternate Details'}
+              </Typography>
+            </Box>
+            
+            <Box sx={{ display: 'flex', alignItems: 'center' }}>
+              <FormControl 
+                variant="outlined"
+                size="small"
+                sx={{ 
+                  minWidth: 200,
+                  '& .MuiOutlinedInput-root': {
+                    borderRadius: '6px',
+                    backgroundColor: 'background.paper',
+                    '&:hover .MuiOutlinedInput-notchedOutline': {
+                      borderColor: 'primary.main',
+                    },
+                    '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                      borderWidth: '1px',
+                      borderColor: 'primary.main',
+                    }
+                  },
+                  '& .MuiInputLabel-root': {
+                    color: 'text.secondary',
+                    '&.Mui-focused': {
+                      color: 'primary.main',
+                    }
+                  }
+                }}
+              >
+                <InputLabel id="financial-year-label" shrink>Financial Year</InputLabel>
+                <Select
+                  labelId="financial-year-label"
+                  value={financialYear}
+                  onChange={(e) => setFinancialYear(e.target.value)}
+                  label="Financial Year"
+                  sx={{
+                    '& .MuiSelect-select': {
+                      py: 1,
+                      fontWeight: 500,
+                      color: 'text.primary',
+                    },
+                    '& .MuiOutlinedInput-notchedOutline': {
+                      borderColor: 'divider',
+                    },
+                  }}
+                  MenuProps={{
+                    PaperProps: {
+                      sx: {
+                        mt: 1,
+                      borderRadius: '8px',
+                      boxShadow: '0 4px 20px rgba(0, 0, 0, 0.1)',
+                      '& .MuiMenuItem-root': {
+                        px: 2,
+                        py: 1,
+                        '&:hover': {
+                          backgroundColor: 'action.hover',
+                        },
+                        '&.Mui-selected': {
+                          backgroundColor: 'primary.lighter',
+                          color: 'primary.main',
+                          '&:hover': {
+                            backgroundColor: 'primary.light',
+                          }
+                        }
+                      }
+                    }
+                  }
+                }}
+              >
+                {financialYears.map((year) => (
+                  <MenuItem 
+                    key={year} 
+                    value={year}
+                  >
+                    {formatFinancialYear(year)}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
           </Box>
+        </Box>
 
           <Stack 
             direction={{ xs: 'column', sm: 'row' }} 
@@ -692,101 +774,8 @@ const Report = () => {
               handleOpenDialog={handleOpenDialog}
             />
 
-            <Button
-              variant="outlined"
-              onClick={fetchData}
-              startIcon={loading ? 
-                <CircularProgress size={20} sx={{ color: 'primary.main' }} /> : 
-                <RefreshIcon />
-              }
-              disabled={loading}
-              sx={{
-                borderWidth: '2px',
-                '&:hover': {
-                  borderWidth: '2px'
-                }
-              }}
-            >
-              {loading ? 'Refreshing...' : 'Refresh Data'}
-            </Button>
           </Stack>
         </Box>
-
-        <FormControl 
-          variant="outlined"
-          size="small"
-          sx={{ 
-            mb: 4,
-            minWidth: 220,
-            '& .MuiOutlinedInput-root': {
-              borderRadius: '6px',
-              backgroundColor: 'background.paper',
-              '&:hover .MuiOutlinedInput-notchedOutline': {
-                borderColor: 'primary.main',
-              },
-              '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
-                borderWidth: '1px',
-                borderColor: 'primary.main',
-              }
-            },
-            '& .MuiInputLabel-root': {
-              color: 'text.secondary',
-              '&.Mui-focused': {
-                color: 'primary.main',
-              }
-            }
-          }}
-        >
-          <InputLabel id="financial-year-label" shrink>Financial Year</InputLabel>
-          <Select
-            labelId="financial-year-label"
-            value={financialYear}
-            onChange={(e) => setFinancialYear(e.target.value)}
-            label="Financial Year"
-            sx={{
-              '& .MuiSelect-select': {
-                py: 1,
-                fontWeight: 500,
-                color: 'text.primary',
-              },
-              '& .MuiOutlinedInput-notchedOutline': {
-                borderColor: 'divider',
-              },
-            }}
-            MenuProps={{
-              PaperProps: {
-                sx: {
-                  mt: 1,
-                  borderRadius: '8px',
-                  boxShadow: '0 4px 20px rgba(0, 0, 0, 0.1)',
-                  '& .MuiMenuItem-root': {
-                    px: 2,
-                    py: 1,
-                    '&:hover': {
-                      backgroundColor: 'action.hover',
-                    },
-                    '&.Mui-selected': {
-                      backgroundColor: 'primary.lighter',
-                      color: 'primary.main',
-                      '&:hover': {
-                        backgroundColor: 'primary.light',
-                      }
-                    }
-                  }
-                }
-              }
-            }}
-          >
-            {financialYears.map((year) => (
-              <MenuItem 
-                key={year} 
-                value={year}
-              >
-                {formatFinancialYear(year)}
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
 
         {error && (
           <Alert 
@@ -802,6 +791,16 @@ const Report = () => {
             {error}
           </Alert>
         )}
+
+        <Box 
+          sx={{ 
+            height: '2px', 
+            backgroundColor: 'black', 
+            my: 3,
+            width: '100%',
+            opacity: 0.8
+          }} 
+        />
 
         <StyledTableContainer>
           <Table size="small">

@@ -20,8 +20,8 @@ import {
 import { useLocation } from 'react-router-dom';
 import {
   Dashboard as DashboardIcon,
-  Factory as ProductionIcon,
-  ShowChart as ConsumptionIcon,
+  Factory as FactoryIcon,
+  ElectricalServices as ElectricalServicesIcon,
   AssessmentOutlined as ReportsIcon,
   Logout as LogoutIcon,
   Menu as MenuIcon,
@@ -60,12 +60,12 @@ const Navbar = () => {
       path: '/',
     },
     { 
-      icon: <ProductionIcon />, 
+      icon: <FactoryIcon />, 
       label: 'Production', 
       path: '/production',
     },
     { 
-      icon: <ConsumptionIcon />, 
+      icon: <ElectricalServicesIcon />, 
       label: 'Consumption', 
       path: '/consumption',
     },

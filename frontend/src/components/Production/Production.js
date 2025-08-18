@@ -6,7 +6,7 @@ import {
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
   Switch, FormControlLabel
 } from '@mui/material';
-import { Add as AddIcon, Refresh as RefreshIcon, Edit as EditIcon, Delete as DeleteIcon, ViewModule as ViewModuleIcon, ViewList as ViewListIcon } from '@mui/icons-material';
+import { Add as AddIcon, Refresh as RefreshIcon, Edit as EditIcon, Delete as DeleteIcon, ViewModule as ViewModuleIcon, ViewList as ViewListIcon, Factory as FactoryIcon } from '@mui/icons-material';
 import productionSiteApi from '../../services/productionSiteApi';
 import ProductionSiteCard from './ProductionSiteCard';
 import ProductionSiteDialog from './ProductionSiteDialog';
@@ -908,13 +908,15 @@ const Production = () => {
       <Box sx={{ 
         display: 'flex', 
         justifyContent: 'space-between', 
-        mb: 3,
+        alignItems: 'center', 
+        mb: 4,
         borderBottom: '2px solid #000000',
         pb: 2
       }}>
-        <Typography variant="h5" sx={{ fontWeight: 'bold', color: '#1976d2' }}>
-          Production Sites
-        </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          <FactoryIcon color="primary" sx={{ fontSize: 32 }} />
+          <Typography variant="h4" sx={{ color: '#1976d2' }}>Production Sites</Typography>
+        </Box>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
           <IconButton 
             onClick={() => setViewMode(viewMode === 'card' ? 'table' : 'card')}

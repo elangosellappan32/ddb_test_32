@@ -1,117 +1,104 @@
 import React from 'react';
 import PropTypes from 'prop-types';
-import { Paper, Typography, Grid, Box, Divider, Chip } from '@mui/material';
+import { Paper, Typography, Box, Divider } from '@mui/material';
 import { 
-  Business as BusinessIcon,
+  Factory as FactoryIcon,
   LocationOn as LocationIcon,
   Speed as ConsumptionIcon,
-  PowerSettingsNew as StatusIcon,
-  Info as InfoIcon,
-  Update as UpdateIcon,
-  CalendarToday as CalendarIcon
+  Business as BusinessIcon,
+  Home as HomeIcon,
+  Store as StoreIcon,
+  Apartment as ApartmentIcon,
+  Circle as StatusIcon
 } from '@mui/icons-material';
 
 const SiteInfoCard = ({ site }) => {
   if (!site) return null;
 
+  const getTypeIcon = (type) => {
+    const typeMap = {
+      'industrial': <FactoryIcon sx={{ mr: 1, color: 'secondary.main' }} />,
+      'residential': <HomeIcon sx={{ mr: 1, color: 'info.main' }} />,
+      'commercial': <StoreIcon sx={{ mr: 1, color: 'success.main' }} />,
+      'institutional': <ApartmentIcon sx={{ mr: 1, color: 'warning.main' }} />
+    };
+    return typeMap[type] || <BusinessIcon sx={{ mr: 1, color: 'text.secondary' }} />;
+  };
+
   const siteInfo = {
     name: site.name || 'Unnamed Site',
     type: (site.type || 'unknown').toLowerCase(),
     location: site.location || 'Location not specified',
-    annualConsumption: Number(site.annualConsumption || 0).toFixed(2),
-    status: (site.status || 'inactive').toLowerCase(),
-    createdat: site.createdat ? new Date(site.createdat).toLocaleDateString() : 'N/A',
-    updatedat: site.updatedat ? new Date(site.updatedat).toLocaleDateString() : 'N/A'
+    annualConsumption: site.annualConsumption != null 
+      ? Number(site.annualConsumption).toFixed(2) 
+      : '0.00',
+    status: (site.status || 'inactive').toLowerCase()
   };
 
   const getStatusColor = (status) => {
-    switch (status) {
-      case 'active': return 'success';
-      case 'inactive': return 'error';
-      case 'pending': return 'warning';
-      default: return 'default';
+    const normalizedStatus = status.toLowerCase();
+    switch (normalizedStatus) {
+      case 'active': return 'success.main';
+      case 'inactive': return 'error.main';
+      case 'pending':
+      case 'maintenance':
+        return 'warning.main';
+      default: return 'text.secondary';
     }
   };
 
-  const getTypeColor = (type) => {
-    switch (type) {
-      case 'industrial': return 'warning';
-      case 'textile': return 'info';
-      default: return 'default';
-    }
-  };
-
-  const renderInfoItem = (Icon, label, value, color = 'primary.main') => (
-    <Box sx={{ 
-      display: 'flex', 
-      alignItems: 'center', 
-      mb: 2,
-      p: 2,
-      bgcolor: 'background.paper',
-      borderRadius: 2,
-      boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-      transition: 'transform 0.2s ease',
-      '&:hover': {
-        transform: 'translateY(-2px)',
-        boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
-      }
-    }}>
-      <Icon sx={{ mr: 2, color, fontSize: 24 }} />
-      <Box>
-        <Typography variant="body2" color="text.secondary">
-          {label}
-        </Typography>
-        <Typography variant="body1" sx={{ fontWeight: 500 }}>
-          {value}
+  const renderInfoItem = (label, value, icon, color = 'text.primary') => (
+    <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 2 }}>
+      {icon}
+      <Box sx={{ ml: 2 }}>
+        <Typography variant="body1" color={color} sx={{ fontWeight: 500, display: 'flex', alignItems: 'center' }}>
+          {label}: <Box component="span" sx={{ ml: 1, fontWeight: 'normal' }}>{value}</Box>
         </Typography>
       </Box>
     </Box>
   );
 
+  const getStatusIcon = (status) => {
+    const color = getStatusColor(status);
+    return (
+      <StatusIcon 
+        sx={{ 
+          color,
+          fontSize: '0.75rem',
+          mr: 1
+        }} 
+      />
+    );
+  };
+
   return (
-    <Paper sx={{ 
-      p: 3, 
-      mb: 3,
-      borderRadius: 2,
-      boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
-    }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
-        <BusinessIcon sx={{ mr: 2, color: 'primary.main', fontSize: 32 }} />
-        <Box>
-          <Typography variant="h5" gutterBottom color="primary.main">
-            {siteInfo.name}
-          </Typography>
-          <Box sx={{ display: 'flex', gap: 1 }}>
-            <Chip
-              size="small"
-              label={siteInfo.type}
-              color={getTypeColor(siteInfo.type)}
-              icon={<InfoIcon />}
-              sx={{ textTransform: 'capitalize' }}
-            />
-            <Chip
-              size="small"
-              label={siteInfo.status}
-              color={getStatusColor(siteInfo.status)}
-              icon={<StatusIcon />}
-              sx={{ textTransform: 'capitalize' }}
-            />
-          </Box>
-        </Box>
+    <Paper sx={{ p: 3, mb: 3, borderRadius: 2, boxShadow: 2 }}>
+      <Box sx={{ mb: 2 }}>
+        {renderInfoItem(
+          'Name',
+          siteInfo.name,
+          <BusinessIcon sx={{ color: 'text.secondary', mr: 1 }} />
+        )}
+        <Divider sx={{ my: 1.5 }} />
+        {renderInfoItem(
+          'Location',
+          siteInfo.location,
+          <LocationIcon sx={{ color: 'error.main', mr: 1 }} />
+        )}
+        <Divider sx={{ my: 1.5 }} />
+        {renderInfoItem(
+          'Status',
+          siteInfo.status.charAt(0).toUpperCase() + siteInfo.status.slice(1),
+          getStatusIcon(siteInfo.status),
+          getStatusColor(siteInfo.status)
+        )}
+        <Divider sx={{ my: 1.5 }} />
+        {renderInfoItem(
+          'Annual Consumption',
+          `${siteInfo.annualConsumption} MW`,
+          <ConsumptionIcon sx={{ color: 'success.main', mr: 1 }} />
+        )}
       </Box>
-
-      <Divider sx={{ mb: 3 }} />
-
-      <Grid container spacing={3}>
-        <Grid item xs={12} md={6}>
-          {renderInfoItem(LocationIcon, 'Location', siteInfo.location, 'error.main')}
-          {renderInfoItem(ConsumptionIcon, 'Annual Consumption', `${siteInfo.annualConsumption} MW`, 'success.main')}
-        </Grid>
-        <Grid item xs={12} md={6}>
-          {renderInfoItem(CalendarIcon, 'Created Date', siteInfo.createdat, 'info.main')}
-          {renderInfoItem(UpdateIcon, 'Last Updated', siteInfo.updatedat, 'warning.main')}
-        </Grid>
-      </Grid>
     </Paper>
   );
 };
@@ -121,11 +108,11 @@ SiteInfoCard.propTypes = {
     name: PropTypes.string,
     type: PropTypes.string,
     location: PropTypes.string,
-    annualConsumption: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+    annualConsumption: PropTypes.oneOfType([
+      PropTypes.string,
+      PropTypes.number
+    ]),
     status: PropTypes.string,
-    timetolive: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-    createdat: PropTypes.string,
-    updatedat: PropTypes.string
   })
 };
 

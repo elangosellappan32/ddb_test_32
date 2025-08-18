@@ -375,7 +375,7 @@ const ProductionSiteDetails = () => {
         >
           <ArrowBackIcon />
         </IconButton>
-        <Typography variant="h5">Production Site Details</Typography>
+        <Typography variant="h5" color="primary">Production Site Details</Typography>
       </Box>
 
       {error && (

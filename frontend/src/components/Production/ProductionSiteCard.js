@@ -67,7 +67,7 @@ const normalizeStatus = (status) => {
   };
   
   // Check for exact match first
-  if (statusMap[statusStr]) {
+  if (statusMap[statusStr]) { 
     return statusMap[statusStr];
   }
   

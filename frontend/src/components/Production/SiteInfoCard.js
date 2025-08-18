@@ -33,9 +33,6 @@ const SiteInfoCard = ({ site }) => {
 
   return (
     <Paper sx={{ p: 3, mb: 3 }}>
-      <Typography variant="h5" gutterBottom color="primary.main">
-        Site Information
-      </Typography>
       <Grid container spacing={3}>
         <Grid item xs={12} md={6}>
           {renderInfoItem(FactoryIcon, 'Name', siteInfo.name)}
