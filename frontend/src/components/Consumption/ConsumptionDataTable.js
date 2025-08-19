@@ -1,4 +1,4 @@
-import React, { useMemo, useCallback } from 'react';
+import React, { useMemo, useCallback, useState, useEffect } from 'react';
 import {
   Table,
   TableBody,
@@ -15,8 +15,14 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
-  Button
+  Button,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  Alert
 } from '@mui/material';
+import { Add as AddIcon } from '@mui/icons-material';
 import {
   Edit as EditIcon,
   Delete as DeleteIcon,
@@ -25,14 +31,27 @@ import {
 } from '@mui/icons-material';
 import { format } from 'date-fns';
 
+const currentYear = new Date().getFullYear();
+const years = Array.from({ length: 5 }, (_, i) => currentYear - 2 + i);
+
+// Get financial year range for a given year (April 1 to March 31)
+const getFinancialYearRange = (year) => {
+  const startDate = new Date(year, 3, 1); // April 1st of the selected year
+  const endDate = new Date(year + 1, 2, 31); // March 31st of the next year
+  return { startDate, endDate };
+};
+
 const ConsumptionDataTable = ({ 
   data, 
   onEdit, 
   onDelete,
   onCopy, 
+  onAdd,
   permissions,
   loading 
 }) => {
+  const [selectedYear, setSelectedYear] = useState(currentYear);
+  const [filteredData, setFilteredData] = useState([]);
   const [deleteDialog, setDeleteDialog] = React.useState({
     open: false,
     selectedItem: null
@@ -42,10 +61,41 @@ const ConsumptionDataTable = ({
     return Number(value || 0).toFixed(2);
   };
 
-  const sortedData = useMemo(() => {
-    if (!Array.isArray(data)) return [];
+  // Filter data based on selected financial year
+  useEffect(() => {
+    if (!data || !Array.isArray(data)) {
+      console.log('No data or invalid data format');
+      setFilteredData([]);
+      return;
+    }
+
+    console.log('Raw consumption data:', data);
+    const { startDate, endDate } = getFinancialYearRange(selectedYear);
+    console.log(`Filtering consumption for FY ${selectedYear}-${selectedYear + 1} (${startDate.toISOString()} to ${endDate.toISOString()})`);
     
-    return data.map(row => {
+    const filtered = data.filter(item => {
+      // Use sk field if available, otherwise use date field
+      const dateStr = item.sk || item.date;
+      if (!dateStr) return false;
+      
+      // Parse date in MMYYYY format
+      const month = parseInt(dateStr.substring(0, 2)) - 1; // 0-indexed month
+      const year = parseInt(dateStr.substring(2));
+      const itemDate = new Date(year, month, 1); // First day of the month
+      
+      const isInRange = itemDate >= startDate && itemDate <= endDate;
+      console.log(`Consumption date: ${dateStr} (${itemDate.toISOString()}) - In range: ${isInRange}`);
+      return isInRange;
+    });
+
+    console.log('Filtered consumption data count:', filtered.length);
+    setFilteredData(filtered);
+  }, [data, selectedYear]);
+
+  const sortedData = useMemo(() => {
+    if (!Array.isArray(filteredData)) return [];
+    
+    return filteredData.map(row => {
       // Calculate sort key for financial year sorting
       let sortKey = 0;
       try {
@@ -74,7 +124,7 @@ const ConsumptionDataTable = ({
       // If same date, sort by site ID (ascending)
       return (a.productionSiteId || 0) - (b.productionSiteId || 0);
     });
-  }, [data]);
+  }, [filteredData]);
 
   const calculateRowTotal = useCallback((row) => {
     const total = ['c1', 'c2', 'c3', 'c4', 'c5']
@@ -119,9 +169,71 @@ const ConsumptionDataTable = ({
     setDeleteDialog({ open: false, selectedItem: null });
   }, []);
 
+  const handleYearChange = (event) => {
+    setSelectedYear(Number(event.target.value));
+  };
+
+  const renderHeader = () => (
+    <Box sx={{ 
+      display: 'flex', 
+      justifyContent: 'space-between', 
+      alignItems: 'center',
+      p: 2,
+      backgroundColor: 'white',
+      borderBottom: '2px solid #000000',
+      gap: 2
+    }}>
+      <Typography variant="h6" component="div" sx={{ color: '#1976d2', fontWeight: 'bold' }}>
+        Consumption Data
+      </Typography>
+      <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+        {onAdd && (
+          <Button
+            variant="contained"
+            color="primary"
+            size="small"
+            onClick={onAdd}
+            startIcon={<AddIcon />}
+            disabled={loading}
+          >
+            Add Unit
+          </Button>
+        )}
+        <FormControl size="small" sx={{ minWidth: 200 }}>
+          <InputLabel>Financial Year</InputLabel>
+          <Select
+            value={selectedYear}
+            onChange={handleYearChange}
+            label="Financial Year"
+          >
+            {years.map((year) => (
+              <MenuItem key={year} value={year}>
+                {`FY ${year}-${(year + 1).toString().slice(-2)}`}
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+      </Box>
+    </Box>
+  );
+
+  if (!sortedData.length) {
+    return (
+      <Box sx={{ p: 0 }}>
+        {renderHeader()}
+        <Alert severity="info" sx={{ mt: 2, mx: 2, mb: 2 }}>
+          {data && data.length > 0 
+            ? `No consumption data available for financial year ${selectedYear}-${(selectedYear + 1).toString().slice(-2)}`
+            : 'No consumption data available. Add your first consumption record.'}
+        </Alert>
+      </Box>
+    );
+  }
+
   return (
-    <>
-      <TableContainer component={Paper} sx={{ mt: 2, boxShadow: 2 }}>
+    <Box>
+      {renderHeader()}
+      <TableContainer component={Paper} sx={{ mt: 0, boxShadow: 2 }}>
         <Table>
           <TableHead>
             <TableRow sx={{ backgroundColor: 'primary.main' }}>
@@ -255,29 +367,23 @@ const ConsumptionDataTable = ({
         </DialogTitle>
         <DialogContent>
           <Typography>
-            Are you sure you want to delete the consumption data for{' '}
-            {deleteDialog.selectedItem && formatSKPeriod(deleteDialog.selectedItem.sk)}?
-            This action cannot be undone.
+            Are you sure you want to delete this consumption record?
           </Typography>
         </DialogContent>
-        <DialogActions sx={{ p: 2 }}>
-          <Button 
-            onClick={handleDeleteCancel}
-            color="inherit"
-          >
+        <DialogActions>
+          <Button onClick={handleDeleteCancel} color="primary">
             Cancel
           </Button>
           <Button 
-            onClick={handleDeleteConfirm}
-            variant="contained"
+            onClick={handleDeleteConfirm} 
             color="error"
-            autoFocus
+            variant="contained"
           >
             Delete
           </Button>
         </DialogActions>
       </Dialog>
-    </>
+    </Box>
   );
 };
 

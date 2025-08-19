@@ -1,15 +1,17 @@
 import { useState, useEffect, useCallback } from 'react';
-import allocationApi from '../services/allocationApi';
+import allocationService from '../services/allocationService';
 import lapseApi from '../services/lapseApi';
+import bankingApi from '../services/bankingApi';
 import productionSiteApi from '../services/productionSiteApi';
+import consumptionSiteApi from '../services/consumptionSiteApi';
 import { getAccessibleSiteIds } from '../utils/siteAccessUtils';
 
-// Helper function to get financial year months (April to March)
+// Helper function to get financial year months (April to March) - same as GraphicalAllocationReport
 function getFinancialYearMonths(fy) {
-  const [startYear] = fy.split('-').map(Number);
+  const [startYear, endYear] = fy.split('-').map(Number);
   const months = [];
-  for (let m = 4; m <= 12; m++) months.push((m < 10 ? '0' : '') + m + startYear);
-  for (let m = 1; m <= 3; m++) months.push((m < 10 ? '0' : '') + m + (startYear + 1));
+  for (let m = 4; m <= 12; m++) months.push(`${m < 10 ? '0' : ''}${m}${startYear}`);
+  for (let m = 1; m <= 3; m++) months.push(`${m < 10 ? '0' : ''}${m}${endYear}`);
   return months;
 }
 
@@ -27,69 +29,66 @@ function processLapseData(lapseData, months) {
       const d = new Date(record.date);
       month = `${String(d.getMonth() + 1).padStart(2, '0')}${d.getFullYear()}`;
     } else if (record.period) month = record.period;
-    
+
     if (!month || !byMonth[month]) return;
-    
+
     const allocated = record.allocated || record;
     ['c1', 'c2', 'c3', 'c4', 'c5'].forEach(c => {
       byMonth[month][c] += Math.max(0, Number(allocated[c] || 0));
     });
+
     byMonth[month].total = Object.values(byMonth[month])
       .slice(0, 5)
       .reduce((sum, val) => sum + val, 0);
   });
-  
+
   return byMonth;
 }
 
-// Helper function to calculate total units from an array of items
-const calculateTotalUnits = (items, type = 'allocation') => {
-  if (!Array.isArray(items) || items.length === 0) {
-    console.log(`[${type.toUpperCase()}] No items to calculate`);
+// Process banking data similar to GraphicalBankingReport
+function processBankingData(bankingData, months) {
+  const byMonth = {};
+  months.forEach(month => {
+    byMonth[month] = { c1: 0, c2: 0, c3: 0, c4: 0, c5: 0, total: 0 };
+  });
+
+  (bankingData || []).forEach(record => {
+    let month = '';
+    if (record.sk) month = record.sk;
+    else if (record.date) {
+      const d = new Date(record.date);
+      month = `${String(d.getMonth() + 1).padStart(2, '0')}${d.getFullYear()}`;
+    } else if (record.period) month = record.period;
+
+    if (!month || !byMonth[month]) return;
+
+    const allocated = record.allocated || record;
+    ['c1', 'c2', 'c3', 'c4', 'c5'].forEach(c => {
+      byMonth[month][c] += Math.max(0, Number(allocated[c] || 0));
+    });
+
+    byMonth[month].total = Object.values(byMonth[month])
+      .slice(0, 5)
+      .reduce((sum, val) => sum + val, 0);
+  });
+
+  return byMonth;
+}
+
+// Helper function to calculate total units from processed monthly data
+const calculateTotalUnits = (processedData, type = 'allocation') => {
+  if (!processedData || typeof processedData !== 'object') {
+    console.log(`[${type.toUpperCase()}] No data to calculate`);
     return 0;
   }
+
+  console.log(`[${type.toUpperCase()}] Calculating total from processed monthly data`);
   
-  console.log(`[${type.toUpperCase()}] Calculating total for ${items.length} items`);
-  
-  const result = items.reduce((sum, item, index) => {
-    try {
-      if (!item) {
-        console.warn(`[${type.toUpperCase()}] Item at index ${index} is null or undefined`);
-        return sum;
-      }
-      
-      // For all types, check if units are in the 'allocated' object or at root
-      const source = item.allocated || item;
-      
-      // Log the item being processed for debugging
-      console.log(`[${type.toUpperCase()}] Processing item ${index + 1}/${items.length}:`, 
-        JSON.parse(JSON.stringify(item)));
-      
-      // Extract values safely, defaulting to 0 if not found
-      const c1 = Number(source.c1) || 0;
-      const c2 = Number(source.c2) || 0;
-      const c3 = Number(source.c3) || 0;
-      const c4 = Number(source.c4) || 0;
-      const c5 = Number(source.c5) || 0;
-      
-      const itemTotal = c1 + c2 + c3 + c4 + c5;
-      
-      // Log the calculation details
-      console.log(`[${type.toUpperCase()}] Item ${index + 1} values - c1: ${c1}, c2: ${c2}, c3: ${c3}, c4: ${c4}, c5: ${c5}`);
-      console.log(`[${type.toUpperCase()}] Item ${index + 1} total: ${itemTotal}, Running total: ${sum + itemTotal}`);
-      
-      return sum + itemTotal;
-    } catch (error) {
-      console.error('Error calculating units:', error);
-      console.groupEnd();
-      return sum;
-    } finally {
-      console.groupEnd();
-    }
+  const result = Object.values(processedData).reduce((sum, monthData) => {
+    return sum + (monthData.total || 0);
   }, 0);
-  
-  console.log('Final total for', type, ':', result);
-  console.groupEnd();
+
+  console.log(`[${type.toUpperCase()}] Final total:`, result);
   return result;
 };
 
@@ -105,11 +104,11 @@ const useDashboardData = (user) => {
     error: null
   });
 
-  const [reportStats, setReportStats] = useState({
-    dailyReports: 0,
-    monthlyReports: 0,
-    pendingReview: 0,
-    complianceRate: 0,
+  const [invoiceStats, setInvoiceStats] = useState({
+    dailyInvoices: 0,
+    monthlyInvoices: 0,
+    pendingInvoices: 0,
+    completionRate: 0,
     loading: true,
     error: null
   });
@@ -119,7 +118,7 @@ const useDashboardData = (user) => {
     const currentDate = new Date();
     const currentYear = currentDate.getFullYear();
     const currentMonth = currentDate.getMonth() + 1; // 1-12
-    
+
     // Financial year starts in April
     const startYear = currentMonth >= 4 ? currentYear : currentYear - 1;
     return `${startYear}-${startYear + 1}`;
@@ -130,174 +129,194 @@ const useDashboardData = (user) => {
       console.error('[Dashboard] No user provided to useDashboardData');
       return;
     }
+
     console.group('[Dashboard] Fetching allocation stats');
     try {
       setAllocationStats(prev => ({ ...prev, loading: true, error: null }));
-      
+
       // Get current financial year and months
       const financialYear = getCurrentFinancialYear();
-      const financialYearMonths = getFinancialYearMonths(financialYear);
+      const months = getFinancialYearMonths(financialYear);
       console.log('[Dashboard] Financial year:', financialYear);
-      console.log('[Dashboard] Financial year months:', financialYearMonths);
-      
-      // Track unique items to avoid duplicates
-      const seenBanking = new Set();
-      const seenAllocations = new Set();
-      
-      let banking = [];
-      let allocations = [];
-      let lapseData = [];
-      
-      // 1. Fetch banking and allocation data (monthly as before)
-      for (const month of financialYearMonths) {
-        try {
-          console.group(`[Dashboard] Processing month: ${month}`);
-          
-          // Fetch banking and allocation data in parallel
-          const [bankingData, allocationData] = await Promise.all([
-            allocationApi.fetchByType('banking', month).catch(e => {
-              console.error(`[Dashboard] Error fetching banking data for ${month}:`, e);
-              return [];
-            }),
-            allocationApi.fetchByType('allocations', month).catch(e => {
-              console.error(`[Dashboard] Error fetching allocation data for ${month}:`, e);
-              return [];
-            })
-          ]);
-          
-          // Process banking data
-          if (Array.isArray(bankingData)) {
-            const uniqueBanking = bankingData.filter(item => {
-              if (!item) return false;
-              const id = item.id || JSON.stringify(item);
-              if (!seenBanking.has(id)) {
-                seenBanking.add(id);
-                return true;
-              }
-              return false;
-            });
-            banking = [...banking, ...uniqueBanking];
-          }
-          
-          // Process allocation data
-          if (Array.isArray(allocationData)) {
-            const uniqueAllocations = allocationData.filter(item => {
-              if (!item) return false;
-              const id = item.id || JSON.stringify(item);
-              if (!seenAllocations.has(id)) {
-                seenAllocations.add(id);
-                return true;
-              }
-              return false;
-            });
-            allocations = [...allocations, ...uniqueAllocations];
-          }
-          
-          console.log(`[Dashboard] Processed ${month}:`, {
-            banking: bankingData?.length || 0,
-            allocations: allocationData?.length || 0
-          });
-          
-        } catch (error) {
-          console.error(`[Dashboard] Error processing month ${month}:`, error);
-        } finally {
-          console.groupEnd();
+      console.log('[Dashboard] Financial year months:', months);
+
+      // Get accessible site IDs - following GraphicalAllocationReport pattern
+      const prodIds = getAccessibleSiteIds(user, 'production');
+      const consIds = getAccessibleSiteIds(user, 'consumption');
+
+      const extractSiteId = id => (id && id.includes('_') ? id.split('_')[1] : id);
+      const accessibleProdIds = prodIds.map(extractSiteId);
+      const accessibleConsIds = consIds.map(extractSiteId);
+
+      // Fetch site info for filtering - following GraphicalAllocationReport pattern
+      const [prods, conss] = await Promise.all([
+        productionSiteApi.fetchAll().then(r => r.data || []),
+        consumptionSiteApi.fetchAll().then(r => r.data || [])
+      ]);
+
+      console.log('[Dashboard] Accessible prod IDs:', accessibleProdIds);
+      console.log('[Dashboard] Accessible cons IDs:', accessibleConsIds);
+
+      // 1. FETCH ALLOCATION DATA - Using the correct API like GraphicalAllocationReport
+      console.group('[Dashboard] Fetching allocation data');
+      const allocArrays = await Promise.all(
+        months.map(m => allocationService.fetchAllocationsByMonth(m).catch(err => {
+          console.error(`[Dashboard] Error fetching allocations for ${m}:`, err);
+          return [];
+        }))
+      );
+
+      let allocs = allocArrays.flat();
+      console.log('[Dashboard] Raw allocations fetched:', allocs.length);
+
+      // Handle allocated object mapping - same as GraphicalAllocationReport
+      allocs = allocs.map(item =>
+        item && item.allocated && typeof item.allocated === 'object'
+          ? { ...item, ...item.allocated }
+          : item
+      );
+
+      // Filter by accessible sites - same logic as GraphicalAllocationReport
+      allocs = allocs.filter(item => {
+        if (!item.pk) return false;
+
+        let prodId, consId;
+        const pkParts = item.pk.split('_');
+        
+        if (pkParts.length === 3) {
+          [, prodId, consId] = pkParts;
+        } else {
+          [prodId, consId] = pkParts;
         }
-      }
-      
-      // 2. Fetch lapse data by production site (similar to GraphicalLapseReport)
-      try {
-        console.group('[Dashboard] Fetching lapse data by production site');
-        const siteIds = getAccessibleSiteIds(user, 'production');
-        const allSites = await productionSiteApi.fetchAll().then(res => res.data || []);
-        
-        for (const combinedId of siteIds) {
-          const [companyId, siteId] = combinedId.split('_');
-          const siteObj = allSites.find(s => 
-            String(s.productionSiteId) === String(siteId) &&
-            String(s.companyId) === String(companyId)
-          );
-          if (!siteObj) continue;
-          
-          const siteKey = `${siteObj.companyId}_${siteObj.productionSiteId}`;
-          
-          try {
-            const response = await lapseApi.fetchAllByPk(siteKey);
-            const siteLapseData = Array.isArray(response) ? response : [];
-            
-            // Filter for current financial year
-            const currentYearLapseData = siteLapseData.filter(item => {
-              if (!item || (!item.sk && !item.period)) return false;
-              const monthKey = item.sk || item.period;
-              return financialYearMonths.includes(monthKey);
-            });
-            
-            lapseData = [...lapseData, ...currentYearLapseData];
-            
-            if (currentYearLapseData.length > 0) {
-              console.log(`[Dashboard] Fetched ${currentYearLapseData.length} lapse records for site ${siteKey}`);
-            }
-          } catch (error) {
-            console.error(`[Dashboard] Error fetching lapse data for site ${siteKey}:`, error);
-          }
-        }
-      } catch (error) {
-        console.error('[Dashboard] Error fetching lapse data:', error);
-      } finally {
-        console.groupEnd();
-      }
-      
-      // Process lapse data using the same logic as GraphicalLapseReport
-      const lapseByMonth = processLapseData(lapseData, financialYearMonths);
-      
-      // Log summary of unique items
-      console.log('[Dashboard] Unique items summary:', {
-        banking: banking.length,
-        allocations: allocations.length,
-        lapse: lapseData.length
-      });
-      
-      // Log sample items for debugging
-      if (lapseData.length > 0) {
-        console.log('[Dashboard] Sample lapse item structure:', JSON.parse(JSON.stringify(lapseData[0])));
-      } else {
-        console.warn('[Dashboard] No lapse data found for any site');
-      }
-      
-      // Calculate totals with error handling
-      console.group('[Dashboard] Calculating totals');
-      let totalBankingUnits, totalAllocationUnits, totalLapseUnits = 0;
-      
-      try {
-        console.log('[Dashboard] Calculating banking units...');
-        totalBankingUnits = calculateTotalUnits(banking, 'banking');
-        
-        console.log('[Dashboard] Calculating allocation units...');
-        totalAllocationUnits = calculateTotalUnits(allocations, 'allocation');
-        
-        // Calculate total lapse units from processed data
-        console.log('[Dashboard] Calculating lapse units...');
-        totalLapseUnits = Object.values(lapseByMonth).reduce(
-          (sum, monthData) => sum + monthData.total, 0
+
+        return (
+          (!accessibleProdIds.length || accessibleProdIds.includes(prodId)) &&
+          (!accessibleConsIds.length || accessibleConsIds.includes(consId))
         );
-        
-        console.log('[Dashboard] Calculated totals:', {
-          banking: totalBankingUnits,
-          allocations: totalAllocationUnits,
-          lapse: totalLapseUnits
-        });
-      } catch (error) {
-        console.error('[Dashboard] Error calculating totals:', error);
-        // Set defaults if calculation fails
-        totalBankingUnits = totalBankingUnits || 0;
-        totalAllocationUnits = totalAllocationUnits || 0;
-        totalLapseUnits = totalLapseUnits || 0;
-      } finally {
-        console.groupEnd();
+      });
+
+      console.log('[Dashboard] Filtered allocations:', allocs.length);
+      console.groupEnd();
+
+      // Process allocation data by month
+      const allocationByMonth = {};
+      months.forEach(month => {
+        allocationByMonth[month] = { c1: 0, c2: 0, c3: 0, c4: 0, c5: 0, total: 0 };
+      });
+
+      allocs.forEach(item => {
+        const month = item.sk;
+        if (!month || !allocationByMonth[month]) return;
+
+        const c1 = Math.max(0, Number(item.c1) || 0);
+        const c2 = Math.max(0, Number(item.c2) || 0);
+        const c3 = Math.max(0, Number(item.c3) || 0);
+        const c4 = Math.max(0, Number(item.c4) || 0);
+        const c5 = Math.max(0, Number(item.c5) || 0);
+
+        allocationByMonth[month].c1 += c1;
+        allocationByMonth[month].c2 += c2;
+        allocationByMonth[month].c3 += c3;
+        allocationByMonth[month].c4 += c4;
+        allocationByMonth[month].c5 += c5;
+        allocationByMonth[month].total += (c1 + c2 + c3 + c4 + c5);
+      });
+
+      // 2. FETCH BANKING DATA - Similar to GraphicalBankingReport
+      console.group('[Dashboard] Fetching banking data');
+      const allSites = await productionSiteApi.fetchAll().then(res => res.data || []);
+      let allBankingData = [];
+
+      for (const combinedId of prodIds) {
+        const [companyId, siteId] = combinedId.split('_');
+        const siteObj = allSites.find(s =>
+          String(s.productionSiteId) === String(siteId) &&
+          String(s.companyId) === String(companyId)
+        );
+
+        if (!siteObj) continue;
+
+        const siteKey = `${siteObj.companyId}_${siteObj.productionSiteId}`;
+
+        try {
+          const response = await bankingApi.fetchAllByPk(siteKey);
+          const bankingData = Array.isArray(response) ? response : [];
+          
+          // Filter for current financial year
+          const currentYearBanking = bankingData.filter(item => {
+            if (!item) return false;
+            let monthKey = item.sk || item.period;
+            if (item.date && !monthKey) {
+              const d = new Date(item.date);
+              monthKey = `${String(d.getMonth() + 1).padStart(2, '0')}${d.getFullYear()}`;
+            }
+            return monthKey && months.includes(monthKey);
+          });
+
+          allBankingData = [...allBankingData, ...currentYearBanking];
+        } catch (error) {
+          console.error(`[Dashboard] Error fetching banking data for site ${siteKey}:`, error);
+        }
       }
-      
-      const unitsAllocated = allocations.length;
+
+      const bankingByMonth = processBankingData(allBankingData, months);
+      console.log('[Dashboard] Banking data processed:', Object.keys(bankingByMonth).length, 'months');
+      console.groupEnd();
+
+      // 3. FETCH LAPSE DATA - Same as current implementation
+      console.group('[Dashboard] Fetching lapse data');
+      let lapseData = [];
+
+      for (const combinedId of prodIds) {
+        const [companyId, siteId] = combinedId.split('_');
+        const siteObj = allSites.find(s =>
+          String(s.productionSiteId) === String(siteId) &&
+          String(s.companyId) === String(companyId)
+        );
+
+        if (!siteObj) continue;
+
+        const siteKey = `${siteObj.companyId}_${siteObj.productionSiteId}`;
+
+        try {
+          const response = await lapseApi.fetchAllByPk(siteKey);
+          const siteLapseData = Array.isArray(response) ? response : [];
+
+          // Filter for current financial year
+          const currentYearLapseData = siteLapseData.filter(item => {
+            if (!item || (!item.sk && !item.period)) return false;
+            const monthKey = item.sk || item.period;
+            return months.includes(monthKey);
+          });
+
+          lapseData = [...lapseData, ...currentYearLapseData];
+        } catch (error) {
+          console.error(`[Dashboard] Error fetching lapse data for site ${siteKey}:`, error);
+        }
+      }
+
+      const lapseByMonth = processLapseData(lapseData, months);
+      console.log('[Dashboard] Lapse data processed:', Object.keys(lapseByMonth).length, 'months');
+      console.groupEnd();
+
+      // Calculate totals using processed monthly data
+      const totalAllocationUnits = calculateTotalUnits(allocationByMonth, 'allocation');
+      const totalBankingUnits = calculateTotalUnits(bankingByMonth, 'banking');
+      const totalLapseUnits = calculateTotalUnits(lapseByMonth, 'lapse');
+
+      // Calculate other metrics
+      const unitsAllocated = allocs.length;
       const pendingAllocations = lapseData.length;
+      const allocationRate = totalBankingUnits > 0 ? (totalAllocationUnits / totalBankingUnits) * 100 : 0;
+
+      console.log('[Dashboard] Final calculations:', {
+        totalAllocationUnits,
+        totalBankingUnits,
+        totalLapseUnits,
+        unitsAllocated,
+        pendingAllocations,
+        allocationRate: allocationRate.toFixed(2) + '%'
+      });
 
       setAllocationStats({
         totalBankingUnits,
@@ -305,59 +324,56 @@ const useDashboardData = (user) => {
         totalLapseUnits,
         unitsAllocated,
         pendingAllocations,
+        allocationRate,
         loading: false,
         error: null
       });
+
     } catch (error) {
-      console.error('Error fetching allocation stats:', error);
+      console.error('[Dashboard] Error fetching allocation stats:', error);
       setAllocationStats(prev => ({
         ...prev,
         loading: false,
         error: 'Failed to load allocation statistics'
       }));
+    } finally {
+      console.groupEnd();
     }
-  }, []);
+}, [user]);
 
-  const fetchReportStats = useCallback(async () => {
-    try {
-      setReportStats(prev => ({ ...prev, loading: true, error: null }));
-      
-      // In a production environment, these would come from actual API calls
-      // For now, we'll use reasonable defaults
-      const dailyReports = 0;
-      const monthlyReports = 0;
-      const pendingReview = 0;
-      const complianceRate = 0;
+const fetchInvoiceStats = useCallback(async () => {
+  try {
+    setInvoiceStats(prev => ({ ...prev, loading: true, error: null }));
+    
+    // Simulate API call to fetch invoice stats
+    // In a real app, you would make an actual API call here
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
+    // Mock data - replace with actual API call
+    setInvoiceStats({
+      dailyInvoices: 15,
+      monthlyInvoices: 120,
+      pendingInvoices: 5,
+      completionRate: 92,
+      loading: false,
+      error: null
+    });
+  } catch (error) {
+    console.error('Error fetching invoice stats:', error);
+    setInvoiceStats(prev => ({
+      ...prev,
+      loading: false,
+      error: 'Failed to load invoice statistics'
+    }));
+  }
+}, []);
 
-      setReportStats({
-        dailyReports,
-        monthlyReports,
-        pendingReview,
-        complianceRate,
-        loading: false,
-        error: null
-      });
-    } catch (error) {
-      console.error('Error fetching report stats:', error);
-      setReportStats(prev => ({
-        ...prev,
-        loading: false,
-        error: 'Failed to load report statistics'
-      }));
-    }
-  }, []);
+useEffect(() => {
+  fetchAllocationStats();
+  fetchInvoiceStats();
+}, [fetchAllocationStats, fetchInvoiceStats]);
 
-  useEffect(() => {
-    fetchAllocationStats();
-    fetchReportStats();
-  }, [fetchAllocationStats, fetchReportStats]);
-
-  return {
-    allocationStats,
-    reportStats,
-    refreshAllocationStats: fetchAllocationStats,
-    refreshReportStats: fetchReportStats
-  };
+return { allocationStats, invoiceStats, refreshAllocationStats: fetchAllocationStats };
 };
 
 export default useDashboardData;

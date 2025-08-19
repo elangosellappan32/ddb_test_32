@@ -1,4 +1,4 @@
-const { QueryCommand, PutCommand, UpdateCommand, DeleteCommand } = require('@aws-sdk/lib-dynamodb');
+const { PutCommand, UpdateCommand, DeleteCommand, ScanCommand, QueryCommand } = require('@aws-sdk/lib-dynamodb');
 const docClient = require('../utils/db');
 const TableNames = require('../constants/tableNames');
 const logger = require('../utils/logger');
@@ -163,12 +163,10 @@ class LapseDAL {
             const sk = formatMonthYearKey(month);
             this.validateSortKey(sk);
 
-            // Query for all lapses for this company in the given month
-            // The partition key is in the format: {companyId}_{productionSiteId}
-            const command = new QueryCommand({
+            // Use scan with filter expression since we don't have a GSI on sk
+            const command = new ScanCommand({
                 TableName: this.tableName,
-                IndexName: 'GSI1', // Assuming there's a GSI on sk (month) for this query
-                KeyConditionExpression: 'sk = :sk AND begins_with(pk, :companyPrefix)',
+                FilterExpression: 'sk = :sk AND begins_with(pk, :companyPrefix)',
                 ExpressionAttributeValues: {
                     ':sk': sk,
                     ':companyPrefix': `${companyId}_`
@@ -177,7 +175,7 @@ class LapseDAL {
 
             logger.debug(`[LapseDAL] Getting lapses by month: ${companyId}, ${month}`, { 
                 tableName: this.tableName,
-                keyCondition: 'sk = :sk AND begins_with(pk, :companyPrefix)',
+                filterExpression: 'sk = :sk AND begins_with(pk, :companyPrefix)',
                 expressionValues: {
                     sk,
                     companyPrefix: `${companyId}_`

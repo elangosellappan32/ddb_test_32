@@ -407,7 +407,7 @@ const ConsumptionUnitsTable = ({
   return (
     <>
       <TableContainer component={Paper} sx={{ mb: 4, mt: 2, boxShadow: 2 }}>
-        <Box sx={{ p: 2, borderBottom: '1px solid rgba(224, 224, 224, 1)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <Box sx={{ p: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <TrendingDown color="primary" />
             <Typography variant="h6">Consumption Units</Typography>
@@ -435,7 +435,7 @@ const ConsumptionUnitsTable = ({
         ) : consumptionData.length === 0 ? (
           <Alert severity="info" sx={{ m: 2 }}>No consumption data available</Alert>
         ) : (
-          <Table>
+          <Table sx={{ border: '1px solid black', borderTop: 'none' }}>
             <TableHead>
               <TableRow>
                 <StyledTableHeader>Month</StyledTableHeader>

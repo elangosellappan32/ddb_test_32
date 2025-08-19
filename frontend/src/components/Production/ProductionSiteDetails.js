@@ -18,7 +18,8 @@ import productionSiteApi from '../../services/productionSiteApi';
 import productionUnitApi from '../../services/productionUnitApi';
 import productionChargeApi from '../../services/productionChargeApi';
 import SiteInfoCard from './SiteInfoCard';
-import ProductionDataTable from './ProductionDataTable';
+import ChargeTable from './ChargeTable';
+import UnitTable from './UnitTable';
 import ProductionSiteDataForm from './ProductionSiteDataForm';
 import { formatSK, formatDisplayDate } from '../../utils/dateUtils';
 import { useAuth } from '../../context/AuthContext';
@@ -165,57 +166,41 @@ const ProductionSiteDetails = () => {
     fetchData();
   }, [fetchData]);
 
-  // Render data table with correct permissions
-  const renderDataTable = useCallback((type, data) => {
-    const typePermissions = type === 'unit' ? permissions.units : permissions.charges;
-    console.log(`[ProductionSiteDetails] Rendering ${type} table, data:`, data);
-
+  // Render unit table
+  const renderUnitTable = useCallback(() => {
     return (
-      <Paper sx={{ p: 3, mb: type === 'unit' ? 3 : 0 }}>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
-          <Typography variant="h6">
-            Production {type === 'unit' ? 'Units' : 'Charges'}
-          </Typography>
-          {typePermissions.create && (
-            <Button
-              startIcon={<AddIcon />}
-              variant="contained"
-              color="primary"
-              onClick={() => handleAddClick(type)}
-            >
-              Add {type === 'unit' ? 'Unit' : 'Charge'} Data
-            </Button>
-          )}
-        </Box>
-        
-        {loading ? (
-          <Box display="flex" justifyContent="center" p={3}>
-            <CircularProgress />
-          </Box>
-        ) : error ? (
-          <Alert severity="error" sx={{ mt: 2 }}>
-            {error}
-          </Alert>
-        ) : !Array.isArray(data) || data.length === 0 ? (
-          <Alert severity="info" sx={{ mt: 2 }}>
-            No {type === 'unit' ? 'unit' : 'charge'} data available.
-            {user?.role?.toUpperCase() === 'ADMIN' && ' Click the Add button to create new data.'}
-          </Alert>
-        ) : (
-          <ProductionDataTable
-            data={{ data: data }}
-            type={type}
-            onEdit={typePermissions.update ? (row) => handleEditClick(type, row) : undefined}
-            onDelete={typePermissions.delete ? (row) => handleDeleteClick(type, row) : undefined}
-            onCopy={typePermissions.create ? (row) => handleCopyClick(type, row) : undefined}
-            permissions={typePermissions}
-            isProductionPage={false}
-            userRole={user?.role}
-          />
-        )}
+      <Paper sx={{ p: 0, mb: 4, overflow: 'hidden' }}>
+        <UnitTable
+          data={siteData.units}
+          onEdit={handleEditClick}
+          onDelete={handleDeleteClick}
+          onCopy={handleCopyClick}
+          onAdd={permissions.units.create ? () => handleAddClick('unit') : null}
+          permissions={permissions.units}
+          loading={loading}
+          error={error}
+        />
       </Paper>
     );
-  }, [loading, error, permissions, handleAddClick, handleEditClick, handleDeleteClick, user]);
+  }, [siteData.units, loading, error, permissions.units, handleAddClick, handleEditClick, handleDeleteClick, handleCopyClick]);
+
+  // Render charge table
+  const renderChargeTable = useCallback(() => {
+    return (
+      <Paper sx={{ p: 0, overflow: 'hidden' }}>
+        <ChargeTable
+          data={siteData.charges}
+          onEdit={handleEditClick}
+          onDelete={handleDeleteClick}
+          onCopy={handleCopyClick}
+          onAdd={permissions.charges.create ? () => handleAddClick('charge') : null}
+          permissions={permissions.charges}
+          loading={loading}
+          error={error}
+        />
+      </Paper>
+    );
+  }, [siteData.charges, loading, error, permissions.charges, handleAddClick, handleEditClick, handleDeleteClick, handleCopyClick]);
 
   // Move useMemo before any conditional returns
   const existingDates = useMemo(() => {
@@ -391,8 +376,8 @@ const ProductionSiteDetails = () => {
       ) : (
         <>
           <SiteInfoCard site={siteData.site} />
-          {renderDataTable('unit', siteData.units)}
-          {renderDataTable('charge', siteData.charges)}
+          {renderUnitTable()}
+          {renderChargeTable()}
 
           <Dialog
             open={dialog.open}

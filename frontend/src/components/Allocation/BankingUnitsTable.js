@@ -111,11 +111,11 @@ const BankingUnitsTable = ({ bankingData = [], selectedYear }) => {
   // Show net balance in the UI
   return (
     <TableContainer component={Paper} sx={{ mb: 6, mt: 2, boxShadow: 2 }}>
-      <Box sx={{ p: 2, borderBottom: '1px solid rgba(224, 224, 224, 1)', display: 'flex', alignItems: 'center', gap: 1 }}>
+      <Box sx={{ p: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
         <BankingIcon color="primary" />
         <Typography variant="h6">Banking Units</Typography>
       </Box>
-      <Table>
+      <Table sx={{ border: '1px solid black', borderTop: 'none' }}>
         <TableHead>
           <TableRow>
             <StyledTableHeader>Site Name</StyledTableHeader>

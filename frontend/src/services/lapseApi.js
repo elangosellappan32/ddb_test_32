@@ -31,8 +31,9 @@ const lapseApi = {
         return [];
       }
       
-      handleApiError('Error fetching lapse records by PK:', error);
-      throw error;
+      const errorMessage = error.response?.data?.message || 'Error fetching lapse records by PK';
+      handleApiError(error);
+      throw new Error(errorMessage);
     }
   },
 

@@ -10,7 +10,7 @@ import {
 } from '@mui/material';
 import { DesktopDatePicker } from '@mui/x-date-pickers';
 import { format } from 'date-fns';
-import { validateProductionData } from './ProductionDataTable';
+import { validateProductionData, validateProductionFields } from '../../utils/productionValidation';
 import { useAuth } from '../../context/AuthContext';
 import { hasPermission } from '../../utils/permissions';
 
