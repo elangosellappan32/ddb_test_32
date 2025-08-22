@@ -28,12 +28,12 @@ import {
   ChevronLeft as ChevronLeftIcon,
   AccountCircle as ProfileIcon,
   AssignmentTurnedIn as AssignmentTurnedInIcon,
-  BarChart as BarChartIcon
+  BarChart as BarChartIcon,
+  Receipt as ReceiptIcon
 } from '@mui/icons-material';
 import { useAuth } from '../context/AuthContext';
 import { useNavigation } from '../context/NavigationContext';
 import logo from '../assets/logo.png'; 
-
 
 const roleColors = {
   admin: '#d32f2f',   // Red
@@ -41,16 +41,18 @@ const roleColors = {
   viewer: '#fbc02d'   // Yellow
 };
 
-
 const Navbar = () => {
+  // Hooks
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const navigate = useNavigation();
   const location = useLocation();
   const { user, logout } = useAuth();
+  
+  // State
   const [anchorEl, setAnchorEl] = useState(null);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [isLogouting, setIsLogouting] = useState(false);
-  const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
 
 
   const navItems = useMemo(() => [
@@ -58,31 +60,45 @@ const Navbar = () => {
       icon: <DashboardIcon />, 
       label: 'Dashboard', 
       path: '/',
+      resource: 'dashboard'
     },
     { 
       icon: <FactoryIcon />, 
       label: 'Production', 
       path: '/production',
+      resource: 'production'
     },
     { 
       icon: <ElectricalServicesIcon />, 
       label: 'Consumption', 
       path: '/consumption',
+      resource: 'consumption'
     },
     {
       icon: <AssignmentTurnedInIcon />,
       label: 'Allocation',
       path: '/allocation',
+      resource: 'allocation'
     },
     {
+      icon: <ReceiptIcon />,
+      label: 'Invoice',
+      path: '/invoice',
+      resource: 'invoice',
+      requiredResource: 'invoice',
+      requiredAction: 'READ'
+    },
+    { 
       icon: <BarChartIcon />, 
       label: 'Graphical', 
       path: '/graphical-report',
+      resource: 'report'
     },
     { 
       icon: <ReportsIcon />, 
       label: 'Compliance', 
       path: '/report',
+      resource: 'report'
     }
   ], []);
 

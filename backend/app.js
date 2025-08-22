@@ -23,6 +23,7 @@ const captiveRoutes = require('./captive/captiveRoutes');
 const siteAccessRoutes = require('./routes/siteAccessRoutes');
 const reportRoutes = require('./routes/reportRoutes');
 const graphicalReportRoutes = require('./graphicalReport/graphicalReportRoutes');
+const invoiceRoutes = require('./invoice/invoiceRoutes');
 
 const app = express();
 

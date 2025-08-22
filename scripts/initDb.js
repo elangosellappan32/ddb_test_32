@@ -740,7 +740,7 @@ const createDefaultUsers = async () => {
                     ]},
                     consumptionSites: { L: [
                         
-                        { S: '2_1' }, { S: '3_2' }, { S: '5_3' }
+                        { S: '2_1' }, { S: '3_2' }
 
                     ]}
                 }

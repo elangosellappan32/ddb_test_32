@@ -79,6 +79,22 @@ const GraphicalBankingReport = () => {
   const [graphType, setGraphType] = useState('line');
   const { user } = useAuth();
 
+  // Sort months for the financial year (April to March)
+  const getSortedFinancialYearMonths = (fy) => {
+    const months = getFinancialYearMonths(fy);
+    return months.sort((a, b) => {
+      const monthA = parseInt(a.slice(0, 2));
+      const monthB = parseInt(b.slice(0, 2));
+      const yearA = parseInt(a.slice(2));
+      const yearB = parseInt(b.slice(2));
+      if (yearA !== yearB) return yearA - yearB;
+      // April=4 should come before Jan=1 for the fiscal year
+      const adjustedMonthA = monthA < 4 ? monthA + 12 : monthA;
+      const adjustedMonthB = monthB < 4 ? monthB + 12 : monthB;
+      return adjustedMonthA - adjustedMonthB;
+    });
+  };
+
   // Financial year dropdown options matching production report style
   const fyOptions = [];
   for (let y = 2020; y <= currentYear; y++) {
@@ -165,44 +181,89 @@ const GraphicalBankingReport = () => {
   });
 
   return (
-    <Paper elevation={3} sx={{ p: 3, mt: 2 }}>
-      <Typography variant="h5" gutterBottom>Banking Analysis</Typography>
-      <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 2, my: 2 }}>
-        <FormControl size="small" sx={{ minWidth: 220 }}>
-          <InputLabel>Financial Year</InputLabel>
-          <Select
-            value={financialYear}
-            onChange={e => setFinancialYear(e.target.value)}
-            label="Financial Year"
-          >
-            {fyOptions.map(fy => (
-              <MenuItem key={fy.value} value={fy.value}>{fy.label}</MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-        <Box sx={{ display: 'flex', alignItems: 'center', pl: 1 }}>
-          <Typography sx={{ fontSize: 14, pr: 1 }}>Bar</Typography>
-          <Switch
-            checked={graphType === 'line'}
-            onChange={() => setGraphType(prev => prev === 'line' ? 'bar' : 'line')}
-            color="primary"
-            sx={{ mx: 1 }}
-          />
-          <Typography sx={{ fontSize: 14, pl: 1 }}>Line</Typography>
-        </Box>
-        <Box sx={{ flex: 1, minWidth: 200 }}>
-          <Autocomplete
-            multiple
-            options={availableSites}
-            getOptionLabel={option => option.name || option.key}
-            value={availableSites.filter(site => selectedSites.includes(site.key))}
-            onChange={(_, vals) => setSelectedSites(vals.map(s => s.key))}
-            renderInput={params => (
-              <TextField {...params} variant="outlined" label="Select Sites" size="small" />
-            )}
-            sx={{ width: '100%' }}
-            disableCloseOnSelect
-          />
+    <Paper elevation={3} sx={{ p: 4, my: 2, borderRadius: 2, boxShadow: '0 4px 20px 0 rgba(0,0,0,0.1)' }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4, borderBottom: '1px solid #e0e0e0', pb: 2 }}>
+        <Typography variant="h5" sx={{ fontWeight: 600, color: '#2c3e50' }}>Banking Report</Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          <FormControl size="small" sx={{ minWidth: 220 }} variant="outlined">
+            <InputLabel>Financial Year</InputLabel>
+            <Select
+              value={financialYear}
+              onChange={e => setFinancialYear(e.target.value)}
+              label="Financial Year"
+              sx={{
+                '& .MuiOutlinedInput-root': {
+                  borderRadius: 1,
+                  backgroundColor: '#fff',
+                },
+              }}
+            >
+              {fyOptions.map(fy => (
+                <MenuItem key={fy.value} value={fy.value}>
+                  {fy.label}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          <Box sx={{ display: 'flex', alignItems: 'center', bgcolor: '#f5f5f5', px: 1.5, py: 0.5, borderRadius: 1 }}>
+            <Typography variant="body2" sx={{ color: graphType === 'bar' ? '#1976d2' : 'inherit', fontWeight: graphType === 'bar' ? 600 : 400 }}>Bar</Typography>
+            <Switch
+              checked={graphType === 'line'}
+              onChange={() => setGraphType(prev => prev === 'line' ? 'bar' : 'line')}
+              color="primary"
+              size="small"
+            />
+            <Typography variant="body2" sx={{ color: graphType === 'line' ? '#1976d2' : 'inherit', fontWeight: graphType === 'line' ? 600 : 400 }}>Line</Typography>
+          </Box>
+          <Box sx={{ flex: 1, minWidth: 300 }}>
+            <Autocomplete
+              multiple
+              options={availableSites}
+              getOptionLabel={(option) => option.name || option.key}
+              value={availableSites.filter(site => selectedSites.includes(site.key))}
+              onChange={(_, newValue) => setSelectedSites(newValue.map(v => v.key))}
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  variant="outlined"
+                  label="Select Sites"
+                  placeholder="Sites"
+                  size="small"
+                  sx={{
+                    '& .MuiOutlinedInput-root': {
+                      borderRadius: 1,
+                      backgroundColor: '#fff',
+                    },
+                  }}
+                />
+              )}
+              renderTags={(value, getTagProps) =>
+                value.map((option, index) => (
+                  <Box
+                    {...getTagProps({ index })}
+                    key={option.key}
+                    sx={{
+                      backgroundColor: '#e3f2fd',
+                      borderRadius: '4px',
+                      padding: '2px 8px',
+                      margin: '2px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      '& .MuiChip-deleteIcon': {
+                        color: '#1976d2',
+                        '&:hover': {
+                          color: '#1565c0',
+                        },
+                      },
+                    }}
+                  >
+                    {option.name || option.key}
+                  </Box>
+                ))
+              }
+              disableCloseOnSelect
+            />
+          </Box>
         </Box>
       </Box>
 

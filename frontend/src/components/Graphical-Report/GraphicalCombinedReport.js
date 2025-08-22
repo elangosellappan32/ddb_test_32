@@ -284,44 +284,54 @@ export default function GraphicalCombinedReport() {
   }, [load]);
 
   return (
-    <Paper elevation={2} sx={{ p: 3, mt: 2 }}>
-      <Typography variant="h5" gutterBottom>
-        Site-wise Monthly Combined C Values (All Modules)
-      </Typography>
-      
-  
+    <Paper elevation={3} sx={{ p: 4, my: 2, borderRadius: 2, boxShadow: '0 4px 20px 0 rgba(0,0,0,0.1)' }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4, borderBottom: '1px solid #e0e0e0', pb: 2 }}>
+        <Typography variant="h5" sx={{ fontWeight: 600, color: '#2c3e50' }}>
+          Site-wise Monthly Combined C Values (All Modules)
+        </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          <FormControl size="small" sx={{ minWidth: 220 }} variant="outlined">
+            <InputLabel>Financial Year</InputLabel>
+            <Select 
+              value={fy} 
+              label="Financial Year" 
+              onChange={e => setFY(e.target.value)}
+              sx={{
+                '& .MuiOutlinedInput-root': {
+                  borderRadius: 1,
+                  backgroundColor: '#fff',
+                },
+              }}
+            >
+              {fyChoices.map(f => (
+                <MenuItem key={f.value} value={f.value}>{f.label}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
 
-      {/* Controls */}
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
-        <FormControl size="small" sx={{ minWidth: 220 }}>
-          <InputLabel>Financial Year</InputLabel>
-          <Select value={fy} label="Financial Year" onChange={e => setFY(e.target.value)}>
-            {fyChoices.map(f => (
-              <MenuItem key={f.value} value={f.value}>{f.label}</MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-
-        <Box sx={{ display: 'flex', alignItems: 'center', pl: 1 }}>
-          <Typography sx={{ fontSize: 14, pr: 1 }}>Bar</Typography>
-          <Switch
-            checked={chartType === 'line'}
-            onChange={() => setT(t => (t === 'line' ? 'bar' : 'line'))}
-            color="primary"
-            sx={{ mx: 1 }}
-          />
-          <Typography sx={{ fontSize: 14, pl: 1 }}>Line</Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', bgcolor: '#f5f5f5', px: 1.5, py: 0.5, borderRadius: 1 }}>
+            <Typography variant="body2" sx={{ color: chartType === 'bar' ? '#1976d2' : 'inherit', fontWeight: chartType === 'bar' ? 600 : 400 }}>Bar</Typography>
+            <Switch
+              checked={chartType === 'line'}
+              onChange={() => setT(t => (t === 'line' ? 'bar' : 'line'))}
+              color="primary"
+              size="small"
+            />
+            <Typography variant="body2" sx={{ color: chartType === 'line' ? '#1976d2' : 'inherit', fontWeight: chartType === 'line' ? 600 : 400 }}>Line</Typography>
+          </Box>
         </Box>
       </Box>
 
       {/* Chart area */}
-      <Box sx={{ width: '100%', height: 540 }}>
+      <Box sx={{ width: '100%', height: 500 }}>
         {busy
           ? <Typography>Loading combined data…</Typography>
           : err
             ? <Typography color="error">{err}</Typography>
             : rows.length === 0
-              ? <Typography color="text.secondary">No data available for your accessible sites in the selected period</Typography>
+              ? <Typography color="text.secondary" sx={{ textAlign: 'center', mt: 4 }}>
+                  No data available for your accessible sites in the selected period
+                </Typography>
               : (
                 <ResponsiveContainer width="100%" height="100%">
                   {chartType === 'line' ? (

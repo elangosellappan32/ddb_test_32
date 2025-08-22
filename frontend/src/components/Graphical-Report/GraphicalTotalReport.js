@@ -210,36 +210,45 @@ const GraphicalTotalReport = () => {
   }, [financialYear, user]);
 
   return (
-    <Paper elevation={3} sx={{ p: 3, mt: 2 }}>
-      <Typography variant="h5" gutterBottom>Total Units Analysis</Typography>
-      <Box sx={{ mb: 3, display: 'flex', alignItems: 'center', gap: 2 }}>
-        <FormControl sx={{ minWidth: 220 }} size="small">
-          <InputLabel>Financial Year</InputLabel>
-          <Select
-            value={financialYear}
-            onChange={e => setFinancialYear(e.target.value)}
-            disabled={loading}
-          >
-            {fyOptions.map(fy => (
-              <MenuItem key={fy.value} value={fy.value}>
-                {fy.label}
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-        <Box sx={{ display: 'flex', alignItems: 'center' }}>
-          <Typography>Bar</Typography>
-          <Switch
-            checked={graphType === 'line'}
-            onChange={() => setGraphType(prev => prev === 'line' ? 'bar' : 'line')}
-            disabled={loading}
-            sx={{ mx: 1 }}
-          />
-          <Typography>Line</Typography>
+    <Paper elevation={3} sx={{ p: 4, my: 2, borderRadius: 2, boxShadow: '0 4px 20px 0 rgba(0,0,0,0.1)' }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4, borderBottom: '1px solid #e0e0e0', pb: 2 }}>
+        <Typography variant="h5" sx={{ fontWeight: 600, color: '#2c3e50' }}>Total Units Analysis</Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          <FormControl size="small" sx={{ minWidth: 220 }} variant="outlined">
+            <InputLabel>Financial Year</InputLabel>
+            <Select
+              value={financialYear}
+              onChange={e => setFinancialYear(e.target.value)}
+              disabled={loading}
+              sx={{
+                '& .MuiOutlinedInput-root': {
+                  borderRadius: 1,
+                  backgroundColor: '#fff',
+                },
+              }}
+            >
+              {fyOptions.map(fy => (
+                <MenuItem key={fy.value} value={fy.value}>
+                  {fy.label}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          <Box sx={{ display: 'flex', alignItems: 'center', bgcolor: '#f5f5f5', px: 1.5, py: 0.5, borderRadius: 1 }}>
+            <Typography variant="body2" sx={{ color: graphType === 'bar' ? '#1976d2' : 'inherit', fontWeight: graphType === 'bar' ? 600 : 400 }}>Bar</Typography>
+            <Switch
+              checked={graphType === 'line'}
+              onChange={() => setGraphType(prev => prev === 'line' ? 'bar' : 'line')}
+              disabled={loading}
+              color="primary"
+              size="small"
+            />
+            <Typography variant="body2" sx={{ color: graphType === 'line' ? '#1976d2' : 'inherit', fontWeight: graphType === 'line' ? 600 : 400 }}>Line</Typography>
+          </Box>
         </Box>
       </Box>
 
-      <Box sx={{ height: 500 }}>
+      <Box sx={{ width: '100%', height: 500 }}>
         {loading ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
             <CircularProgress />
@@ -247,7 +256,9 @@ const GraphicalTotalReport = () => {
         ) : error ? (
           <Alert severity="error">{error}</Alert>
         ) : chartData.length === 0 ? (
-          <Typography>No data available for the selected period.</Typography>
+          <Typography color="text.secondary" sx={{ textAlign: 'center', mt: 4 }}>
+            No data available for selected period
+          </Typography>
         ) : graphType === 'line' ? (
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={chartData} margin={{ top: 10, right: 30, left: 20, bottom: 50 }}>
