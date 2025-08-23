@@ -170,7 +170,126 @@ const generateInvoiceData = async (month, siteIds = []) => {
     }
 };
 
+/**
+ * Generate an invoice with the provided data
+ * @param {Object} params - Invoice generation parameters
+ * @param {string} params.companyId - Company ID
+ * @param {string} params.month - Month in MM format (01-12)
+ * @param {string} params.year - Year in YYYY format
+ * @param {Array} params.allocations - Array of allocation records
+ * @param {Array} params.charges - Array of charge records
+ * @returns {Promise<Object>} Generated invoice data
+ */
+const generateInvoice = async ({ companyId, month, year, allocations = [], charges = [] }) => {
+    try {
+        // Validate input
+        if (!companyId || !month || !year) {
+            throw new Error('Missing required parameters: companyId, month, and year are required');
+        }
+
+        // Format month to ensure it's 2 digits
+        const formattedMonth = String(month).padStart(2, '0');
+        const period = `${year}${formattedMonth}`;
+
+        // Calculate invoice number (format: INV-YYYYMM-XXXXX where XXXXX is a random number)
+        const invoiceNumber = `INV-${period}-${Math.floor(10000 + Math.random() * 90000)}`;
+        
+        // Calculate invoice date (current date)
+        const invoiceDate = new Date().toISOString().split('T')[0];
+        
+        // Calculate due date (30 days from now)
+        const dueDate = new Date();
+        dueDate.setDate(dueDate.getDate() + 30);
+        const formattedDueDate = dueDate.toISOString().split('T')[0];
+
+        // Process allocations and charges to calculate totals
+        const totalAllocation = allocations.reduce((sum, alloc) => sum + (Number(alloc.allocation) || 0), 0);
+        const totalCharges = charges.reduce((sum, charge) => sum + (Number(charge.amount) || 0), 0);
+
+        // Calculate tax (assuming 18% GST for example)
+        const taxRate = 0.18;
+        const taxAmount = totalCharges * taxRate;
+        const totalAmount = totalCharges + taxAmount;
+
+        // Prepare line items (combining allocations and charges)
+        const lineItems = [
+            ...allocations.map(alloc => ({
+                type: 'allocation',
+                description: `Allocation for ${alloc.productionSiteName || 'Site'}`,
+                quantity: 1,
+                unitPrice: alloc.allocation,
+                amount: alloc.allocation
+            })),
+            ...charges.map(charge => ({
+                type: 'charge',
+                description: charge.description || 'Service Charge',
+                quantity: charge.quantity || 1,
+                unitPrice: charge.unitPrice || charge.amount,
+                amount: charge.amount
+            }))
+        ];
+
+        // Prepare the invoice object
+        const invoice = {
+            invoiceNumber,
+            invoiceDate,
+            dueDate: formattedDueDate,
+            period: {
+                month: formattedMonth,
+                year,
+                display: `${getMonthName(parseInt(formattedMonth, 10))} ${year}`
+            },
+            companyId,
+            status: 'generated',
+            lineItems,
+            subtotal: totalCharges,
+            tax: {
+                rate: taxRate * 100, // Convert to percentage
+                amount: taxAmount
+            },
+            total: totalAmount,
+            currency: 'INR',
+            metadata: {
+                allocationsCount: allocations.length,
+                chargesCount: charges.length,
+                generatedAt: new Date().toISOString()
+            }
+        };
+
+        logger.info(`Generated invoice ${invoiceNumber} for company ${companyId}`, {
+            invoiceNumber,
+            companyId,
+            period,
+            totalAmount
+        });
+
+        return invoice;
+
+    } catch (error) {
+        logger.error('Error in generateInvoice service:', {
+            error: error.message,
+            stack: error.stack,
+            params: { companyId, month, year }
+        });
+        throw error;
+    }
+};
+
+/**
+ * Helper function to get month name from month number
+ * @param {number} month - Month number (1-12)
+ * @returns {string} Month name
+ */
+function getMonthName(month) {
+    const months = [
+        'January', 'February', 'March', 'April', 'May', 'June',
+        'July', 'August', 'September', 'October', 'November', 'December'
+    ];
+    return months[month - 1] || '';
+}
+
 module.exports = {
     generateInvoiceData,
+    generateInvoice,
     getCValue  // Export for testing
 };

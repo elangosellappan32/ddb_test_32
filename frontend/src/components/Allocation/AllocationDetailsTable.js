@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
+    Checkbox,
+    FormControlLabel,
     Table,
     TableBody,
     TableCell,
@@ -127,14 +129,26 @@ const AllocationDetailsTable = ({ allocations = [], bankingAllocations = [], old
     }, [allocations, bankingAllocations, lapseAllocations, editingAllocation]);
 
     const handleEdit = (row, type) => {
-        setEditingAllocation({ ...row, type });
-        setEditValues(row.allocated || {
-            c1: row.c1 || 0,
-            c2: row.c2 || 0,
-            c3: row.c3 || 0,
-            c4: row.c4 || 0,
-            c5: row.c5 || 0
+        // Convert charge to boolean if it's a number
+        const charge = row.charge !== undefined ? 
+            (typeof row.charge === 'number' ? row.charge === 1 : Boolean(row.charge)) : 
+            false;
+            
+        setEditingAllocation({ 
+            ...row, 
+            type,
+            charge
         });
+        
+        setEditValues({
+            c1: row.allocated?.c1 || row.c1 || 0,
+            c2: row.allocated?.c2 || row.c2 || 0,
+            c3: row.allocated?.c3 || row.c3 || 0,
+            c4: row.allocated?.c4 || row.c4 || 0,
+            c5: row.allocated?.c5 || row.c5 || 0,
+            charge: charge
+        });
+        setValidationError(null);
         setEditDialog(true);
     };
 
@@ -146,109 +160,128 @@ const AllocationDetailsTable = ({ allocations = [], bankingAllocations = [], old
     };
 
     const handleEditSave = () => {
-        // Allow all values to be zero (remove validation)
-        // Round all values to integers
-        const roundedEditValues = {};
-        ALL_PERIODS.forEach(period => {
-            roundedEditValues[period] = Math.round(Number(editValues[period] || 0));
-        });
+        if (!editingAllocation) return;
 
-        // Get the original values before edit
-        const originalValues = editingAllocation.allocated || {};
-        const isBankingEnabled = editingAllocation.bankingEnabled;
+        // Round all C values to nearest integer and ensure they're numbers
+        const roundedEditValues = {
+            c1: Math.max(0, Math.round(Number(editValues.c1 || 0))),
+            c2: Math.max(0, Math.round(Number(editValues.c2 || 0))),
+            c3: Math.max(0, Math.round(Number(editValues.c3 || 0))),
+            c4: Math.max(0, Math.round(Number(editValues.c4 || 0))),
+            c5: Math.max(0, Math.round(Number(editValues.c5 || 0))),
+            charge: Boolean(editValues.charge)
+        };
 
-        // Calculate differences for each period (new - old)
-        const differences = {};
-        ALL_PERIODS.forEach(period => {
-            const oldValue = Math.round(Number(originalValues[period] || 0));
-            const newValue = roundedEditValues[period];
-            differences[period] = newValue - oldValue;
-        });
+        // Validate that at least one C value has a value greater than 0
+        const cValues = {
+            c1: roundedEditValues.c1,
+            c2: roundedEditValues.c2,
+            c3: roundedEditValues.c3,
+            c4: roundedEditValues.c4,
+            c5: roundedEditValues.c5
+        };
+        
+        const hasValidAllocation = Object.values(cValues).some(val => val > 0);
+        if (!hasValidAllocation) {
+            setValidationError('At least one period must have a value greater than 0');
+            return;
+        }
 
-        // Extract IDs for composite key (ensure all are string and present)
-        const companyId = String(editingAllocation.companyId || editingAllocation.company || '');
-        const prodId = String(editingAllocation.productionSiteId || editingAllocation.productionSite || '');
-        const consId = String(editingAllocation.consumptionSiteId || editingAllocation.consumptionSite || '');
+        if (roundedEditValues.charge) {
+            // Find if there's another allocation in the same month with charge=true
+            const otherChargedAllocation = allocations.find(a => 
+                a.pk !== editingAllocation.pk &&
+                a.sk === editingAllocation.sk &&
+                (a.charge === true || a.charge === 1)
+            );
+            if (otherChargedAllocation) {
+                setValidationError('Only one allocation per month can have charge set to true');
+                return;
+            }
+        }
 
-        // Prepare delta data for each period using composite key
+        // Calculate adjustments for banking/lapse
+        const bankingAdjustments = {};
+        const lapseAdjustments = {};
         const deltaData = {};
-        ALL_PERIODS.forEach(period => {
-            const compositeKey = `${companyId}_${prodId}_${consId}_${period}_${period}`;
-            const delta = differences[period];
+
+        // Calculate the delta between new and old values
+        Object.keys(roundedEditValues).forEach(key => {
+            const oldValue = editingAllocation.allocated?.[key] || 0;
+            const newValue = roundedEditValues[key] || 0;
+            const delta = newValue - oldValue;
+
             if (delta !== 0) {
-                deltaData[compositeKey] = {
-                    compositeKey,
-                    companyId,
-                    productionSiteId: prodId,
-                    consumptionSiteId: consId,
-                    prodPeriod: period,
-                    consPeriod: period,
-                    delta,
-                    oldValue: Math.round(Number(originalValues[period] || 0)),
-                    newValue: roundedEditValues[period],
-                    timestamp: new Date().toISOString()
-                };
+                deltaData[key] = delta;
+                
+                if (delta > 0) {
+                    // Positive delta goes to banking
+                    bankingAdjustments[key] = delta;
+                } else {
+                    // Negative delta comes from lapse (absolute value since delta is negative)
+                    lapseAdjustments[key] = Math.abs(delta);
+                }
             }
         });
 
-        // Prepare banking/lapse adjustments using composite key for each period
-        let bankingAdjustments = undefined;
-        let lapseAdjustments = undefined;
-        if (isBankingEnabled) {
-            bankingAdjustments = {};
-            ALL_PERIODS.forEach(period => {
-                if (differences[period] !== 0) {
-                    const compositeKey = `${companyId}_${prodId}_${consId}_${period}_${period}`;
-                    bankingAdjustments[compositeKey] = -differences[period];
-                }
-            });
-            Object.keys(bankingAdjustments).forEach(key => {
-                if (bankingAdjustments[key] === 0) delete bankingAdjustments[key];
-            });
-            if (Object.keys(bankingAdjustments).length === 0) bankingAdjustments = undefined;
-        } else {
-            lapseAdjustments = {};
-            ALL_PERIODS.forEach(period => {
-                if (differences[period] < 0) {
-                    const compositeKey = `${companyId}_${prodId}_${consId}_${period}_${period}`;
-                    lapseAdjustments[compositeKey] = -differences[period];
-                }
-            });
-            Object.keys(lapseAdjustments).forEach(key => {
-                if (lapseAdjustments[key] === 0) delete lapseAdjustments[key];
-            });
-            if (Object.keys(lapseAdjustments).length === 0) lapseAdjustments = undefined;
-        }
-
-        // Store history of changes
-        if (Object.keys(deltaData).length > 0) {
-            setAllocationHistory(prev => [
-                ...prev,
-                ...Object.values(deltaData)
-            ]);
-        }
-
+        // If we have a valid edit, call the onEdit callback
         if (onEdit) {
+            // Create the updated allocation with values at root level (for backward compatibility)
+            // and also in the allocated object (for new format)
             const updatedAllocation = {
                 ...editingAllocation,
-                allocated: roundedEditValues,
+                // Root level values (for backward compatibility)
+                c1: roundedEditValues.c1,
+                c2: roundedEditValues.c2,
+                c3: roundedEditValues.c3,
+                c4: roundedEditValues.c4,
+                c5: roundedEditValues.c5,
+                charge: roundedEditValues.charge ? 1 : 0,  // Send as number (1/0) for backend
+                
+                // New format with allocated object
+                allocated: {
+                    ...(editingAllocation.allocated || {}),
+                    c1: roundedEditValues.c1,
+                    c2: roundedEditValues.c2,
+                    c3: roundedEditValues.c3,
+                    c4: roundedEditValues.c4,
+                    c5: roundedEditValues.c5,
+                    charge: roundedEditValues.charge ? 1 : 0
+                },
+                
+                // Metadata
                 version: (editingAllocation.version || 0) + 1,
                 updatedAt: new Date().toISOString(),
-                bankingAdjustments,
-                lapseAdjustments,
-                deltaData // Attach deltaData for reference
+                
+                // Include adjustments if any
+                ...(Object.keys(bankingAdjustments).length > 0 && { bankingAdjustments }),
+                ...(Object.keys(lapseAdjustments).length > 0 && { lapseAdjustments }),
+                ...(Object.keys(deltaData).length > 0 && { deltaData })
             };
+            
+            // Ensure we have the required fields for the backend
+            if (!updatedAllocation.companyId && updatedAllocation.pk) {
+                const [companyId] = updatedAllocation.pk.split('_');
+                if (companyId) updatedAllocation.companyId = parseInt(companyId, 10);
+            }
+            
+            if (!updatedAllocation.productionSiteId && updatedAllocation.pk) {
+                const [, productionSiteId] = updatedAllocation.pk.split('_');
+                if (productionSiteId) updatedAllocation.productionSiteId = productionSiteId;
+            }
+            
             onEdit(updatedAllocation, editingAllocation.type);
         }
+
+        // Close the dialog
         handleEditClose();
     };
 
     const calculateTotal = (row) => {
-        if (row.allocated && Object.keys(row.allocated).length) {
-            return Object.values(row.allocated).reduce((sum, val) => sum + Math.round(Number(val || 0)), 0);
-        }
-        return ['c1','c2','c3','c4','c5']
-            .reduce((sum, key) => sum + Math.round(Number(row[key] || 0)), 0);
+        // Only sum c1-c5 values, excluding charge
+        const values = row.allocated || row;
+        return ['c1', 'c2', 'c3', 'c4', 'c5']
+            .reduce((sum, key) => sum + Math.round(Number(values[key] || 0)), 0);
     };
 
     // Helper to group and sum allocations by productionSiteId and consumptionSiteId
@@ -288,6 +321,7 @@ const AllocationDetailsTable = ({ allocations = [], bankingAllocations = [], old
         if (type === 'lapse') {
             uniqueData = mergeWithFallback(uniqueData, oldLapseAllocations);
         }
+        
         return (
             <Paper variant="outlined" sx={{ mb: 3, borderRadius: 2, overflow: 'hidden' }}>
                 <Box sx={{ p: 2 }}>
@@ -301,71 +335,119 @@ const AllocationDetailsTable = ({ allocations = [], bankingAllocations = [], old
                                     {getAllocationPeriods().map(period => (
                                         <TableCell key={period.id} align="right" sx={{ color: 'white' }}>{period.label}</TableCell>
                                     ))}
+                                    {type === 'allocation' && <TableCell align="center" sx={{ color: 'white' }}>Charge</TableCell>}
                                     <TableCell align="right" sx={{ color: 'white' }}>Total</TableCell>
                                     {type === 'allocation' && <TableCell align="right" sx={{ color: 'white' }}>Actions</TableCell>}
                                 </TableRow>
                             </TableHead>
                             <TableBody>
-                            {uniqueData.length > 0 ? uniqueData.map((allocation, idx) => (
-                                <TableRow 
-                                    key={`${allocation.productionSiteId}-${allocation.consumptionSiteId || type}-${idx}`} 
-                                    hover 
-                                    sx={{ 
-                                        '&:nth-of-type(even)': { backgroundColor: 'action.hover' },
-                                        '&:hover .edit-button': { opacity: 1 }
-                                    }}
-                                >
-                                    <TableCell>
-                                        <Box>
-                                            <Typography>{allocation.productionSite || allocation.siteName}</Typography>
-                                            <Typography variant="caption" color="textSecondary">{allocation.siteType}</Typography>
-                                        </Box>
-                                    </TableCell>
-                                    {type === 'allocation' && (
-                                        <TableCell>{allocation.consumptionSite}</TableCell>
-                                    )}
-                                    {getAllocationPeriods().map(period => {
-                                        const val = allocation.allocated?.[period.id] ?? allocation[period.id] ?? 0;
-                                        return (
-                                            <TableCell key={period.id} align="right" 
-                                                sx={{ 
-                                                    color: period.isPeak ? 'warning.main' : 'inherit',
-                                                    fontWeight: period.isPeak ? 'bold' : 'normal' 
-                                                }}
-                                            >
-                                                {Math.round(Number(val))}
-                                            </TableCell>
-                                        );
-                                    })}
-                                    <TableCell align="right" sx={{ fontWeight: 'bold', color: getAllocationTypeColor(type) }}>
-                                        {calculateTotal(allocation)}
-                                    </TableCell>
-                                    {type === 'allocation' && (
-                                        <TableCell align="right">
-                                            <Tooltip title="Edit Allocation">
-                                                <IconButton 
-                                                    className="edit-button"
-                                                    size="small" 
-                                                    onClick={() => handleEdit(allocation, type)}
+                                {uniqueData.length > 0 ? uniqueData.map((allocation, idx) => (
+                                    <TableRow 
+                                        key={`${allocation.productionSiteId}-${allocation.consumptionSiteId || type}-${idx}`}
+                                        hover
+                                        sx={{
+                                            '&:nth-of-type(odd)': { backgroundColor: 'action.hover' },
+                                            '&:hover .MuiTableCell-body': {
+                                                backgroundColor: 'action.selected',
+                                            },
+                                        }}
+                                    >
+                                        <TableCell>
+                                            <Box>
+                                                <Box display="flex" alignItems="center" gap={1}>
+                                                    <Typography>{allocation.productionSite || allocation.siteName}</Typography>
+                                                    {allocation.charge && (
+                                                        <Tooltip title="This allocation is charged for the month">
+                                                            <Box sx={{ 
+                                                                width: 12, 
+                                                                height: 12, 
+                                                                borderRadius: '50%', 
+                                                                bgcolor: 'success.main',
+                                                                border: '1px solid',
+                                                                borderColor: 'success.dark'
+                                                            }} />
+                                                        </Tooltip>
+                                                    )}
+                                                </Box>
+                                                <Typography variant="caption" color="textSecondary">{allocation.siteType}</Typography>
+                                            </Box>
+                                        </TableCell>
+                                        {type === 'allocation' && (
+                                            <TableCell>{allocation.consumptionSite}</TableCell>
+                                        )}
+                                        {getAllocationPeriods().map(period => {
+                                            // Get value from either allocated object or root level
+                                            const val = allocation.allocated?.[period.id] ?? allocation[period.id] ?? 0;
+                                            return (
+                                                <TableCell key={period.id} align="right" 
                                                     sx={{ 
-                                                        color: bgColor,
-                                                        opacity: 0.3,
-                                                        transition: 'opacity 0.2s',
-                                                        '&:hover': {
-                                                            opacity: 1,
-                                                            backgroundColor: `${bgColor}15`
-                                                        }
+                                                        color: period.isPeak ? 'warning.main' : 'inherit',
+                                                        fontWeight: period.isPeak ? 'bold' : 'normal',
+                                                        minWidth: 60
                                                     }}
                                                 >
-                                                    <EditIcon />
-                                                </IconButton>
-                                            </Tooltip>
+                                                    {Math.round(Number(val))}
+                                                </TableCell>
+                                            );
+                                        })}
+                                        {type === 'allocation' && (
+                                            <TableCell align="center" sx={{ minWidth: 80 }}>
+                                                <Box 
+                                                    sx={{
+                                                        display: 'inline-flex',
+                                                        alignItems: 'center',
+                                                        justifyContent: 'center',
+                                                        width: 24,
+                                                        height: 24,
+                                                        borderRadius: '50%',
+                                                        bgcolor: (allocation.charge || allocation.allocated?.charge) ? 'success.main' : 'error.main',
+                                                        color: 'white',
+                                                        fontWeight: 'bold',
+                                                        fontSize: '0.75rem',
+                                                        border: '1px solid',
+                                                        borderColor: (allocation.charge || allocation.allocated?.charge) ? 'success.dark' : 'error.dark',
+                                                        cursor: 'default',
+                                                        mx: 'auto'
+                                                    }}
+                                                    title={(allocation.charge || allocation.allocated?.charge) ? 'This allocation is charged for the month' : 'Not charged for this month'}
+                                                >
+                                                    {(allocation.charge || allocation.allocated?.charge) ? '✓' : '✗'}
+                                                </Box>
+                                            </TableCell>
+                                        )}
+                                        <TableCell align="right" sx={{ fontWeight: 'bold', color: getAllocationTypeColor(type) }}>
+                                            {calculateTotal(allocation)}
                                         </TableCell>
-                                    )}
-                                </TableRow>
+                                        {type === 'allocation' && (
+                                            <TableCell align="right">
+                                                <Tooltip title="Edit Allocation">
+                                                    <IconButton 
+                                                        size="small" 
+                                                        onClick={() => handleEdit(allocation, type)}
+                                                        aria-label={`Edit allocation for ${allocation.productionSite || allocation.siteName}`}
+                                                        sx={{
+                                                            opacity: 0,
+                                                            transition: 'opacity 0.2s',
+                                                            '&:hover, &:focus-visible': {
+                                                                opacity: 1,
+                                                                color: 'primary.main'
+                                                            },
+                                                            '&:focus-visible': {
+                                                                outline: '2px solid',
+                                                                outlineOffset: '2px',
+                                                                outlineColor: 'primary.main'
+                                                            }
+                                                        }}
+                                                    >
+                                                        <EditIcon />
+                                                    </IconButton>
+                                                </Tooltip>
+                                            </TableCell>
+                                        )}
+                                    </TableRow>
                             )) : (
                                 <TableRow>
-                                    <TableCell colSpan={type === 'allocation' ? getAllocationPeriods().length + 3 : getAllocationPeriods().length + 2} align="center">
+                                    <TableCell colSpan={type === 'allocation' ? getAllocationPeriods().length + 4 : getAllocationPeriods().length + 3} align="center">
                                         <Typography color="textSecondary">No {title.toLowerCase()} data available</Typography>
                                     </TableCell>
                                 </TableRow>
@@ -404,21 +486,35 @@ const AllocationDetailsTable = ({ allocations = [], bankingAllocations = [], old
                 onClose={handleEditClose} 
                 maxWidth="sm" 
                 fullWidth
+                aria-labelledby="edit-allocation-dialog-title"
+                aria-describedby="edit-allocation-dialog-description"
                 PaperProps={{
-                    sx: { borderRadius: 2 }
+                    sx: { 
+                        borderRadius: 2,
+                        '&:focus': {
+                            outline: 'none'
+                        }
+                    }
                 }}
             >
-                <DialogTitle sx={{ 
-                    backgroundColor: getAllocationTypeColor(editingAllocation?.type),
-                    color: 'white',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 1
-                }}>
-                    <EditIcon /> 
+                <DialogTitle 
+                    id="edit-allocation-dialog-title"
+                    sx={{ 
+                        backgroundColor: getAllocationTypeColor(editingAllocation?.type),
+                        color: 'white',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 1,
+                        '&:focus': {
+                            boxShadow: '0 0 0 2px #3f51b5',
+                            outline: 'none'
+                        }
+                    }}
+                >
+                    <EditIcon aria-hidden="true" /> 
                     Edit {editingAllocation?.type || 'Allocation'}
                 </DialogTitle>
-                <DialogContent>
+                <DialogContent id="edit-allocation-dialog-description">
                     <Box sx={{ pt: 2 }}>
                         {validationError && (
                             <Alert severity="error" sx={{ mb: 2 }}>
@@ -455,9 +551,29 @@ const AllocationDetailsTable = ({ allocations = [], bankingAllocations = [], old
                                 </Grid>
                             ))}
                             <Grid item xs={12}>
-                                <Typography variant="subtitle1" align="right" sx={{ mt: 2 }}>
-                                    Total: <strong>{Object.values(editValues).reduce((sum, val) => sum + Math.round(Number(val || 0)), 0)}</strong>
-                                </Typography>
+                                <FormControlLabel
+                                    control={
+                                        <Checkbox
+                                            checked={Boolean(editValues.charge)}
+                                            onChange={(e) => setEditValues({ ...editValues, charge: e.target.checked })}
+                                            disabled={!editValues.charge && allocations.some(a => 
+                                                a.pk !== editingAllocation?.pk && 
+                                                a.sk === editingAllocation?.sk && 
+                                                (a.charge === true || a.charge === 1)
+                                            )}
+                                            color="primary"
+                                        />
+                                    }
+                                    label="Charge for this month"
+                                />
+                            </Grid>
+                            <Grid item xs={12}>
+                                <Box sx={{ mt: 2 }}>
+                                    <Typography variant="subtitle1">
+                                        Total: <strong>{Object.entries(editValues).reduce((sum, [key, val]) => 
+                                            key !== 'charge' ? sum + Math.round(Number(val || 0)) : sum, 0)}</strong>
+                                    </Typography>
+                                </Box>
                             </Grid>
                         </Grid>
                     </Box>

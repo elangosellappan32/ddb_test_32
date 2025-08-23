@@ -93,7 +93,7 @@ const ProductionSiteDataForm = ({
       };
     }
     
-    return Array.from({ length: 10 }, (_, i) => {
+    return Array.from({ length: 11 }, (_, i) => {
       const key = `c${String(i + 1).padStart(3, '0')}`;
       return { [key]: (data?.[key] ?? '0').toString() };
     }).reduce((acc, curr) => ({ ...acc, ...curr }), {});
@@ -142,7 +142,7 @@ const ProductionSiteDataForm = ({
       ];
     }
 
-    return Array.from({ length: 10 }, (_, i) => ({
+    return Array.from({ length: 11 }, (_, i) => ({
       id: `c${String(i + 1).padStart(3, '0')}`,
       label: `C${String(i + 1).padStart(3, '0')} Value`
     }));

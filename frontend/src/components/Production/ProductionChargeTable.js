@@ -205,7 +205,7 @@ const ChargeTable = ({
         <TableHead>
           <TableRow sx={{ '& th': { backgroundColor: '#1976d2', color: 'white', fontWeight: 'bold' } }}>
             <TableCell>Date</TableCell>
-            {[...Array(10)].map((_, i) => (
+            {[...Array(11)].map((_, i) => (
               <TableCell key={`header-${i}`} align="right">
                 C{(i + 1).toString().padStart(3, '0')}
               </TableCell>
@@ -221,7 +221,7 @@ const ChargeTable = ({
               sx={{ '&:hover': { cursor: 'pointer' } }}
             >
               <TableCell>{row.sk ? formatDisplayDate(row.sk) : 'N/A'}</TableCell>
-              {[...Array(10)].map((_, i) => {
+              {[...Array(11)].map((_, i) => {
                 const field = `c${(i + 1).toString().padStart(3, '0')}`;
                 return (
                   <TableCell 

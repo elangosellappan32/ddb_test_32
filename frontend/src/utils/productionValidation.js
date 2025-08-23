@@ -49,8 +49,8 @@ export const validateProductionFields = (data, type) => {
       }
     }
   } else {
-    // For charge data, validate all c001-c010 fields
-    for (let i = 1; i <= 10; i++) {
+    // For charge data, validate all c001-c011 fields
+    for (let i = 1; i <= 11; i++) {
       const field = `c${i.toString().padStart(3, '0')}`;
       const value = parseFloat(data[field]);
       if (isNaN(value) || value < 0) {

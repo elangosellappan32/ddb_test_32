@@ -20,7 +20,10 @@ class AllocationApi {
             c2: Math.max(0, Math.round(Number(c2) || 0)),
             c3: Math.max(0, Math.round(Number(c3) || 0)),
             c4: Math.max(0, Math.round(Number(c4) || 0)),
-            c5: Math.max(0, Math.round(Number(c5) || 0))
+            c5: Math.max(0, Math.round(Number(c5) || 0)),
+            // Charge defaults to false and will be handled by the backend
+            // The frontend will need to ensure only one allocation per month has charge=true
+            charge: Boolean(data.charge)
         };
         const t = (type || data.type || 'ALLOCATION').toUpperCase();
         if (t === 'ALLOCATION') {

@@ -64,7 +64,7 @@ const create = async (item) => {
             updatedat: now,
             timetolive: 0,
             // Initialize charge fields
-            ...Array.from({ length: 10 }, (_, i) => ({
+            ...Array.from({ length: 11 }, (_, i) => ({
                 [`c${String(i + 1).padStart(3, '0')}`]: 0
             })).reduce((acc, curr) => ({ ...acc, ...curr }), {}),
             ...Object.fromEntries(

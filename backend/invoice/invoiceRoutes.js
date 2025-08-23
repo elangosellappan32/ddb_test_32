@@ -1,6 +1,20 @@
 const express = require('express');
 const router = express.Router();
+const { body, param, validationResult } = require('express-validator');
 const invoiceController = require('./invoiceController');
+
+// Input validation middleware
+const validate = (req, res, next) => {
+    const errors = validationResult(req);
+    if (errors.isEmpty()) {
+        return next();
+    }
+    return res.status(400).json({ 
+        success: false,
+        errors: errors.array(),
+        message: 'Validation failed' 
+    });
+};
 
 /**
  * @swagger
@@ -64,5 +78,66 @@ const invoiceController = require('./invoiceController');
  */
 // Define the route with the correct path
 router.get('/:month', invoiceController.getInvoiceData);
+
+/**
+ * @swagger
+ * /api/invoice/generate:
+ *   post:
+ *     summary: Generate a new invoice
+ *     description: Generate an invoice with the provided data
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - companyId
+ *               - month
+ *               - year
+ *             properties:
+ *               companyId:
+ *                 type: string
+ *                 description: ID of the company
+ *               month:
+ *                 type: string
+ *                 description: Month in MM format (01-12)
+ *               year:
+ *                 type: string
+ *                 description: Year in YYYY format
+ *               allocations:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *               charges:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *     responses:
+ *       201:
+ *         description: Invoice generated successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ */
+router.post('/generate',
+    [
+        body('companyId').isString().notEmpty(),
+        body('month').isString().matches(/^(0[1-9]|1[0-2])$/),
+        body('year').isString().matches(/^\d{4}$/),
+        body('allocations').optional().isArray(),
+        body('charges').optional().isArray()
+    ],
+    validate,
+    invoiceController.generateInvoice
+);
 
 module.exports = router;

@@ -18,7 +18,7 @@ import productionSiteApi from '../../services/productionSiteApi';
 import productionUnitApi from '../../services/productionUnitApi';
 import productionChargeApi from '../../services/productionChargeApi';
 import SiteInfoCard from './SiteInfoCard';
-import ChargeTable from './ChargeTable';
+import ProductionChargeTable from './ProductionChargeTable';
 import UnitTable from './UnitTable';
 import ProductionSiteDataForm from './ProductionSiteDataForm';
 import { formatSK, formatDisplayDate } from '../../utils/dateUtils';
@@ -188,7 +188,7 @@ const ProductionSiteDetails = () => {
   const renderChargeTable = useCallback(() => {
     return (
       <Paper sx={{ p: 0, overflow: 'hidden' }}>
-        <ChargeTable
+        <ProductionChargeTable
           data={siteData.charges}
           onEdit={handleEditClick}
           onDelete={handleDeleteClick}

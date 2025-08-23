@@ -19,7 +19,7 @@ const validateFields = (data) => {
     const numericFields = [
         'c1', 'c2', 'c3', 'c4', 'c5',
         'c001', 'c002', 'c003', 'c004', 'c005',
-        'c006', 'c007', 'c008', 'c009', 'c010'
+        'c006', 'c007', 'c008', 'c009', 'c010','c011'
     ];
 
     // Validate required fields
@@ -48,7 +48,7 @@ const transformProductionData = (item) => {
         pk, sk,
         c1, c2, c3, c4, c5,
         c001, c002, c003, c004, c005,
-        c006, c007, c008, c009, c010
+        c006, c007, c008, c009, c010,c011
     } = item;
 
     // Return transformed data
@@ -69,7 +69,9 @@ const transformProductionData = (item) => {
         c007: Number(parseFloat(c007 || 0).toFixed(2)),
         c008: Number(parseFloat(c008 || 0).toFixed(2)),
         c009: Number(parseFloat(c009 || 0).toFixed(2)),
-        c010: Number(parseFloat(c010 || 0).toFixed(2))
+        c010: Number(parseFloat(c010 || 0).toFixed(2)),
+        c011: Number(parseFloat(c011 || 0).toFixed(2))
+
     };
 };
 

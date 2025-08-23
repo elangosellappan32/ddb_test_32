@@ -40,6 +40,12 @@ const validateAllocation = (req, res, next) => {
             if (type === 'BANKING') {
                 alloc.bankingEnabled = true;
             }
+            
+            // For new allocations, default charge to false
+            // We'll set it to true only if it's explicitly set to true and no other allocation has charge=true for this month
+            if (alloc.charge === undefined) {
+                alloc.charge = false;
+            }
 
             if (validationErrors.length > 0) {
                 errors.push({

@@ -1,5 +1,6 @@
 const invoiceService = require('./invoiceService');
 const logger = require('../utils/logger');
+const { validationResult } = require('express-validator');
 
 /**
  * Get invoice data for a specific month
@@ -52,6 +53,61 @@ function getFinancialYear(month) {
     }
 }
 
+/**
+ * Generate a new invoice
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ */
+const generateInvoice = async (req, res) => {
+    try {
+        // Validate request
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) {
+            return res.status(400).json({
+                success: false,
+                errors: errors.array(),
+                message: 'Validation failed'
+            });
+        }
+
+        const { companyId, month, year, allocations = [], charges = [] } = req.body;
+        
+        logger.info(`Generating invoice for company ${companyId}, ${month}/${year}`, {
+            allocationsCount: allocations.length,
+            chargesCount: charges.length
+        });
+
+        // Generate the invoice
+        const invoice = await invoiceService.generateInvoice({
+            companyId,
+            month,
+            year,
+            allocations,
+            charges
+        });
+
+        res.status(201).json({
+            success: true,
+            message: 'Invoice generated successfully',
+            data: invoice
+        });
+
+    } catch (error) {
+        logger.error('Error in generateInvoice:', {
+            error: error.message,
+            stack: error.stack,
+            body: req.body
+        });
+
+        res.status(500).json({
+            success: false,
+            message: error.message || 'Failed to generate invoice',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+    }
+};
+
 module.exports = {
-    getInvoiceData
+    getInvoiceData,
+    generateInvoice
 };
