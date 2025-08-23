@@ -190,6 +190,23 @@ const ConsumptionSiteDetails = () => {
     }
   }, [permissions.delete, companyId, consumptionSiteId, enqueueSnackbar, fetchData]);
 
+  const renderUnitTable = useCallback(() => {
+    return (
+      <Paper sx={{ p: 0, mb: 3, overflow: 'hidden' }}>
+        <ConsumptionDataTable
+          data={siteData.units}
+          onEdit={handleEditClick}
+          onDelete={handleDeleteClick}
+          onCopy={handleCopyClick}
+          onAdd={permissions.create ? handleAddClick : null}
+          permissions={permissions}
+          loading={loading}
+          error={error}
+        />
+      </Paper>
+    );
+  }, [siteData.units, loading, error, permissions, handleAddClick, handleEditClick, handleDeleteClick, handleCopyClick]);
+
   const handleSubmit = async (formData) => {
     try {
       const sk = formatSK(formData.date);
@@ -283,35 +300,7 @@ const ConsumptionSiteDetails = () => {
       ) : (
         <>
           <SiteInfoCard site={siteData.site} />
-          <Paper sx={{ p: 3, mb: 3 }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
-              <Typography variant="h6" component="div">Consumption Units</Typography>
-              {permissions.create && (
-                <Button
-                  variant="contained"
-                  startIcon={<AddIcon />}
-                  onClick={handleAddClick}
-                >
-                  Add Unit
-                </Button>
-              )}
-            </Box>
-
-            {!siteData.units?.length ? (
-              <Alert severity="info">
-                No units data available.
-                {permissions.create && ' Click the Add button to create new data.'}
-              </Alert>
-            ) : (
-              <ConsumptionDataTable
-                data={siteData.units}
-                onEdit={handleEditClick}
-                onDelete={handleDeleteClick}
-                onCopy={handleCopyClick}
-                permissions={permissions}
-              />
-            )}
-          </Paper>
+          {renderUnitTable()}
 
           <Dialog
             open={dialog.open}

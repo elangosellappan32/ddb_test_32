@@ -667,9 +667,6 @@ const createDefaultUsers = async () => {
             password: 'admin123',
             roleId: 'ROLE-1',
             metadata: {
-                department: 'IT Administration',
-                accessLevel: 'ADMIN',
-                companyId: '1', // STRIO KAIZEN
                 accessibleSites: {
                     productionSites: { L: [
                         { S: '1_1' }, { S: '1_2' }
@@ -692,8 +689,6 @@ const createDefaultUsers = async () => {
             password: 'user123',
             roleId: 'ROLE-2',
             metadata: {
-                department: 'Operations',
-                accessLevel: 'MANAGER',
                 companyId: '1', // STRIO KAIZEN
                 accessibleSites: {
                     productionSites: { L: [
@@ -717,9 +712,6 @@ const createDefaultUsers = async () => {
             password: 'viewer123',
             roleId: 'ROLE-3',
             metadata: {
-                department: 'Monitoring',
-                accessLevel: 'VIEWER',
-                companyId: '1', // STRIO KAIZEN
                 accessibleSites: {
                     productionSites: { L: [
                         { S: '1_1' }
@@ -742,16 +734,13 @@ const createDefaultUsers = async () => {
             password: 'admin123',
             roleId: 'ROLE-1',
             metadata: {
-                department: 'SMR Administration',
-                accessLevel: 'ADMIN',
-                companyId: '5',  // Add companyId for SMR Energy
                 accessibleSites: {
                     productionSites: { L: [
                         { S: '5_3' }
                     ]},
                     consumptionSites: { L: [
                         
-                        { S: '2_1' }, { S: '3_2' }, { S: '5_3' }
+                        { S: '2_1' }, { S: '3_2' }
 
                     ]}
                 }
@@ -769,9 +758,6 @@ const createDefaultUsers = async () => {
             password: 'user123',
             roleId: 'ROLE-2',
             metadata: {
-                department: 'SMR Operations',
-                accessLevel: 'MANAGER',
-                companyId: '5',  // Add companyId for SMR Energy
                 accessibleSites: {
                     productionSites: { L: [
                         { S: '5_3' }
@@ -794,9 +780,6 @@ const createDefaultUsers = async () => {
             password: 'viewer123',
             roleId: 'ROLE-3',
             metadata: {
-                department: 'SMR Monitoring',
-                accessLevel: 'VIEWER',
-                companyId: '5',  // Add companyId for SMR Energy
                 accessibleSites: {
                     productionSites: { L: [
                         { S: '5_3' }

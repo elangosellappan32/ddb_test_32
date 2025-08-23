@@ -10,7 +10,7 @@ import {
 } from '@mui/material';
 import { DesktopDatePicker } from '@mui/x-date-pickers';
 import { format } from 'date-fns';
-import { validateProductionData } from './ProductionDataTable';
+import { validateProductionData, validateProductionFields } from '../../utils/productionValidation';
 import { useAuth } from '../../context/AuthContext';
 import { hasPermission } from '../../utils/permissions';
 
@@ -35,13 +35,6 @@ const ProductionSiteDataForm = ({
     return hasPermission(user, moduleType, action);
   }, [user, type, initialData]);
 
-  // Add near the top of the component
-  console.log('User permissions:', {
-    role: user?.role,
-    type,
-    canEdit,
-    moduleType: type === 'unit' ? 'production-units' : 'production-charges'
-  });
 
   // Update the generateSK function to handle dates properly
   const generateSK = (date) => {

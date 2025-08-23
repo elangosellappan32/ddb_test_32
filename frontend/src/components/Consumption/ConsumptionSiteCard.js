@@ -8,7 +8,7 @@ import {
   Grid,
   Typography,
   IconButton,
-  Tooltip,
+  Tooltip, 
   LinearProgress
 } from '@mui/material';
 import {
@@ -238,14 +238,21 @@ const ConsumptionSiteCard = ({
       }}
     >
       <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-        <CardActionArea
+        <CardActionArea 
+          component="div" 
           onClick={onClick}
           sx={{
-            p: 2,
-            flex: 1,
+            height: '100%',
             display: 'flex',
             flexDirection: 'column',
-            alignItems: 'flex-start',
+            alignItems: 'stretch',
+            p: 2,
+            pb: 1,
+            position: 'relative', 
+            '&:hover': {
+              backgroundColor: (theme) =>
+                theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.04)' : 'rgba(0, 0, 0, 0.04)',
+            },
           }}
         >
           {/* Site Name */}
@@ -314,6 +321,17 @@ const ConsumptionSiteCard = ({
               </Typography>
             </Grid>
           </Grid>
+          
+          {/* Version Info - positioned on the right side */}
+          <Box sx={{ 
+            position: 'absolute',
+            right: 16,
+            bottom: 8
+          }}>
+            <Typography variant="caption" color="text.secondary">
+              Version: {safeData.version || '1.0.0'}
+            </Typography>
+          </Box>
         </CardActionArea>
 
         {/* Footer - only action icons on right */}

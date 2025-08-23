@@ -1,54 +1,41 @@
 import React, { useEffect, useState } from 'react';
 import {
-  ResponsiveContainer,
-  BarChart,
-  Bar,
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
+  BarChart, Bar, LineChart, Line, XAxis, YAxis,
+  CartesianGrid, Tooltip, Legend, ResponsiveContainer
 } from 'recharts';
+import {
+  FormControl, InputLabel, Select, MenuItem, Switch, Typography,
+  Box, Autocomplete, TextField, Paper
+} from '@mui/material';
 import { getAccessibleSiteIds } from '../../utils/siteAccessUtils';
 import { useAuth } from '../../context/AuthContext';
 import productionSiteApi from '../../services/productionSiteApi';
 import consumptionSiteApi from '../../services/consumptionSiteApi';
 import allocationService from '../../services/allocationService';
-import {
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
-  Switch,
-  Typography,
-  Box,
-  Autocomplete,
-  TextField,
-  Paper,
-} from '@mui/material';
 
-// HELPER: Build Financial Year months in MMYYYY order (April-March)
-const getFinancialYearMonths = (fy) => {
+// Helper to make array of months for financial year: ["042024", ..., "122024", "012025",..., "032025"]
+function getFinancialYearMonths(fy) {
   const [startYear, endYear] = fy.split('-').map(Number);
   const months = [];
-  for (let m = 4; m <= 12; m++) months.push(`${m < 10 ? '0' : ''}${m}${startYear}`);
-  for (let m = 1; m <= 3; m++) months.push(`${m < 10 ? '0' : ''}${m}${endYear}`);
+  for (let m = 4; m <= 12; m++) months.push((m < 10 ? '0' : '') + m + String(startYear));
+  for (let m = 1; m <= 3; m++) months.push((m < 10 ? '0' : '') + m + String(endYear));
   return months;
-};
-// Month label for x-axis and tooltips (April = start of FY)
-const formatMonthDisplay = (monthKey) => {
+}
+
+// Format months like "Apr FY2024", "May2024", ... "Mar2025"
+function formatMonthDisplay(monthKey) {
   if (!monthKey || monthKey.length !== 6) return monthKey;
+  const monthNum = parseInt(monthKey.slice(0, 2), 10) - 1; // Convert to 0-based index
+  const yearNum = monthKey.slice(2);
   const monthNames = [
     'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
     'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
   ];
-  const m = parseInt(monthKey.slice(0, 2), 10) - 1;
-  const y = monthKey.slice(2);
-  return `${monthNames[m]} ${y}`;
-};
-const getSortedFinancialYearMonths = (fy) => {
+  return `${monthNames[monthNum]} ${yearNum}`;
+}
+
+// Sort months for the financial year (April to March)
+function getSortedFinancialYearMonths(fy) {
   const months = getFinancialYearMonths(fy);
   return months.sort((a, b) => {
     const monthA = parseInt(a.slice(0, 2));
@@ -61,7 +48,8 @@ const getSortedFinancialYearMonths = (fy) => {
     const adjustedMonthB = monthB < 4 ? monthB + 12 : monthB;
     return adjustedMonthA - adjustedMonthB;
   });
-};
+}
+
 // Given a pk and site maps, get readable label
 function getPairLabelFromPk(pk, prodMap, consMap) {
   const parts = pk.split('_');
@@ -71,17 +59,16 @@ function getPairLabelFromPk(pk, prodMap, consMap) {
   const consName = consMap[consId] || consId;
   return `${prodName} → ${consName}`;
 }
+
 const palette = [
   '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEEAD',
   '#D4A5A5', '#9B786F', '#E3EAA7', '#86AFC2', '#FFD3B6'
 ];
 
-
 const GraphicalAllocationReport = () => {
   const currentYear = new Date().getFullYear();
   const defaultFY = `${currentYear}-${currentYear + 1}`;
   const [financialYear, setFinancialYear] = useState(defaultFY);
-
   const [loading, setLoading] = useState(true);
   const [prodSiteMap, setProdSiteMap] = useState({});
   const [consSiteMap, setConsSiteMap] = useState({});
@@ -247,11 +234,12 @@ const GraphicalAllocationReport = () => {
   });
 
   // Render always shows controls and chart area (like GraphicalLapseReport)
+  
   return (
     <Paper elevation={3} sx={{ p: 3, mt: 2 }}>
-      <Typography variant="h5" gutterBottom>
-        Allocation Analysis
-      </Typography>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+        <Typography variant="h5">Allocation Analysis</Typography>
+      </Box>
       <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 2, my: 2 }}>
         <FormControl size="small" sx={{ minWidth: 220 }}>
           <InputLabel>Financial Year</InputLabel>

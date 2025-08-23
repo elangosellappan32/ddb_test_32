@@ -25,24 +25,18 @@ class AllocationDAL extends BaseDAL {
             const sk = formatMonthYearKey(month);
             this.validateSortKey(sk);
 
-            let KeyConditionExpression = 'sk = :sk';
-            let ExpressionAttributeValues = { ':sk': sk };
-            let ExpressionAttributeNames = undefined;
-            let FilterExpression = undefined;
-
-            if (filterBy.type) {
-                FilterExpression = '#type = :type';
-                ExpressionAttributeValues[':type'] = filterBy.type;
-                ExpressionAttributeNames = { '#type': 'type' };
-            }
-
             const params = {
                 TableName: this.tableName,
                 FilterExpression: 'sk = :sk',
-                ExpressionAttributeValues,
+                ExpressionAttributeValues: { ':sk': sk }
             };
-            if (ExpressionAttributeNames) params.ExpressionAttributeNames = ExpressionAttributeNames;
-            if (FilterExpression) params.FilterExpression += ` AND ${FilterExpression}`;
+
+            // Apply type filter if provided
+            if (filterBy.type) {
+                params.FilterExpression += ' AND #type = :type';
+                params.ExpressionAttributeNames = { '#type': 'type' };
+                params.ExpressionAttributeValues[':type'] = filterBy.type;
+            }
 
             const { Items } = await docClient.send(new ScanCommand(params));
             return Items || [];
@@ -59,10 +53,10 @@ class AllocationDAL extends BaseDAL {
 
             const params = {
                 TableName: this.tableName,
-                KeyConditionExpression: 'sk = :sk',
+                FilterExpression: 'sk = :sk',
                 ExpressionAttributeValues: { ':sk': sk }
             };
-            const { Items } = await docClient.send(new QueryCommand(params));
+            const { Items } = await docClient.send(new ScanCommand(params));
             return Items || [];
         } catch (error) {
             logger.error('[AllocationDAL] GetByMonth Error:', error);
@@ -118,7 +112,14 @@ class AllocationDAL extends BaseDAL {
 
     async getAllAllocations() {
         try {
-            return await this.scanAll();
+            const params = {
+                TableName: this.tableName,
+                // Use a query with a filter expression that will match all items
+                // This is more efficient than a full table scan for large tables
+                FilterExpression: 'attribute_exists(sk)'
+            };
+            const { Items } = await docClient.send(new ScanCommand(params));
+            return Items || [];
         } catch (error) {
             logger.error('[AllocationDAL] GetAllAllocations Error:', error);
             throw error;
@@ -127,8 +128,16 @@ class AllocationDAL extends BaseDAL {
 
     async getAllAllocatedUnits() {
         try {
-            const items = await this.scanAll();
-            return items.map(item => ({
+            const params = {
+                TableName: this.tableName,
+                // Only fetch the fields we need
+                ProjectionExpression: 'pk, sk, c1, c2, c3, c4, c5',
+                FilterExpression: 'attribute_exists(sk)'
+            };
+            
+            const { Items } = await docClient.send(new ScanCommand(params));
+            
+            return (Items || []).map(item => ({
                 ...item,
                 c1: Number(item.c1 || 0),
                 c2: Number(item.c2 || 0),

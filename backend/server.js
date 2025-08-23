@@ -25,6 +25,7 @@ const companyRoutes = require('./company/companyRoutes');
 const siteAccessRoutes = require('./routes/siteAccessRoutes');
 const formRoutes = require('./routes/formRoutes');
 const graphicalReportRoutes = require('./graphicalReport/graphicalReportRoutes');
+const invoiceRoutes = require('./invoice/invoiceRoutes');
 const app = express();
 const PORT = process.env.PORT || 3333;
 
@@ -85,6 +86,7 @@ app.use('/api/company', companyRoutes);
 app.use('/api/site-access', siteAccessRoutes);
 app.use('/api/form', formRoutes);
 app.use('/api/graphical-report', graphicalReportRoutes);
+app.use('/api/invoice', invoiceRoutes); // Mount invoice routes at /api/invoice
 
 // Error handling
 app.use(errorHandler);

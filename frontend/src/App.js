@@ -22,6 +22,7 @@ const Consumption = lazy(() => import("./components/Consumption/Consumption"));
 const ConsumptionSiteDetails = lazy(() => import("./components/Consumption/ConsumptionSiteDetails"));
 const Allocation = lazy(() => import("./components/Allocation/Allocation"));
 const Report = lazy(() => import("./components/Reports/Report"));
+const Invoice = lazy(() => import("./components/invoice/InvoicePage"));
 const GraphicalReport = lazy(() => import("./components/Graphical-Report/GraphicalReport.js"));
 // Loading component for suspense fallback
 const LoadingFallback = () => (
@@ -66,9 +67,19 @@ const AppRoutes = () => {
               <Report/>
             </PrivateRoute>
           } />
+          <Route path="/report" element={
+            <PrivateRoute requiredResource="report" requiredAction="READ">
+              <Report />
+            </PrivateRoute>
+          } />
           <Route path="/graphical-report" element={
-            <PrivateRoute requiredResource="reports" requiredAction="READ">
+            <PrivateRoute requiredResource="report" requiredAction="READ">
               <GraphicalReport />
+            </PrivateRoute>
+          } />
+          <Route path="/invoice" element={
+            <PrivateRoute requiredResource="invoice" requiredAction="READ">
+              <Invoice />
             </PrivateRoute>
           } />
           <Route path="/allocation" element={

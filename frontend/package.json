@@ -41,7 +41,7 @@
     "react-toastify": "^11.0.5",
     "recharts": "^2.10.4",
     "sanitize.css": "^13.0.0",
-    "xlsx": "^0.18.5",
+    "xlsx-js-style": "^1.2.0",
     "yup": "^1.6.1"
   },
   "proxy": "http://localhost:3333",

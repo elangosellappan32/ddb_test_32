@@ -254,61 +254,97 @@ const GraphicalConsumptionReport = () => {
   });
 
   return (
-    <Paper elevation={3} sx={{ p: 3, m: 2 }}>
-      <Typography variant="h5" gutterBottom>
-        Consumption Units Analysis
-      </Typography>
-      <Box sx={{ mb: 3, display: "flex", flexWrap: "wrap", gap: 2, alignItems: "center" }}>
-        <FormControl sx={{ minWidth: 220 }} size="small">
-          <InputLabel>Financial Year</InputLabel>
-          <Select
-            value={financialYear}
-            label="Financial Year"
-            onChange={(e) => setFinancialYear(e.target.value)}
-            disabled={loading}
-          >
-            {fyOptions.map((fy) => (
-              <MenuItem key={fy.value} value={fy.value}>{fy.label}</MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-        <Box sx={{ display: "flex", alignItems: "center", ml: 2 }}>
-          <Typography sx={{ mr: 1 }}>Bar</Typography>
-          <Switch
-            checked={graphType === "line"}
-            onChange={(e) => setGraphType(e.target.checked ? "line" : "bar")}
+    <Paper elevation={3} sx={{ p: 4, my: 2, borderRadius: 2, boxShadow: '0 4px 20px 0 rgba(0,0,0,0.1)' }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4, borderBottom: '1px solid #e0e0e0', pb: 2 }}>
+        <Typography variant="h5" sx={{ fontWeight: 600, color: '#2c3e50' }}>Consumption Report</Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          <FormControl size="small" sx={{ minWidth: 220 }} variant="outlined">
+            <InputLabel>Financial Year</InputLabel>
+            <Select
+              value={financialYear}
+              onChange={e => setFinancialYear(e.target.value)}
+              label="Financial Year"
+              sx={{
+                '& .MuiOutlinedInput-root': {
+                  borderRadius: 1,
+                  backgroundColor: '#fff',
+                },
+              }}
+            >
+              {fyOptions.map(fy => (
+                <MenuItem key={fy.value} value={fy.value}>
+                  {fy.label}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          <Box sx={{ display: 'flex', alignItems: 'center', bgcolor: '#f5f5f5', px: 1.5, py: 0.5, borderRadius: 1 }}>
+            <Typography variant="body2" sx={{ color: graphType === 'bar' ? '#1976d2' : 'inherit', fontWeight: graphType === 'bar' ? 600 : 400 }}>Bar</Typography>
+            <Switch
+              checked={graphType === 'line'}
+              onChange={() => setGraphType(prev => prev === 'line' ? 'bar' : 'line')}
+              color="primary"
+              size="small"
+            />
+            <Typography variant="body2" sx={{ color: graphType === 'line' ? '#1976d2' : 'inherit', fontWeight: graphType === 'line' ? 600 : 400 }}>Line</Typography>
+          </Box>
+          <Autocomplete
+            multiple
+            id="site-selector"
+            options={availableSites}
+            value={selectedSites}
+            onChange={(_, newValue) => setSelectedSites(newValue)}
+            getOptionLabel={(option) => option.name || option.key}
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                variant="outlined"
+                label="Select Sites"
+                placeholder="Sites"
+                size="small"
+                sx={{
+                  '& .MuiOutlinedInput-root': {
+                    borderRadius: 1,
+                    backgroundColor: '#fff',
+                  },
+                }}
+              />
+            )}
+            renderTags={(value, getTagProps) =>
+              value.map((option, index) => (
+                <Box
+                  {...getTagProps({ index })}
+                  key={option.key}
+                  sx={{
+                    backgroundColor: '#e3f2fd',
+                    borderRadius: '4px',
+                    padding: '2px 8px',
+                    margin: '2px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    '& .MuiChip-deleteIcon': {
+                      color: '#1976d2',
+                      '&:hover': {
+                        color: '#1565c0',
+                      },
+                    },
+                  }}
+                >
+                  {option.name || option.key}
+                </Box>
+              ))
+            }
+            sx={{ flexGrow: 1 }}
+            ListboxProps={{ style: { maxHeight: "200px" } }}
             disabled={loading}
           />
-          <Typography sx={{ ml: 1 }}>Line</Typography>
         </Box>
-        <Autocomplete
-          multiple
-          id="site-selector"
-          options={availableSites}
-          value={selectedSites}
-          onChange={(_, newValue) => setSelectedSites(newValue)}
-          getOptionLabel={(option) => option.name}
-          isOptionEqualToValue={(option, value) => option.key === value.key}
-          renderOption={(props, option) => (
-            <li {...props} key={option.key}>{option.name}</li>
-          )}
-          renderInput={(params) => (
-            <TextField
-              {...params}
-              variant="outlined"
-              label="Select Consumption Sites"
-              size="small"
-              sx={{ minWidth: 300 }}
-            />
-          )}
-          sx={{ flexGrow: 1 }}
-          ListboxProps={{ style: { maxHeight: "200px" } }}
-          disabled={loading}
-        />
       </Box>
-      <Box sx={{ height: 500 }}>
+      <Box sx={{ width: '100%', height: 500 }}>
         {loading ? (
-          <Typography>Loading consumption report...</Typography>
+          <Typography color="text.secondary" sx={{ textAlign: 'center', mt: 4 }}>
+            No data available for selected period
+          </Typography>
         ) : error ? (
           <Typography color="error">{error}</Typography>
         ) : selectedSites.length === 0 ? (

@@ -297,7 +297,7 @@ const ConsumptionSiteDataForm = ({
 
         <Grid item xs={12}>
           <DesktopDatePicker
-            label="Period"
+            label="Month"
             inputFormat="MMMM yyyy"
             views={['year', 'month']}
             value={formData.date}

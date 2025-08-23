@@ -46,7 +46,16 @@ const GraphicalReport = () => {
 
   return (
     <Paper elevation={3} sx={{ p: 3, m: 2 }}>
-      <Typography variant="h4" gutterBottom>
+      <Typography 
+        variant="h4" 
+        gutterBottom 
+        sx={{ 
+          color: 'primary.main',
+          pb: 3,
+          borderBottom: '2px solid black',
+          mb: 4
+        }}
+      >
         Energy Analytics Dashboard
       </Typography>
       <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}>

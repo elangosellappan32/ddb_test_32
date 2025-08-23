@@ -23,14 +23,26 @@ import {
 } from '@mui/icons-material';
 import { useSnackbar } from 'notistack';
 
-const SITE_TYPES = ['Industrial', 'Commercial', 'Residential'];
-const SITE_STATUS = ['Active', 'Inactive', 'Maintenance'];
+// Site type configuration with display text and icons
+const SITE_TYPES = [
+  { value: 'textile', label: 'Textile' },
+  { value: 'industrial', label: 'Industrial' },
+  { value: 'commercial', label: 'Commercial' }
+];
+// Status configuration with display text and colors
+const STATUS_CONFIG = {
+  active: { label: 'Active', color: 'success.main' },
+  inactive: { label: 'Inactive', color: 'text.secondary' },
+  maintenance: { label: 'Maintenance', color: 'warning.main' }
+};
+
+const SITE_STATUS = Object.keys(STATUS_CONFIG);
 
 const INITIAL_FORM_STATE = {
   name: '',
   location: '',
-  type: 'Industrial',
-  status: 'Active',
+  type: 'textile',
+  status: 'active',
   annualConsumption: '',
   annualConsumption_L: '',
   timetolive: 0,
@@ -49,14 +61,13 @@ const ConsumptionSiteForm = ({
   const [formData, setFormData] = useState(INITIAL_FORM_STATE);
   const [errors, setErrors] = useState({});
 
-  // Initialize form data when initialData changes
+  // Normalize site type to ensure it's one of the valid types
   const normalizeType = (type) => {
-    if (!type) return 'Industrial';
-    return String(type)
-      .trim()
-      .split(' ')
-      .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-      .join(' ');
+    if (!type) return 'textile';
+    const normalized = String(type).trim().toLowerCase();
+    return SITE_TYPES.some(t => t.value === normalized) 
+      ? normalized 
+      : 'textile'; // Default to textile if invalid
   };
 
   useEffect(() => {
@@ -66,7 +77,7 @@ const ConsumptionSiteForm = ({
         name: initialData.name || '',
         type: normalizeType(initialData.type),
         location: initialData.location || '',
-        status: initialData.status || 'Active',
+        status: initialData.status ? initialData.status.toLowerCase() : 'active',
         annualConsumption: initialData.annualConsumption || initialData.annualConsumption_L || '',
         timetolive: Number(initialData.timetolive || 0),
         // Important: Always include these fields for version control
@@ -108,6 +119,10 @@ const ConsumptionSiteForm = ({
     
     if (!formData.location.trim()) {
       newErrors.location = 'Location is required';
+    }
+    
+    if (!formData.status || !SITE_STATUS.includes(formData.status.toLowerCase())) {
+      newErrors.status = 'Please select a valid status';
     }
     
     if (!formData.annualConsumption) {
@@ -213,16 +228,23 @@ const ConsumptionSiteForm = ({
         
         <Grid item xs={12} sm={6}>
           <FormControl fullWidth margin="normal" error={!!errors.type}>
-            <InputLabel>Type</InputLabel>
+            <InputLabel>Site Type</InputLabel>
             <Select
               name="type"
               value={formData.type}
               onChange={handleChange}
-              label="Type"
+              label="Site Type"
               required
+              startAdornment={
+                <InputAdornment position="start">
+                  <CategoryIcon color="action" />
+                </InputAdornment>
+              }
             >
-              {SITE_TYPES.map(type => (
-                <MenuItem key={type} value={type}>{type}</MenuItem>
+              {SITE_TYPES.map((type) => (
+                <MenuItem key={type.value} value={type.value}>
+                  {type.label}
+                </MenuItem>
               ))}
             </Select>
             {errors.type && <FormHelperText>{errors.type}</FormHelperText>}
@@ -274,7 +296,7 @@ const ConsumptionSiteForm = ({
         </Grid>
         
         <Grid item xs={12} sm={6}>
-          <FormControl fullWidth margin="normal">
+          <FormControl fullWidth margin="normal" error={!!errors.status}>
             <InputLabel>Status</InputLabel>
             <Select
               name="status"
@@ -282,11 +304,37 @@ const ConsumptionSiteForm = ({
               onChange={handleChange}
               label="Status"
               required
+              renderValue={(selected) => (
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <Box 
+                    sx={{
+                      width: 12,
+                      height: 12,
+                      borderRadius: '50%',
+                      bgcolor: STATUS_CONFIG[selected]?.color || 'grey.500'
+                    }}
+                  />
+                  {STATUS_CONFIG[selected]?.label || selected}
+                </Box>
+              )}
             >
-              {SITE_STATUS.map(status => (
-                <MenuItem key={status} value={status}>{status}</MenuItem>
+              {SITE_STATUS.map((status) => (
+                <MenuItem key={status} value={status}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Box 
+                      sx={{
+                        width: 12,
+                        height: 12,
+                        borderRadius: '50%',
+                        bgcolor: STATUS_CONFIG[status]?.color || 'grey.500'
+                      }}
+                    />
+                    {STATUS_CONFIG[status]?.label || status}
+                  </Box>
+                </MenuItem>
               ))}
             </Select>
+            {errors.status && <FormHelperText>{errors.status}</FormHelperText>}
           </FormControl>
         </Grid>
         

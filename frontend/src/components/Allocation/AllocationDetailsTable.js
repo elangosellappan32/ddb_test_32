@@ -3,6 +3,7 @@ import {
     Table,
     TableBody,
     TableCell,
+    TableContainer,
     TableHead,
     TableRow,
     Box,
@@ -291,19 +292,20 @@ const AllocationDetailsTable = ({ allocations = [], bankingAllocations = [], old
             <Paper variant="outlined" sx={{ mb: 3, borderRadius: 2, overflow: 'hidden' }}>
                 <Box sx={{ p: 2 }}>
                     <Typography variant="h6" sx={{ mb: 1, color: bgColor, fontWeight: 'bold' }}>{title}</Typography>
-                    <Table size="small" sx={{ mt: 1 }}>
-                        <TableHead>
-                            <TableRow sx={{ background: bgColor }}>
-                                <TableCell>Production Site</TableCell>
-                                {type === 'allocation' && <TableCell>Consumption Site</TableCell>}
-                                {getAllocationPeriods().map(period => (
-                                    <TableCell key={period.id} align="right">{period.label}</TableCell>
-                                ))}
-                                <TableCell align="right">Total</TableCell>
-                                {type === 'allocation' && <TableCell align="right">Actions</TableCell>}
-                            </TableRow>
-                        </TableHead>
-                        <TableBody>
+                    <TableContainer component={Paper}>
+                        <Table size="small" sx={{ mt: 1, border: '1px solid black' }}>
+                            <TableHead>
+                                <TableRow sx={{ background: bgColor }}>
+                                    <TableCell sx={{ color: 'white' }}>Production Site</TableCell>
+                                    {type === 'allocation' && <TableCell sx={{ color: 'white' }}>Consumption Site</TableCell>}
+                                    {getAllocationPeriods().map(period => (
+                                        <TableCell key={period.id} align="right" sx={{ color: 'white' }}>{period.label}</TableCell>
+                                    ))}
+                                    <TableCell align="right" sx={{ color: 'white' }}>Total</TableCell>
+                                    {type === 'allocation' && <TableCell align="right" sx={{ color: 'white' }}>Actions</TableCell>}
+                                </TableRow>
+                            </TableHead>
+                            <TableBody>
                             {uniqueData.length > 0 ? uniqueData.map((allocation, idx) => (
                                 <TableRow 
                                     key={`${allocation.productionSiteId}-${allocation.consumptionSiteId || type}-${idx}`} 
@@ -368,8 +370,9 @@ const AllocationDetailsTable = ({ allocations = [], bankingAllocations = [], old
                                     </TableCell>
                                 </TableRow>
                             )}
-                        </TableBody>
-                    </Table>
+                            </TableBody>
+                        </Table>
+                    </TableContainer>
                 </Box>
             </Paper>
         );

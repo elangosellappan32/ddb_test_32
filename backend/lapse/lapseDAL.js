@@ -1,4 +1,4 @@
-const { QueryCommand, PutCommand, UpdateCommand, DeleteCommand } = require('@aws-sdk/lib-dynamodb');
+const { PutCommand, UpdateCommand, DeleteCommand, ScanCommand, QueryCommand } = require('@aws-sdk/lib-dynamodb');
 const docClient = require('../utils/db');
 const TableNames = require('../constants/tableNames');
 const logger = require('../utils/logger');
@@ -163,20 +163,34 @@ class LapseDAL {
             const sk = formatMonthYearKey(month);
             this.validateSortKey(sk);
 
-            const command = new QueryCommand({
+            // Use scan with filter expression since we don't have a GSI on sk
+            const command = new ScanCommand({
                 TableName: this.tableName,
-                KeyConditionExpression: 'pk = :pk AND sk = :sk',
+                FilterExpression: 'sk = :sk AND begins_with(pk, :companyPrefix)',
                 ExpressionAttributeValues: {
-                    ':pk': String(companyId),
-                    ':sk': sk
+                    ':sk': sk,
+                    ':companyPrefix': `${companyId}_`
                 }
             });
 
-            logger.debug(`[LapseDAL] Getting lapses by month: ${companyId}, ${month}`);
+            logger.debug(`[LapseDAL] Getting lapses by month: ${companyId}, ${month}`, { 
+                tableName: this.tableName,
+                filterExpression: 'sk = :sk AND begins_with(pk, :companyPrefix)',
+                expressionValues: {
+                    sk,
+                    companyPrefix: `${companyId}_`
+                }
+            });
+            
             const response = await docClient.send(command);
+            logger.debug(`[LapseDAL] Found ${response.Items?.length || 0} lapses for ${companyId}, ${month}`);
             return response.Items || [];
         } catch (error) {
-            logger.error(`[LapseDAL] Error fetching lapses by month: ${error.message}`, { error, companyId, month });
+            logger.error(`[LapseDAL] Error fetching lapses by month: ${error.message}`, { 
+                error: error.stack, 
+                companyId, 
+                month 
+            });
             throw error;
         }
     }

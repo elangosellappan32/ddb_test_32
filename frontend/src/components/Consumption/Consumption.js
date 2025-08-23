@@ -24,6 +24,7 @@ import {
   ViewModule as ViewModuleIcon,
   Delete as DeleteIcon,
   Edit as EditIcon,
+  ElectricalServices as ElectricalServicesIcon
 } from '@mui/icons-material';
 import consumptionSiteApi from '../../services/consumptionSiteApi';
 import ConsumptionSiteCard from './ConsumptionSiteCard';
@@ -372,13 +373,15 @@ const Consumption = () => {
       <Box sx={{ 
         display: 'flex', 
         justifyContent: 'space-between', 
-        mb: 3,
-        borderBottom: '2px solid #1976d2',
+        alignItems: 'center', 
+        mb: 4,
+        borderBottom: '2px solid #000000',
         pb: 2
       }}>
-        <Typography variant="h5" sx={{ fontWeight: 'bold', color: '#1976d2' }}>
-          Consumption Sites
-        </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          <ElectricalServicesIcon color="primary" sx={{ fontSize: 32 }} />
+          <Typography variant="h4" sx={{ color: '#1976d2' }}>Consumption Sites</Typography>
+        </Box>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
           <IconButton onClick={() => setViewMode(prev => prev === 'card' ? 'table' : 'card')}>
             {viewMode === 'card' ? <ViewListIcon /> : <ViewModuleIcon />}

@@ -48,16 +48,17 @@ export const formatDisplayDate = (sk) => {
     if (!sk || typeof sk !== 'string' || sk.length !== 6) {
       return 'Invalid Date';
     }
-
-    const month = parseInt(sk.substring(0, 2)) - 1;
+    
+    // Handle MMYYYY format
+    const month = parseInt(sk.substring(0, 2)) - 1; // 0-indexed month
     const year = parseInt(sk.substring(2));
     const date = new Date(year, month);
     
-    if (!isValid(date)) {
+    if (isNaN(date.getTime())) {
       return 'Invalid Date';
     }
-
-    return format(date, 'MMM yyyy');
+    
+    return format(date, 'MMMM yyyy');
   } catch (error) {
     console.error('Error formatting display date:', error);
     return 'Invalid Date';

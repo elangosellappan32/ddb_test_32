@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../../context/AuthContext';
 import {
   Box,
   Grid,
@@ -16,7 +17,7 @@ import {
   Factory as FactoryIcon,
   PowerSettingsNew as ConsumptionIcon,
   AssignmentTurnedIn as AllocationIcon,
-  Assessment as ReportsIcon,
+  Receipt as InvoiceIcon,
   AssessmentOutlined as AssessmentOutlinedIcon,
   Assessment as AssessmentIcon,
   WbSunny as SolarIcon,
@@ -27,6 +28,8 @@ import {
   CheckCircle as CheckCircleIcon,
   Warning as WarningIcon
 } from '@mui/icons-material';
+import ReceiptIcon from '@mui/icons-material/Receipt';
+import ErrorIcon from '@mui/icons-material/Error';
 import productionSiteApi from '../../services/productionSiteApi';
 import { useConsumptionStats } from '../../hooks/useConsumptionStats';
 import useDashboardData from '../../hooks/useDashboardData';
@@ -204,7 +207,8 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const { stats: consumptionStats, loading: consumptionLoading, error: consumptionError } = useConsumptionStats();
-  const { allocationStats, reportStats } = useDashboardData();
+  const { user } = useAuth(); // Get the user from the useAuth hook
+  const { allocationStats, invoiceStats, refreshAllocationStats } = useDashboardData(user); // Pass the user to useDashboardData
 
   const calculateStats = useCallback((response) => {
     try {
@@ -262,7 +266,8 @@ const Dashboard = () => {
 
   useEffect(() => {
     fetchStats();
-  }, [fetchStats]);
+    refreshAllocationStats();
+  }, [fetchStats, refreshAllocationStats]);
 
   const ConsumptionCardContent = () => {
     if (consumptionLoading) {
@@ -606,118 +611,32 @@ const Dashboard = () => {
               ) : (
                 <Box sx={{ '& > * + *': { mt: 2 } }}>
                   <Grid container spacing={2}>
-                    <Grid item xs={6}>
+                    <Grid item xs={12}>
                       <StatCard 
-                        value={allocationStats.totalAllocated}
-                        label="Total Allocated"
+                        value={allocationStats.totalBankingUnits || 0}
+                        label="Total Banking Units"
                         sublabel="MW"
                         icon={AllocationIcon}
-                        color="warning"
+                        color="info"
                       />
                     </Grid>
-                    <Grid item xs={6}>
+                    <Grid item xs={12}>
                       <StatCard 
-                        value={allocationStats.unitsAllocated}
-                        label="Units Allocated"
+                        value={allocationStats.totalAllocationUnits || 0}
+                        label="Total Allocation Units"
+                        sublabel="MW"
                         icon={CheckCircleIcon}
-                        color="primary"
+                        color="success"
                       />
                     </Grid>
                     <Grid item xs={12}>
-                      <Box 
-                        sx={{
-                          p: 2,
-                          borderRadius: 2,
-                          backgroundColor: (theme) => alpha(theme.palette.warning.light, 0.08),
-                          border: '1px solid',
-                          borderColor: (theme) => alpha(theme.palette.warning.light, 0.3),
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between'
-                        }}
-                      >
-                        <Box>
-                          <Typography variant="body2" color="text.secondary" gutterBottom>Pending Allocations</Typography>
-                          <Typography variant="h6" sx={{ fontWeight: 700 }}>{allocationStats.pendingAllocations}</Typography>
-                        </Box>
-                        <Box 
-                          sx={{ 
-                            width: 44, 
-                            height: 44, 
-                            borderRadius: '50%', 
-                            backgroundColor: (theme) => alpha(theme.palette.warning.light, 0.2),
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            color: (theme) => theme.palette.warning.dark,
-                          }}
-                        >
-                          <PendingIcon fontSize="small" />
-                        </Box>
-                      </Box>
-                    </Grid>
-                    <Grid item xs={12}>
-                      <Box 
-                        sx={{
-                          p: 2,
-                          borderRadius: 2,
-                          backgroundColor: (theme) => alpha(theme.palette.success.main, 0.04),
-                          border: '1px solid',
-                          borderColor: (theme) => alpha(theme.palette.success.main, 0.2),
-                        }}
-                      >
-                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-                          <Typography variant="body2" color="text.secondary">Allocation Rate</Typography>
-                          <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                            <Typography variant="h6" sx={{ fontWeight: 600, mr: 1 }}>{allocationStats.allocationRate}%</Typography>
-                            <CheckCircleIcon sx={{ color: 'success.main', fontSize: 20 }} />
-                          </Box>
-                        </Box>
-                        <Box sx={{ 
-                          width: '100%', 
-                          height: 6, 
-                          bgcolor: 'grey.200',
-                          borderRadius: 3,
-                          overflow: 'hidden',
-                          mb: 1
-                        }}>
-                          <Box 
-                            sx={{ 
-                              width: `${allocationStats.allocationRate}%`, 
-                              height: '100%', 
-                              background: (theme) => {
-                                if (allocationStats.allocationRate > 90) {
-                                  return `linear-gradient(90deg, ${theme.palette.success.light}, ${theme.palette.success.main})`;
-                                } else if (allocationStats.allocationRate > 70) {
-                                  return `linear-gradient(90deg, ${theme.palette.info.light}, ${theme.palette.info.main})`;
-                                } else if (allocationStats.allocationRate > 50) {
-                                  return `linear-gradient(90deg, ${theme.palette.warning.light}, ${theme.palette.warning.main})`;
-                                } else {
-                                  return `linear-gradient(90deg, ${theme.palette.error.light}, ${theme.palette.error.main})`;
-                                }
-                              },
-                              borderRadius: 3,
-                              transition: 'width 0.5s ease-in-out',
-                            }} 
-                          />
-                        </Box>
-                        <Typography 
-                          variant="caption" 
-                          sx={{ 
-                            fontWeight: 500,
-                            color: (theme) => {
-                              if (allocationStats.allocationRate > 90) return theme.palette.success.main;
-                              if (allocationStats.allocationRate > 70) return theme.palette.info.main;
-                              if (allocationStats.allocationRate > 50) return theme.palette.warning.dark;
-                              return theme.palette.error.main;
-                            }
-                          }}
-                        >
-                          {allocationStats.allocationRate > 90 ? 'Excellent' : 
-                           allocationStats.allocationRate > 70 ? 'Good' : 
-                           allocationStats.allocationRate > 50 ? 'Average' : 'Needs Attention'}
-                        </Typography>
-                      </Box>
+                      <StatCard 
+                        value={allocationStats.totalLapseUnits || 0}
+                        label="Total Lapse Units"
+                        sublabel="MW"
+                        icon={WarningIcon}
+                        color="error"
+                      />
                     </Grid>
                   </Grid>
                 </Box>
@@ -726,87 +645,81 @@ const Dashboard = () => {
           />
         </Grid>
 
-        {/* Reports Card */}
+        {/* Invoice Card */}
         <Grid item xs={12} md={6} lg={3}>
           <DashboardCard
-            icon={ReportsIcon}
-            title="Reports"
-            color="info"
-            onClick={() => navigate('/report')}
+            icon={InvoiceIcon}
+            title="Invoices"
+            color="secondary"
+            onClick={() => navigate('/invoices')}
             content={
-              reportStats.loading ? (
+              invoiceStats.loading ? (
                 <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', minHeight: 300 }}>
                   <CircularProgress size={32} />
                 </Box>
-              ) : reportStats.error ? (
-                <Alert severity="error" sx={{ m: 2 }}>{reportStats.error}</Alert>
+              ) : invoiceStats.error ? (
+                <Alert severity="error" sx={{ m: 2 }}>{invoiceStats.error}</Alert>
               ) : (
                 <Box sx={{ '& > * + *': { mt: 2 } }}>
                   <Grid container spacing={2}>
-                    <Grid item xs={6}>
+                    <Grid item xs={12}>
                       <StatCard 
-                        value={reportStats.dailyReports}
-                        label="Daily Reports"
-                        icon={AssessmentIcon}
-                        color="info"
-                      />
-                    </Grid>
-                    <Grid item xs={6}>
-                      <StatCard 
-                        value={reportStats.monthlyReports}
-                        label="Monthly Reports"
-                        icon={AssessmentOutlinedIcon}
+                        value={invoiceStats.dailyInvoices || 0}
+                        label="Today's Invoices"
+                        icon={ReceiptIcon}
                         color="primary"
                       />
                     </Grid>
                     <Grid item xs={12}>
-                      <Box 
-                        sx={{
-                          p: 2,
-                          borderRadius: 2,
-                          backgroundColor: (theme) => alpha(theme.palette.warning.light, 0.08),
-                          border: '1px solid',
-                          borderColor: (theme) => alpha(theme.palette.warning.light, 0.3),
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between'
-                        }}
-                      >
-                        <Box>
-                          <Typography variant="body2" color="text.secondary" gutterBottom>Pending Review</Typography>
-                          <Typography variant="h6" sx={{ fontWeight: 700 }}>{reportStats.pendingReview}</Typography>
-                        </Box>
-                        <Box 
-                          sx={{ 
-                            width: 44, 
-                            height: 44, 
-                            borderRadius: '50%', 
-                            backgroundColor: (theme) => alpha(theme.palette.warning.light, 0.2),
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            color: (theme) => theme.palette.warning.dark,
-                          }}
-                        >
-                          <WarningIcon fontSize="small" />
-                        </Box>
-                      </Box>
+                      <StatCard 
+                        value={invoiceStats.monthlyInvoices || 0}
+                        label="Monthly Invoices"
+                        sublabel={`${new Date().toLocaleString('default', { month: 'long' })}`}
+                        icon={AssessmentIcon}
+                        color="info"
+                      />
+                    </Grid>
+                    <Grid item xs={12}>
+                      <StatCard 
+                        value={invoiceStats.pendingInvoices || 0}
+                        label="Pending Invoices"
+                        icon={PendingIcon}
+                        color="warning"
+                      />
                     </Grid>
                     <Grid item xs={12}>
                       <Box 
                         sx={{
                           p: 2,
                           borderRadius: 2,
-                          backgroundColor: (theme) => alpha(theme.palette.success.main, 0.04),
+                          backgroundColor: (theme) => 
+                            invoiceStats.completionRate >= 90 
+                              ? alpha(theme.palette.success.main, 0.04)
+                              : invoiceStats.completionRate >= 70
+                              ? alpha(theme.palette.warning.main, 0.04)
+                              : alpha(theme.palette.error.main, 0.04),
                           border: '1px solid',
-                          borderColor: (theme) => alpha(theme.palette.success.main, 0.2),
+                          borderColor: (theme) => 
+                            invoiceStats.completionRate >= 90 
+                              ? alpha(theme.palette.success.main, 0.2)
+                              : invoiceStats.completionRate >= 70
+                              ? alpha(theme.palette.warning.main, 0.2)
+                              : alpha(theme.palette.error.main, 0.2),
                         }}
                       >
                         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-                          <Typography variant="body2" color="text.secondary">Compliance Rate</Typography>
+                          <Typography variant="body2" color="text.secondary">Completion Rate</Typography>
                           <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                            <Typography variant="h6" sx={{ fontWeight: 600, mr: 1 }}>{reportStats.complianceRate}%</Typography>
-                            <CheckCircleIcon sx={{ color: 'success.main', fontSize: 20 }} />
+                            <Typography variant="h6" sx={{ fontWeight: 600, mr: 1 }}>
+                              {invoiceStats.completionRate}%
+                            </Typography>
+                            {invoiceStats.completionRate >= 90 ? (
+                              <CheckCircleIcon sx={{ color: 'success.main', fontSize: 20 }} />
+                            ) : invoiceStats.completionRate >= 70 ? (
+                              <WarningIcon sx={{ color: 'warning.main', fontSize: 20 }} />
+                            ) : (
+                              <ErrorIcon sx={{ color: 'error.main', fontSize: 20 }} />
+                            )}
                           </Box>
                         </Box>
                         <Box sx={{ 
@@ -819,39 +732,25 @@ const Dashboard = () => {
                         }}>
                           <Box 
                             sx={{ 
-                              width: `${reportStats.complianceRate}%`, 
+                              width: `${invoiceStats.completionRate}%`, 
                               height: '100%', 
-                              background: (theme) => {
-                                if (reportStats.complianceRate > 90) {
-                                  return `linear-gradient(90deg, ${theme.palette.success.light}, ${theme.palette.success.main})`;
-                                } else if (reportStats.complianceRate > 70) {
-                                  return `linear-gradient(90deg, ${theme.palette.info.light}, ${theme.palette.info.main})`;
-                                } else if (reportStats.complianceRate > 50) {
-                                  return `linear-gradient(90deg, ${theme.palette.warning.light}, ${theme.palette.warning.main})`;
-                                } else {
-                                  return `linear-gradient(90deg, ${theme.palette.error.light}, ${theme.palette.error.main})`;
-                                }
-                              },
+                              background: (theme) => 
+                                invoiceStats.completionRate >= 90 
+                                  ? `linear-gradient(90deg, ${theme.palette.success.light}, ${theme.palette.success.main})`
+                                  : invoiceStats.completionRate >= 70
+                                  ? `linear-gradient(90deg, ${theme.palette.warning.light}, ${theme.palette.warning.main})`
+                                  : `linear-gradient(90deg, ${theme.palette.error.light}, ${theme.palette.error.main})`,
                               borderRadius: 3,
                               transition: 'width 0.5s ease-in-out',
                             }} 
                           />
                         </Box>
-                        <Typography 
-                          variant="caption" 
-                          sx={{ 
-                            fontWeight: 500,
-                            color: (theme) => {
-                              if (reportStats.complianceRate > 90) return theme.palette.success.main;
-                              if (reportStats.complianceRate > 70) return theme.palette.info.main;
-                              if (reportStats.complianceRate > 50) return theme.palette.warning.dark;
-                              return theme.palette.error.main;
-                            }
-                          }}
-                        >
-                          {reportStats.complianceRate > 90 ? 'Fully Compliant' : 
-                           reportStats.complianceRate > 70 ? 'Mostly Compliant' : 
-                           reportStats.complianceRate > 50 ? 'Partially Compliant' : 'Needs Attention'}
+                        <Typography variant="caption" color="text.secondary">
+                          {invoiceStats.completionRate >= 90 
+                            ? 'Excellent' 
+                            : invoiceStats.completionRate >= 70 
+                            ? 'Good' 
+                            : 'Needs Attention'}
                         </Typography>
                       </Box>
                     </Grid>
