@@ -196,11 +196,17 @@ class AllocationService {
                 );
             }
 
+            // Validate charge if it's being updated
+            if (updateData.charge !== undefined) {
+                await this.validateAllocationCharge(existingAllocation.sk, existingAllocation.pk, updateData.charge);
+            }
+
             // Update allocation record
             const updatedAllocation = await this.allocationDAL.update(id, {
                 ...updateData,
                 ...calculationResult,
                 transactionId,
+                charge: updateData.charge ? 1 : 0, // Store as 1/0 in database
                 version: existingAllocation.version + 1
             });
 
@@ -413,15 +419,61 @@ class AllocationService {
 
     /**
      * Fetch allocations by month and optional type filter.
+     * @param {string} month - The month for which to fetch allocations
+     * @param {string} type - Optional type filter (e.g., 'BANKING', 'LAPSE')
+     * @param {Object} options - Additional options for filtering
+     * @param {boolean} options.charge - If specified, filter by charge status
      */
-    async getAllocations(month, type) {
+    async getAllocations(month, type, options = {}) {
         try {
             const filterBy = {};
-            if (type) filterBy.type = type;
+            if (type) {
+                filterBy.type = type;
+            }
+            
+            // Add charge filter if specified
+            if (options.charge !== undefined) {
+                filterBy.charge = options.charge ? 1 : 0;
+            }
+            
             const allocations = await this.allocationDAL.getAllocations(month, filterBy);
-            return allocations;
+            
+            // Transform charge values to boolean for consistency
+            return allocations.map(allocation => ({
+                ...allocation,
+                charge: allocation.charge === 1 || allocation.charge === true,
+                allocated: allocation.allocated ? {
+                    ...allocation.allocated,
+                    charge: allocation.allocated.charge === 1 || allocation.allocated.charge === true
+                } : undefined
+            }));
         } catch (error) {
             logger.error('[AllocationService] GetAllocations Error:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Validate that only one allocation can be charged per month
+     */
+    async validateAllocationCharge(month, pk, currentCharge) {
+        try {
+            // If not setting charge to true, no need to validate
+            if (!currentCharge) {
+                return true;
+            }
+            
+            // Check if any other allocation in the same month has charge=true
+            const existingChargedAllocations = await this.allocationDAL.getAllocations(month, { charge: 1 });
+            const existingCharged = existingChargedAllocations.find(a => a.pk !== pk);
+            
+            if (existingCharged) {
+                throw new ValidationError(`Another allocation (${existingCharged.pk}) is already marked as charged for this month`);
+            }
+            
+            return true;
+        } catch (error) {
+            logger.error('[AllocationService] ValidateAllocationCharge Error:', error);
             throw error;
         }
     }

@@ -446,6 +446,50 @@ const updateFormVBSite = async (req, res, next) => {
     }
 };
 
+const getChargingAllocation = async (req, res, next) => {
+    try {
+        const { month } = req.params;
+        if (!month) {
+            throw new ValidationError('Month parameter is required');
+        }
+        const allocations = await allocationDAL.getAllocations(month);
+        // Filter and return only charging-related allocations
+        const chargingAllocations = allocations.filter(alloc => alloc.isCharging === true);
+        res.json({
+            success: true,
+            data: chargingAllocations.map(transformAllocationRecord)
+        });
+    } catch (error) {
+        logger.error('[AllocationController] GetChargingAllocation Error:', error);
+        next(error);
+    }
+};
+
+const getFilteredAllocations = async (req, res, next) => {
+    try {
+        const { month } = req.params;
+        const { charge = false } = req.query;
+        
+        if (!month) {
+            throw new ValidationError('Month parameter is required');
+        }
+        
+        const allocations = await allocationDAL.getAllocations(month);
+        // Filter based on charge parameter
+        const filteredAllocations = charge === 'true' 
+            ? allocations.filter(alloc => alloc.isCharging === true)
+            : allocations.filter(alloc => !alloc.isCharging);
+            
+        res.json({
+            success: true,
+            data: filteredAllocations.map(transformAllocationRecord)
+        });
+    } catch (error) {
+        logger.error('[AllocationController] GetFilteredAllocations Error:', error);
+        next(error);
+    }
+};
+
 module.exports = {
     createAllocation,
     getAllocations,
@@ -454,5 +498,7 @@ module.exports = {
     deleteAllocation,
     getAllAllocations,
     getFormVBData,
-    updateFormVBSite
+    updateFormVBSite,
+    getChargingAllocation,
+    getFilteredAllocations
 };

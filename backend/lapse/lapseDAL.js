@@ -103,8 +103,8 @@ class LapseDAL {
             
             this.validateSortKey(sk);
             
-            // Extract c1-c5 from updates or from allocated if present
-            const { allocated, ...restUpdates } = updates;
+            // Extract only the fields we want to update
+            const { allocated, charge, ...restUpdates } = updates;
             const cValues = {
                 c1: 0,
                 c2: 0,

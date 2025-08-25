@@ -38,8 +38,9 @@ class BankingDAL {
             
             // If record exists, update it with new values (don't add to existing values)
             if (existingBanking) {
+                const { charge, ...itemWithoutCharge } = item;
                 const updateData = {
-                    ...item,
+                    ...itemWithoutCharge,
                     // Use new values directly, don't add to existing
                     c1: Number(item.c1 || 0),
                     c2: Number(item.c2 || 0),
@@ -58,8 +59,9 @@ class BankingDAL {
             }
             
             // If no existing record, create a new one
+            const { charge, ...itemWithoutCharge } = item;
             const bankingItem = {
-                ...item,
+                ...itemWithoutCharge,
                 // Use provided values directly
                 c1: Number(item.c1 || 0),
                 c2: Number(item.c2 || 0),
@@ -143,7 +145,7 @@ class BankingDAL {
             
             // Process each update field
             for (const [key, value] of Object.entries(updates)) {
-                if (['pk', 'sk', 'updatedAt', 'version'].includes(key)) continue;
+                if (['pk', 'sk', 'updatedAt', 'version', 'charge'].includes(key)) continue;
                 
                 // Handle special cases for c1-c5 to ensure they're numbers
                 const processedValue = key.match(/^c[1-5]$/) ? (Number(value) || 0) : value;

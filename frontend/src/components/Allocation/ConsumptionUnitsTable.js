@@ -349,7 +349,7 @@ const ConsumptionUnitsTable = ({
           setSplitPercentages(percentages);
         } else {
           // Fallback to equal split if no shareholdings found
-          console.log('No shareholdings found for company:', companyId);
+          
           initializeEqualSplitPercentages(sites.length);
         }
       } catch (error) {

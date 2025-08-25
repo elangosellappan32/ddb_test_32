@@ -11,6 +11,14 @@ class AllocationApi {
         const c3 = data.c3 !== undefined ? data.c3 : allocated.c3 || 0;
         const c4 = data.c4 !== undefined ? data.c4 : allocated.c4 || 0;
         const c5 = data.c5 !== undefined ? data.c5 : allocated.c5 || 0;
+        
+        // Handle charge attribute, convert to number (1/0) for backend
+        // Check both data.charge and allocated.charge, ensure boolean conversion
+        const charge = data.charge !== undefined ? 
+            (data.charge === true || data.charge === 1) : 
+            (allocated.charge === true || allocated.charge === 1);
+        const chargeValue = charge ? 1 : 0;
+
         // Build payload with c1-c5 at root
         const payload = {
             companyId: data.companyId,
@@ -21,9 +29,16 @@ class AllocationApi {
             c3: Math.max(0, Math.round(Number(c3) || 0)),
             c4: Math.max(0, Math.round(Number(c4) || 0)),
             c5: Math.max(0, Math.round(Number(c5) || 0)),
-            // Charge defaults to false and will be handled by the backend
-            // The frontend will need to ensure only one allocation per month has charge=true
-            charge: Boolean(data.charge)
+            charge: chargeValue,
+            // Include allocated object for consistency
+            allocated: {
+                c1: Math.max(0, Math.round(Number(c1) || 0)),
+                c2: Math.max(0, Math.round(Number(c2) || 0)),
+                c3: Math.max(0, Math.round(Number(c3) || 0)),
+                c4: Math.max(0, Math.round(Number(c4) || 0)),
+                c5: Math.max(0, Math.round(Number(c5) || 0)),
+                charge: chargeValue
+            }
         };
         const t = (type || data.type || 'ALLOCATION').toUpperCase();
         if (t === 'ALLOCATION') {
@@ -41,10 +56,17 @@ class AllocationApi {
         return payload;
     }
 
-    async fetchAll(month, companyId) {
+    async fetchAll(month, companyId, options = {}) {
         try {
-            // Construct the URL with company ID as a query parameter
-            const endpoint = `${API_CONFIG.ENDPOINTS.ALLOCATION.BASE}/month/${month}${companyId ? `?companyId=${companyId}` : ''}`;
+            // Construct the URL with query parameters
+            const queryParams = [];
+            if (companyId) queryParams.push(`companyId=${companyId}`);
+            if (options.charge !== undefined) queryParams.push(`charge=${options.charge ? 1 : 0}`);
+            
+            const endpoint = `${API_CONFIG.ENDPOINTS.ALLOCATION.BASE}/month/${month}${
+                queryParams.length ? '?' + queryParams.join('&') : ''
+            }`;
+            
             const response = await api.get(endpoint);
             
             // Filter allocations by company ID if provided
@@ -53,10 +75,22 @@ class AllocationApi {
                 return (items || []).filter(item => item.companyId === companyId);
             };
             
+            // Transform charge values to boolean
+            const transformCharge = (items) => {
+                return (items || []).map(item => ({
+                    ...item,
+                    charge: item.charge === 1 || item.charge === true,
+                    allocated: item.allocated ? {
+                        ...item.allocated,
+                        charge: item.allocated.charge === 1 || item.allocated.charge === true
+                    } : undefined
+                }));
+            };
+            
             return {
-                allocations: filterByCompany(response.data?.data),
-                banking: filterByCompany(response.data?.banking),
-                lapse: filterByCompany(response.data?.lapse)
+                allocations: transformCharge(filterByCompany(response.data?.data)),
+                banking: transformCharge(filterByCompany(response.data?.banking)),
+                lapse: transformCharge(filterByCompany(response.data?.lapse))
             };
         } catch (error) {
             throw this.handleError(error);
@@ -77,7 +111,7 @@ class AllocationApi {
         }
     }
 
-    async fetchByType(type, month, companyId) {
+    async fetchByType(type, month, companyId, options = {}) {
         try {
             const typeMap = {
                 'allocations': API_CONFIG.ENDPOINTS.ALLOCATION.BASE,
@@ -90,30 +124,32 @@ class AllocationApi {
                 throw new Error(`Invalid allocation type: ${type}`);
             }
             
-            // Add company ID as query parameter if provided
+            // Build query parameters
             const queryParams = [];
             if (month) queryParams.push(`month=${month}`);
             if (companyId) queryParams.push(`companyId=${companyId}`);
+            if (options.charge !== undefined) queryParams.push(`charge=${options.charge ? 1 : 0}`);
             
             const queryString = queryParams.length > 0 ? `?${queryParams.join('&')}` : '';
             const url = `${endpoint}${queryString}`;
             
-            
-            const response = await api.get(url).catch(error => {
-                if (error.response) {
-                }
-                throw error;
-            });
-            
-            
+            const response = await api.get(url);
             const data = response.data?.data || [];
             
-            // Apply company filter if needed
+            // Apply filters and transform data
             const filteredData = companyId 
                 ? data.filter(item => item.companyId === companyId)
                 : data;
-                
-            return filteredData;
+            
+            // Transform charge values to boolean
+            return filteredData.map(item => ({
+                ...item,
+                charge: item.charge === 1 || item.charge === true,
+                allocated: item.allocated ? {
+                    ...item.allocated,
+                    charge: item.allocated.charge === 1 || item.allocated.charge === true
+                } : undefined
+            }));
         } catch (error) {
             throw error;
         } finally {
@@ -242,7 +278,17 @@ class AllocationApi {
             }
 
             const response = await api.get(getEndpoint);
-            return response.data;
+            const data = response.data;
+
+            // Transform charge values to boolean
+            return {
+                ...data,
+                charge: data.charge === 1 || data.charge === true,
+                allocated: data.allocated ? {
+                    ...data.allocated,
+                    charge: data.allocated.charge === 1 || data.allocated.charge === true
+                } : undefined
+            };
         } catch (error) {
             // Return null if record not found
             if (error.response?.status === 404) {

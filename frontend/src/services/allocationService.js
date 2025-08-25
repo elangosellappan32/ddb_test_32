@@ -20,7 +20,7 @@ class AllocationService {
         );
     }
 
-    validateAllocation(allocation) {
+    validateAllocation(allocation, existingAllocations = []) {
         const errors = [];
         if (!allocation?.allocated) {
             errors.push('No allocation data provided');
@@ -37,10 +37,25 @@ class AllocationService {
 
         // Check for negative values
         Object.entries(allocation.allocated).forEach(([period, value]) => {
-            if (Number(value) < 0) {
+            if (period !== 'charge' && Number(value) < 0) {
                 errors.push(`Period ${period} cannot have negative value`);
             }
         });
+
+        // Validate charge attribute
+        if (allocation.allocated.charge || allocation.charge) {
+            // Check if another allocation for the same month is already charged
+            const hasExistingCharge = existingAllocations.some(existing => 
+                existing.sk === allocation.sk && // Same month
+                existing.pk !== allocation.pk && // Different allocation
+                (existing.charge === 1 || existing.charge === true || 
+                 existing.allocated?.charge === 1 || existing.allocated?.charge === true)
+            );
+
+            if (hasExistingCharge) {
+                errors.push('Another allocation is already marked as charged for this month');
+            }
+        }
 
         return {
             isValid: errors.length === 0,
@@ -51,7 +66,10 @@ class AllocationService {
 
     async createAllocation(data) {
         try {
-            const validation = this.validateAllocation(data);
+            // Get existing allocations for the same month to validate charge
+            const existingAllocations = await this.fetchAllocationsByMonth(data.sk);
+            
+            const validation = this.validateAllocation(data, existingAllocations);
             if (!validation.isValid) {
                 throw new Error(validation.errors.join(', '));
             }
@@ -79,7 +97,10 @@ class AllocationService {
 
     async updateAllocation(pk, sk, data) {
         try {
-            const validation = this.validateAllocation(data);
+            // Get existing allocations for the same month to validate charge
+            const existingAllocations = await this.fetchAllocationsByMonth(data.sk);
+            
+            const validation = this.validateAllocation(data, existingAllocations);
             if (!validation.isValid) {
                 throw new Error(validation.errors.join(', '));
             }

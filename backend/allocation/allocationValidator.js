@@ -5,6 +5,7 @@ const validateAllocation = (req, res, next) => {
         const allocation = req.body;
         const allocations = Array.isArray(allocation) ? allocation : [allocation];
         const errors = [];
+        const monthChargeMap = new Map(); // Track charge=1 allocations by month
 
         for (const alloc of allocations) {
             const type = (alloc.type || 'ALLOCATION').toUpperCase();
@@ -30,10 +31,15 @@ const validateAllocation = (req, res, next) => {
                 validationErrors.push(`Missing required fields: ${missingFields.join(', ')}`);
             }
 
-            // Coerce all allocation periods to numbers (default 0)
+            // Coerce all allocation periods to numbers (default 0) and validate
             const periods = ['c1', 'c2', 'c3', 'c4', 'c5'];
+            let totalAllocation = 0;
             periods.forEach(p => {
                 alloc[p] = Number(alloc[p]) || 0;
+                if (alloc[p] < 0) {
+                    validationErrors.push(`${p} cannot be negative`);
+                }
+                totalAllocation += alloc[p];
             });
 
             // Set defaults for banking and lapse
@@ -41,10 +47,29 @@ const validateAllocation = (req, res, next) => {
                 alloc.bankingEnabled = true;
             }
             
-            // For new allocations, default charge to false
-            // We'll set it to true only if it's explicitly set to true and no other allocation has charge=true for this month
+            // Handle charge attribute
             if (alloc.charge === undefined) {
-                alloc.charge = false;
+                alloc.charge = 0;  // Default to 0 (no charge)
+            } else {
+                // Convert charge to number (0 or 1)
+                alloc.charge = alloc.charge === true || alloc.charge === 1 ? 1 : 0;
+            }
+
+            // Additional charge validations
+            if (alloc.charge === 1) {
+                if (totalAllocation === 0) {
+                    validationErrors.push('Cannot set charge=1 for an allocation with zero units');
+                }
+
+                // Check for unique charge=1 per month
+                if (monthChargeMap.has(alloc.sk)) {
+                    const existingChargePk = monthChargeMap.get(alloc.sk);
+                    if (existingChargePk !== alloc.pk) {
+                        validationErrors.push(`Month ${alloc.sk} already has an allocation with charge=1`);
+                    }
+                } else {
+                    monthChargeMap.set(alloc.sk, alloc.pk);
+                }
             }
 
             if (validationErrors.length > 0) {

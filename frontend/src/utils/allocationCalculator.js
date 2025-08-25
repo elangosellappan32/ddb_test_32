@@ -22,6 +22,9 @@ function createUnitWithRemaining(unit, isProduction = false) {
     acc[period] = Number(unit[period] || 0);
     return acc;
   }, {});
+  
+  // Initialize charge separately
+  const charge = Number(unit.charge || 0);
 
   // Enhanced bankingEnabled detection with multiple fallbacks
   let bankingEnabled = false;
@@ -45,17 +48,6 @@ function createUnitWithRemaining(unit, isProduction = false) {
     });
   }
 
-  console.group(`[createUnitWithRemaining] Created ${isProduction ? 'production' : 'consumption'} unit`);
-  console.log('Unit ID:', unit.id);
-  console.log('Type:', unit.type);
-  console.log('Banking Enabled:', bankingEnabled);
-  console.log('Remaining:', remaining);
-  console.log('Source Data:', {
-    banking: unit.banking,
-    bankingEnabled: unit.bankingEnabled,
-    isProduction
-  });
-  console.groupEnd();
 
   // Create the unit with all necessary properties
   const result = {
@@ -67,6 +59,7 @@ function createUnitWithRemaining(unit, isProduction = false) {
     companyId: unit.companyId,
     month: unit.month,
     remaining,
+    charge,
     bankingEnabled,
     // Preserve original data for debugging
     _original: { ...unit },
@@ -90,20 +83,71 @@ function applyShareholding(amount, companyId, sharePercentMap) {
   return Math.floor((amount * share) / 100);
 }
 
-function createAllocationRecord(prod, cons, month) {
-  return {
-    productionSiteId: prod.productionSiteId,
-    productionSite: prod.siteName,
-    consumptionSiteId: cons?.consumptionSiteId || '',
-    consumptionSite: cons?.siteName || '',
-    siteType: prod.type,
-    siteName: prod.siteName,
-    month,
+function createAllocationRecord(prod = {}, cons = {}, month = '') {
+  // Ensure prod is an object
+  if (!prod || typeof prod !== 'object') {
+    console.error('Invalid production unit in createAllocationRecord:', prod);
+    prod = {};
+  }
+  
+  // Initialize allocated with default values
+  const allocated = Object.fromEntries(ALL_PERIODS.map(p => [p, 0]));
+  
+  // Safely get charge value with proper defaults
+  const chargeValue = Number(
+    prod.charge ?? 
+    prod.allocated?.charge ?? 
+    (typeof prod.allocated === 'object' ? prod.allocated.charge : undefined) ?? 
+    0
+  );
+  
+  // Set charge in allocated if we have a valid number
+  if (!isNaN(chargeValue)) {
+    allocated.charge = Math.max(0, chargeValue);
+  }
+  
+  // Calculate total units for charge distribution
+  const totalUnits = ALL_PERIODS.reduce((sum, p) => {
+    const units = Number(prod[p] || 0) || 0;
+    return sum + (units > 0 ? units : 0);
+  }, 0);
+  
+  // Distribute charge proportionally to each period if we have charge and units
+  if (totalUnits > 0 && allocated.charge && allocated.charge > 0) {
+    const chargePerUnit = allocated.charge / totalUnits;
+    
+    ALL_PERIODS.forEach(p => {
+      const units = Number(prod[p] || 0) || 0;
+      if (units > 0) {
+        allocated[`${p}_charge`] = units * chargePerUnit;
+      }
+    });
+  }
+  
+  // Build the result with proper fallbacks
+  const result = {
+    productionSiteId: prod.productionSiteId || '',
+    productionSite: prod.siteName || prod.productionSite || '',
+    consumptionSiteId: cons?.consumptionSiteId || cons?.id || '',
+    consumptionSite: cons?.siteName || cons?.consumptionSite || cons?.name || '',
+    siteType: prod.type || prod.siteType || 'GENERATION',
+    siteName: prod.siteName || prod.productionSite || 'Unknown Site',
+    month: month || new Date().toISOString().slice(0, 7).replace('-', ''),
     type: 'ALLOCATION',
-    allocated: Object.fromEntries(ALL_PERIODS.map(p => [p, 0])),
+    allocated: { ...allocated },
+    charge: allocated.charge || 0,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString()
   };
+  
+  // Copy any additional properties from prod
+  Object.entries(prod).forEach(([key, value]) => {
+    if (!(key in result) && key !== 'allocated') {
+      result[key] = value;
+    }
+  });
+  
+  return result;
 }
 
 export function calculateAllocations({
@@ -168,7 +212,16 @@ export function calculateAllocations({
 
           const available = prod.remaining[period];
           const needed = cons.remaining[period];
-          const alloc = Math.min(available, needed);
+          let alloc = Math.min(available, needed);
+          
+          // Calculate charge if present
+          let charge = 0;
+          if (prod.charge && prod.charge > 0) {
+            // Apply charge proportionally to the allocation
+            charge = (alloc / available) * prod.charge;
+            console.log(`[allocate] Applying charge of ${charge} for allocation of ${alloc} units`);
+          }
+          
           const finalAlloc = applyShareholding(alloc, prod.companyId, shareMap);
 
           if (finalAlloc <= 0) continue;
@@ -197,6 +250,13 @@ export function calculateAllocations({
 
           // Update the allocation for this period
           record.allocated[period] = (record.allocated[period] || 0) + finalAlloc;
+          
+          // Add charge to the record if it exists
+          if (charge > 0) {
+            record.allocated.charge = (record.allocated.charge || 0) + charge;
+            console.log(`[allocate] Added charge of ${charge} to allocation (total charge: ${record.allocated.charge})`);
+          }
+          
           console.log(`[allocate] Added ${finalAlloc} units to period ${period} (total: ${record.allocated[period]})`);
         }
       }
