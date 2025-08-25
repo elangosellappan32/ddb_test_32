@@ -98,6 +98,8 @@ const InvoicePage = () => {
   const [invoiceData, setInvoiceData] = useState({
     allocationData: [],
     chargeData: [],
+    siteMaps: { production: {}, consumption: {} },
+    meta: { financialYear: '', month: '' }
   });
 
   const [loading, setLoading] = useState(true);
@@ -111,37 +113,45 @@ const InvoicePage = () => {
   const [invoice, setInvoice] = useState(null);
   const [generatingInvoice, setGeneratingInvoice] = useState(false);
 
-  const fetchInvoiceData = useCallback(
-    async (date) => {
-      if (!isAuthenticated || !user) return;
+  const fetchInvoiceData = useCallback(async (date) => {
+    if (!user || !date) return;
 
-      setLoading(true);
-      setError(null);
+    setLoading(true);
+    setError(null);
 
-      try {
-        const [allocationResult, chargeResult] = await Promise.all([
-          fetchAndProcessInvoiceData(user, date),
-          fetchProductionChargesForMonth(user, user.companyId, null, date),
-        ]);
+    try {
+      const month = format(date, 'MM');
+      const year = format(date, 'yyyy');
+      
+      // Fetch both allocation and charge data in parallel
+      const [allocationResponse, chargeResponse] = await Promise.all([
+        fetchAndProcessInvoiceData(user, date),
+        fetchProductionChargesForMonth(user, user.companyId, null, date)
+      ]);
 
-        setInvoiceData({
-          allocationData: allocationResult.data || [],
-          chargeData: (chargeResult && chargeResult.success) ? chargeResult.data : [],
-        });
+      // Process allocation data to include charge status
+      const processedAllocations = (allocationResponse.data || []).map(item => ({
+        ...item,
+        // Ensure charge is a boolean for consistency
+        charge: Boolean(item.charge)
+      }));
 
-        if (!(chargeResult && chargeResult.success)) {
-          enqueueSnackbar('Warning: Issue loading production charges.', { variant: 'warning' });
-        }
-      } catch (err) {
-        const errMsg = err.message || 'Failed to load invoice data.';
-        setError(errMsg);
-        enqueueSnackbar(errMsg, { variant: 'error' });
-      } finally {
-        setLoading(false);
-      }
-    },
-    [isAuthenticated, user, enqueueSnackbar]
-  );
+      setInvoiceData({
+        allocationData: processedAllocations,
+        chargeData: chargeResponse.data || [],
+        siteMaps: allocationResponse.siteMaps || { production: {}, consumption: {} },
+        meta: allocationResponse.meta || { financialYear: '', month: '' }
+      });
+
+      enqueueSnackbar('Invoice data loaded successfully', { variant: 'success' });
+    } catch (error) {
+      console.error('Error fetching invoice data:', error);
+      setError(error.message || 'Failed to fetch invoice data');
+      enqueueSnackbar(error.message || 'Failed to fetch invoice data', { variant: 'error' });
+    } finally {
+      setLoading(false);
+    }
+  }, [user]);
 
   useEffect(() => {
     if (!authLoading && isAuthenticated) {
@@ -180,7 +190,7 @@ const InvoicePage = () => {
 
       if (error) throw new Error(error);
 
-setInvoice({
+      setInvoice({
         ...generatedInvoice,
         company: {
           name: user.companyName || 'Your Company',
@@ -217,25 +227,73 @@ setInvoice({
     enqueueSnackbar('PDF download will be implemented here', { variant: 'info' });
   };
 
+  const handleEditAllocation = (allocation) => {
+    // Navigate to edit page or open edit modal
+    enqueueSnackbar(
+      allocation 
+        ? `Edit allocation for ${allocation.productionSiteName} to ${allocation.consumptionSiteName}`
+        : 'Create new allocation',
+      { variant: 'info' }
+    );
+    // TODO: Implement edit functionality
+    console.log('Edit allocation:', allocation);
+  };
+
+  const handleDeleteAllocation = async (allocation) => {
+    if (!allocation || !window.confirm(`Are you sure you want to delete this allocation?`)) {
+      return;
+    }
+
+    try {
+      // TODO: Call your API to delete the allocation
+      // await allocationService.deleteAllocation(allocation.id);
+      
+      // Update local state to remove the deleted allocation
+      setInvoiceData(prev => ({
+        ...prev,
+        allocationData: prev.allocationData.filter(
+          item => item.productionSiteId !== allocation.productionSiteId || 
+                 item.consumptionSiteId !== allocation.consumptionSiteId
+        )
+      }));
+
+      enqueueSnackbar('Allocation deleted successfully', { variant: 'success' });
+    } catch (error) {
+      console.error('Error deleting allocation:', error);
+      enqueueSnackbar(error.message || 'Failed to delete allocation', { variant: 'error' });
+    }
+  };
+
   return (
     <PageWrapper maxWidth="lg">
       <HeaderBox>
         <SectionTitle variant="h4" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <ReceiptIcon fontSize="large" />
-          Invoice Summary
+          Invoice Management
         </SectionTitle>
-        <LocalizationProvider dateAdapter={AdapterDateFns}>
-          <DatePicker
-            views={['year', 'month']}
-            label="Select Month"
-            value={selectedDate}
-            onChange={handleDateChange}
-            disableFuture
-            renderInput={(params) => (
-              <Box sx={{ minWidth: isMobile ? '100%' : 200 }}>{params.input}</Box>
+        <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+          <LocalizationProvider dateAdapter={AdapterDateFns}>
+            <DatePicker
+              views={['year', 'month']}
+              label="Select Month & Year"
+              value={selectedDate}
+              onChange={handleDateChange}
+              renderInput={(params) => (
+                <Box sx={{ minWidth: 200 }}>
+                  {params.inputProps?.ref ? (
+                    <input {...params.inputProps} readOnly />
+                  ) : null}
+                  {params.InputProps?.endAdornment}
+                </Box>
+              )}
+            />
+          </LocalizationProvider>
+          <Typography variant="body1" sx={{ fontWeight: 'medium' }}>
+            {invoiceData.meta.financialYear && (
+              `Financial Year: ${invoiceData.meta.financialYear}`
             )}
-          />
-        </LocalizationProvider>
+          </Typography>
+        </Box>
       </HeaderBox>
 
       {loading || authLoading ? (
@@ -252,31 +310,33 @@ setInvoice({
             Retry
           </ActionButton>
         </Box>
-      ) : (!invoiceData.allocationData?.length && !invoiceData.chargeData?.length) ? (
-        <Box>
-          <Typography variant="h6" gutterBottom>
-            No Invoice Data Available
-          </Typography>
-          <Typography variant="body2" gutterBottom>
-            No invoice data found for the selected period.
-          </Typography>
-          <ActionButton variant="contained" color="primary" onClick={() => fetchInvoiceData(selectedDate)}>
-            Refresh
-          </ActionButton>
-        </Box>
       ) : (
         <>
           <Box sx={{ borderTop: '1px solid black', pt: 2, mb: 4, width: '100%' }}>
             <StyledPaper sx={{ width: '100%', overflow: 'hidden' }}>
-              <Typography variant="h5" gutterBottom>
-                Allocation Data
-              </Typography>
-              <Box sx={{ borderBottom: '1px solid black', pb: 2, mb: 2 }} />
-              {invoiceData.allocationData.length > 0 ? (
-                <AllocationTable data={invoiceData.allocationData} />
-              ) : (
-                <Typography>No allocation data available.</Typography>
-              )}
+              <Box sx={{ mb: 4 }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                  <Typography variant="h5" gutterBottom>
+                    Allocation Data
+                  </Typography>
+                  <Box sx={{ display: 'flex', gap: 2 }}>
+                    <Button 
+                      variant="outlined" 
+                      color="primary"
+                      onClick={() => handleEditAllocation(null)}
+                      disabled={loading}
+                    >
+                      Add New Allocation
+                    </Button>
+                  </Box>
+                </Box>
+                <AllocationTable 
+                  data={invoiceData.allocationData}
+                  onEdit={handleEditAllocation}
+                  onDelete={handleDeleteAllocation}
+                  loading={loading}
+                />
+              </Box>
             </StyledPaper>
           </Box>
 

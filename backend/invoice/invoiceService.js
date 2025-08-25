@@ -7,7 +7,7 @@ const logger = require('../utils/logger');
 const allocationDAL = new AllocationDAL();
 
 // C Values
-const C_VALUES = ['C1', 'C2', 'C3', 'C4', 'C5'];
+const C_VALUES = ['C1', 'C2', 'C3', 'C4', 'C5','charge'];
 
 /**
  * Get C value (simple passthrough, no range checking)
@@ -36,17 +36,24 @@ const processAllocation = (alloc) => {
         consSiteId = parts[2];
     }
     
-    // Initialize C values with 0
+    // Initialize with default values from the allocation or 0
     const cValues = {
-        C1: 0,
-        C2: 0,
-        C3: 0,
-        C4: 0,
-        C5: 0
+        C1: alloc.allocated?.C1 || alloc.allocated?.c1 || 0,
+        C2: alloc.allocated?.C2 || alloc.allocated?.c2 || 0,
+        C3: alloc.allocated?.C3 || alloc.allocated?.c3 || 0,
+        C4: alloc.allocated?.C4 || alloc.allocated?.c4 || 0,
+        C5: alloc.allocated?.C5 || alloc.allocated?.c5 || 0,
+        charge: alloc.charge || 0
     };
 
     // Process each C value from the allocation
     C_VALUES.forEach(cKey => {
+        if (cKey !== 'charge') {  // Skip charge as it's handled separately
+            const value = alloc.allocated?.[cKey] || alloc.allocated?.[cKey.toLowerCase()];
+            if (value !== undefined) {
+                cValues[cKey] = Number(value) || 0;
+            }
+        }
         // Try both uppercase and lowercase variations
         const lowerKey = cKey.toLowerCase();
         const value = Number(alloc[cKey] || alloc[lowerKey] || 0);

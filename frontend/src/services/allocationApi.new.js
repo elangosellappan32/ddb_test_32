@@ -160,9 +160,9 @@ class AllocationApi {
     }
 
     async createBanking(data) {
-        let formattedData = this.formatAllocationData(data, 'BANKING');
-        
         try {
+            const formattedData = this.formatAllocationData(data, 'BANKING');
+            
             if (formattedData.pk && formattedData.sk) {
                 const existingRecord = await this.get(formattedData.pk, formattedData.sk, 'BANKING').catch(() => null);
                 if (existingRecord) {

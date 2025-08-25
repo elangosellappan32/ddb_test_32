@@ -1,28 +1,97 @@
 import { getAccessibleSiteIds } from './siteAccessUtils';
 import productionSiteApi from '../services/productionSiteApi';
-import productionChargeApi from '../services/productionChargeApi';
 import consumptionSiteApi from '../services/consumptionSiteApi';
+import productionChargeApi from '../services/productionChargeApi';
 import api from '../services/api';
 import { format } from 'date-fns';
 
-// Helper: Normalize allocation cValues keys to lowercase c1-c5
-export function normalizeAllocationCValues(cValues = {}) {
-  const normalized = {};
-  ['1', '2', '3', '4', '5'].forEach(num => {
-    const keysToTry = [`C${num}`, `c${num}`, `C0${num}`, `c0${num}`];
-    let value = 0;
-    for (const key of keysToTry) {
-      if (key in cValues && cValues[key] !== undefined && cValues[key] !== null) {
-        value = Number(cValues[key]) || 0;
-        break;
+/**
+ * Process allocation data to ensure consistent format
+ * @param {Object} item - Raw allocation item from API
+ * @returns {Object} Processed allocation with consistent structure
+ */
+const processAllocationItem = (item) => {
+  console.group('Processing Allocation Item');
+  console.log('Raw input item:', JSON.parse(JSON.stringify(item)));
+  
+  // If item is already processed by allocationService, return as is
+  if (item.cValues && typeof item.cValues === 'object' && 'c1' in item.cValues) {
+    console.log('Item already processed, returning as is');
+    console.groupEnd();
+    return item;
+  }
+
+  // Handle both direct and nested allocated values
+  const source = item.original || item;
+  const allocated = source.allocated || source.cValues || {};
+  console.log('Source object:', JSON.parse(JSON.stringify(source)));
+  console.log('Allocated values:', JSON.parse(JSON.stringify(allocated)));
+  
+  // Helper to safely get a value with case-insensitive keys
+  const getValue = (obj, keys, defaultValue = 0, valueName = 'value') => {
+    if (!obj) {
+      console.log(`No object provided for ${valueName}, using default:`, defaultValue);
+      return defaultValue;
+    }
+    
+    const keyVariations = [
+      ...keys.flatMap(k => [k, k.toLowerCase(), k.toUpperCase()]),
+      ...keys.flatMap(k => [`c${k}`, `C${k}`])
+    ];
+    
+    console.log(`Searching for ${valueName} in keys:`, keyVariations);
+    
+    for (const key of keyVariations) {
+      if (obj[key] !== undefined && obj[key] !== null) {
+        console.log(`Found ${valueName} at key '${key}':`, obj[key]);
+        return obj[key];
       }
     }
-    normalized[`c${num}`] = value;
-  });
-  return normalized;
-}
+    
+    console.log(`No matching key found for ${valueName}, using default:`, defaultValue);
+    return defaultValue;
+  };
 
-// Helper: Normalize charge cValues keys to uppercase C001-C010
+  // Extract C values with proper fallbacks
+  const cValues = {
+    c1: Number(getValue(allocated, ['1', 'c1', 'C1'], 0, 'c1')),
+    c2: Number(getValue(allocated, ['2', 'c2', 'C2'], 0, 'c2')),
+    c3: Number(getValue(allocated, ['3', 'c3', 'C3'], 0, 'c3')),
+    c4: Number(getValue(allocated, ['4', 'c4', 'C4'], 0, 'c4')),
+    c5: Number(getValue(allocated, ['5', 'c5', 'C5'], 0, 'c5')),
+    // Check both source and allocated for charge value, with proper type conversion
+    charge: source.charge !== undefined ? (source.charge === true || source.charge === 1 ? 1 : 0) :
+           (allocated.charge !== undefined ? (allocated.charge === true || allocated.charge === 1 ? 1 : 0) : 0)
+  };
+  
+  console.log('Processed cValues:', cValues);
+
+  // Calculate total allocation (excluding charge)
+  const totalAllocation = Object.entries(cValues)
+    .filter(([key]) => key !== 'charge')
+    .reduce((sum, [_, value]) => sum + (Number(value) || 0), 0);
+
+  const result = {
+    ...item,
+    cValues,
+    charge: cValues.charge === 1,  // Convert to boolean for consistency
+    total: Object.entries(cValues)
+      .filter(([key]) => key !== 'charge') // Exclude charge from total calculation
+      .reduce((sum, [_, val]) => sum + (typeof val === 'number' ? val : 0), 0),
+    // Ensure allocated object has the charge value for backward compatibility
+    allocated: {
+      ...(item.allocated || {}),
+      charge: cValues.charge
+    }
+  };
+  
+  console.log('Final processed item:', JSON.parse(JSON.stringify(result)));
+  console.groupEnd();
+  
+  return result;
+};
+
+// Helper: Normalize charge cValues keys to uppercase C001-C011
 export function normalizeChargeCValues(cValues = {}) {
   const normalized = {};
   for (let i = 1; i <= 11; i++) {
@@ -41,16 +110,14 @@ export function normalizeChargeCValues(cValues = {}) {
 }
 
 /**
- * Fetches and processes allocation invoice data for a given month
- * Normalizes allocation cValues keys to lowercase c1-c5
+ * Fetches and processes allocation invoice data for a given month.
+ * Normalizes allocation cValues keys to lowercase c1-c5 and includes charge flag.
  */
-export const fetchAndProcessInvoiceData = async (user, date) => {
+export const fetchAndProcessInvoiceData = async (user, date, { onlyCharging = false } = {}) => {
   try {
     // Get accessible site IDs for production and consumption
     const prodIds = getAccessibleSiteIds(user, 'production');
     const consIds = getAccessibleSiteIds(user, 'consumption');
-
-    // Extract raw IDs if prefixed
     const extractSiteId = (id) => (id && id.includes('_') ? id.split('_')[1] : id);
     const accessibleProdIds = prodIds.map(extractSiteId);
     const accessibleConsIds = consIds.map(extractSiteId);
@@ -73,40 +140,68 @@ export const fetchAndProcessInvoiceData = async (user, date) => {
 
     // Format date as YYYYMM for API request
     const formattedDate = format(date, 'yyyyMM');
-
-    // Prepare combined unique site IDs
     const allSiteIds = [...new Set([...accessibleProdIds, ...accessibleConsIds])];
 
     // Fetch invoice data from API
     const response = await api.get(`/invoice/${formattedDate}`, {
       params: { sites: allSiteIds.join(',') },
     });
-    
     if (!response.data?.success) {
       throw new Error(response.data?.message || 'Failed to fetch invoice data');
     }
 
-    // Process and normalize the data
-    const processedData = [];
+    // Process main "data" allocations
+    let processedData = [];
     const seenKeys = new Set();
 
-    (response.data.data || [])
-      .filter(item => accessibleProdIds.includes(String(item.productionSiteId)))
-      .forEach(item => {
-        const key = `${item.productionSiteId}-${item.consumptionSiteId}`;
-        if (!seenKeys.has(key)) {
+    if (Array.isArray(response.data?.data)) {
+      processedData = response.data.data
+        .filter(item => {
+          const prodId = String(item.productionSiteId || item.productionSiteId || '');
+          const consId = String(item.consumptionSiteId || item.consumptionSiteId || '');
+          return accessibleProdIds.includes(prodId) && accessibleConsIds.includes(consId);
+        })
+        .map(item => {
+          // Process the allocation item
+          const processedItem = processAllocationItem(item);
+          
+          // Create a stable key to prevent duplicates
+          const key = `${processedItem.productionSiteId}-${processedItem.consumptionSiteId}`;
+          if (seenKeys.has(key)) return null;
           seenKeys.add(key);
-          const normalizedCValues = normalizeAllocationCValues(item.cValues);
-          processedData.push({
-            productionSiteId: item.productionSiteId,
-            productionSiteName: prodMap[item.productionSiteId] || `Site ${item.productionSiteId}`,
-            consumptionSiteId: item.consumptionSiteId,
-            consumptionSiteName: consMap[item.consumptionSiteId] || `Site ${item.consumptionSiteId}`,
-            cValues: normalizedCValues,
-            total: item.totalAllocation || 0,
-          });
-        }
-      });
+          
+          return {
+            ...processedItem,
+            productionSiteName: prodMap[String(processedItem.productionSiteId)] || `Site ${processedItem.productionSiteId}`,
+            consumptionSiteName: consMap[String(processedItem.consumptionSiteId)] || `Site ${processedItem.consumptionSiteId}`,
+            // Ensure we have all required fields with proper defaults
+            productionSiteId: processedItem.productionSiteId || item.productionSiteId,
+            consumptionSiteId: processedItem.consumptionSiteId || item.consumptionSiteId,
+            // Ensure cValues is properly structured
+            cValues: {
+              c1: Number(processedItem.cValues?.c1 || 0),
+              c2: Number(processedItem.cValues?.c2 || 0),
+              c3: Number(processedItem.cValues?.c3 || 0),
+              c4: Number(processedItem.cValues?.c4 || 0),
+              c5: Number(processedItem.cValues?.c5 || 0),
+              charge: Number(processedItem.cValues?.charge || 0)
+            },
+            // Ensure charge is properly set
+            charge: Boolean(processedItem.charge || processedItem.cValues?.charge),
+            // Ensure totals are calculated
+            total: processedItem.total || processedItem.totalAllocation || 0,
+            totalAllocation: processedItem.totalAllocation || processedItem.total || 0,
+            // Preserve original data for reference
+            original: processedItem.original || item
+          };
+        })
+        .filter(Boolean); // Remove any null entries from duplicates
+    }
+
+    // Optionally filter only charging data from the main allocations
+    if (onlyCharging) {
+      processedData = processedData.filter(rec => rec.charge === true || rec.charge === 1);
+    }
 
     return {
       data: processedData,
@@ -126,9 +221,10 @@ export const fetchAndProcessInvoiceData = async (user, date) => {
   }
 };
 
+
 /**
- * Fetches production charge data for a specific month
- * Normalizes charge cValues keys to uppercase C001-C011 format
+ * Fetches production charge data for a specific month.
+ * Normalizes charge cValues keys to uppercase C001-C011 format.
  */
 export const fetchProductionChargesForMonth = async (user, companyId, productionSiteId, date) => {
   console.group('fetchProductionChargesForMonth');
@@ -139,21 +235,18 @@ export const fetchProductionChargesForMonth = async (user, companyId, production
 
     // Get accessible production site IDs
     const accessibleSiteIds = getAccessibleSiteIds(user, 'production');
-
-    // Validate access if specific site ID is given
     if (productionSiteId) {
-      const hasAccess = accessibleSiteIds.includes(productionSiteId) ||
+      const hasAccess =
+        accessibleSiteIds.includes(productionSiteId) ||
         accessibleSiteIds.some(id => id.endsWith(`_${productionSiteId}`));
       if (!hasAccess) {
         throw new Error('You do not have access to this production site');
       }
     }
-
     const yearMonth = format(date, 'MMyyyy');
     const sitesToFetch = productionSiteId ? [productionSiteId] : accessibleSiteIds;
     const allCharges = [];
 
-    // Fetch charges from each site
     for (const siteId of sitesToFetch) {
       try {
         const siteIdOnly = siteId.includes('_') ? siteId.split('_')[1] : siteId;
@@ -176,30 +269,9 @@ export const fetchProductionChargesForMonth = async (user, companyId, production
       return chargeDate === yearMonth;
     });
 
-    // Helper function to safely parse dates (ISO string)
-    const safeParseDate = (dateStr) => {
-      try {
-        if (!dateStr) return new Date().toISOString();
-        if (dateStr instanceof Date && !isNaN(dateStr)) return dateStr.toISOString();
-        if (/^\d{6}$/.test(dateStr)) {
-          const month = dateStr.substring(0, 2);
-          const year = dateStr.substring(2);
-          return new Date(`${year}-${month}-01`).toISOString();
-        }
-        if (/^\d{4}\d{2}$/.test(dateStr)) {
-          const year = dateStr.substring(0, 4);
-          const month = dateStr.substring(4);
-          return new Date(`${year}-${month}-01`).toISOString();
-        }
-        const parsed = new Date(dateStr);
-        if (!isNaN(parsed)) return parsed.toISOString();
-      } catch (_) {}
-      return new Date().toISOString();
-    };
-
-    // Fetch site information in parallel
+    // Fetch site info in parallel
     const uniqueSiteIds = [...new Set(chargesForMonth.map(c => c.productionSiteId))];
-    const sitesInfo = await Promise.all(uniqueSiteIds.map(async (siteId) => {
+    const sitesInfo = await Promise.all(uniqueSiteIds.map(async siteId => {
       try {
         const site = await productionSiteApi.fetchOne(companyId, siteId);
         return {
@@ -213,26 +285,17 @@ export const fetchProductionChargesForMonth = async (user, companyId, production
         };
       }
     }));
-
     const siteMap = sitesInfo.reduce((acc, site) => ({ ...acc, [site.id]: site.name }), {});
 
     // Process and normalize charges
     const processedCharges = chargesForMonth.map(charge => {
       let cValues = {};
       let totalCharge = 0;
-
       if (charge.cValues && typeof charge.cValues === 'object') {
-        // Normalize keys for cValues to C001-C011 format
-        Object.entries(charge.cValues).forEach(([key, value]) => {
-          const normalizedKey = key.toUpperCase().startsWith('C')
-            ? `C${key.substring(1).padStart(3, '0')}`
-            : key;
-          const numValue = parseFloat(value) || 0;
-          cValues[normalizedKey] = numValue;
-          totalCharge += numValue;
-        });
+        cValues = normalizeChargeCValues(charge.cValues);
+        totalCharge = Object.values(cValues).reduce((acc, val) => acc + val, 0);
       } else {
-        // fallback if cValues missing, try individual C001-C011 keys
+        // Fallback normalization if cValues is missing
         for (let i = 1; i <= 11; i++) {
           const chargeKey = `C${i.toString().padStart(3, '0')}`;
           const possibleKeys = [chargeKey, `c${i.toString().padStart(3, '0')}`];
@@ -251,14 +314,14 @@ export const fetchProductionChargesForMonth = async (user, companyId, production
       const siteId = String(charge.productionSiteId || '');
       const siteName = siteMap[siteId] || `Site ${siteId}`;
       const rawDate = charge.date || charge.sk || '';
-      const formattedDate = safeParseDate(rawDate);
 
       return {
-        id: charge.id || `charge-${siteId}-${formattedDate}`,
+        id: charge.id || `charge-${siteId}-${rawDate}`,
         productionSiteId: siteId,
         productionSiteName: siteName,
         cValues,
         total: parseFloat(totalCharge.toFixed(2)),
+        charge: typeof charge.charge !== "undefined" ? Number(charge.charge) : 0,
         _raw: { ...charge, sensitiveData: undefined },
       };
     });
@@ -303,43 +366,4 @@ export const fetchProductionChargesForMonth = async (user, companyId, production
       error,
     };
   }
-};
-
-/**
- * Calculates totals from invoice data
- * @param {Array} invoiceData - Array of invoice items
- * @returns {Object} Object containing calculated totals
- */
-export const calculateInvoiceTotals = (invoiceData = []) => {
-  const cValueCounts = {
-    C1: 0,
-    C2: 0,
-    C3: 0,
-    C4: 0,
-    C5: 0,
-  };
-  let totalAllocation = 0;
-
-  const processedData = invoiceData.map(item => {
-    const rowTotal = Object.entries(item.cValues || {}).reduce(
-      (sum, [key, value]) => sum + (Number(value) || 0),
-      0
-    );
-    totalAllocation += rowTotal;
-
-    Object.entries(item.cValues || {}).forEach(([cValue, value]) => {
-      const numValue = Number(value) || 0;
-      if (numValue > 0) {
-        cValueCounts[cValue] = (cValueCounts[cValue] || 0) + 1;
-      }
-    });
-
-    return { ...item, total: rowTotal };
-  });
-
-  return {
-    data: processedData,
-    allocation: totalAllocation,
-    cValueCounts,
-  };
 };

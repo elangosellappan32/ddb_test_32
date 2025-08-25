@@ -8,18 +8,18 @@ import {
   TableHead,
   TableRow,
   Typography,
+  Chip,
   Tooltip,
   Box
 } from '@mui/material';
 import { styled } from '@mui/material/styles';
-import { Info as InfoIcon } from '@mui/icons-material';
+import { CheckCircle, Cancel, Info as InfoIcon, Bolt as BoltIcon } from '@mui/icons-material';
 
 // Styled components for consistent styling
 const StyledTableHeader = styled(TableCell)(({ theme }) => ({
   backgroundColor: theme.palette.primary.main,
   color: theme.palette.common.white,
   fontWeight: 'bold',
-  whiteSpace: 'nowrap',
   '& .MuiTypography-root': {
     color: 'inherit',
     fontWeight: 'inherit',
@@ -60,121 +60,215 @@ const TotalCell = styled(TableCell)(({ theme }) => ({
   }
 }));
 
-const ALLOCATION_PERIODS = ['c1', 'c2', 'c3', 'c4', 'c5'];
+const PERIODS = ['c1', 'c2', 'c3', 'c4', 'c5'];
 const PEAK_PERIODS = ['c2', 'c3'];
 const NON_PEAK_PERIODS = ['c1', 'c4', 'c5'];
 
+const getPeriodLabel = (period) => {
+  const periodMap = {
+    c1: { 
+      label: 'C1', 
+      tooltip: 'Non-Peak Period', 
+      color: 'success.light',
+      isPeak: false 
+    },
+    c2: { 
+      label: 'C2', 
+      tooltip: 'Peak Period', 
+      color: 'warning.light',
+      isPeak: true 
+    },
+    c3: { 
+      label: 'C3', 
+      tooltip: 'Peak Period', 
+      color: 'warning.light',
+      isPeak: true 
+    },
+    c4: { 
+      label: 'C4', 
+      tooltip: 'Non-Peak Period', 
+      color: 'success.light',
+      isPeak: false 
+    },
+    c5: { 
+      label: 'C5', 
+      tooltip: 'Non-Peak Period',
+      color: 'success.light',
+      isPeak: false 
+    },
+  };
+  return periodMap[period] || { 
+    label: period.toUpperCase(), 
+    tooltip: '', 
+    color: 'inherit',
+    isPeak: false 
+  };
+};
+
 const AllocationTable = ({ data = [] }) => {
-  const calculateColumnTotal = (period) =>
-    data.reduce((sum, row) => sum + (parseFloat(row.cValues?.[period]) || 0), 0);
+  // Calculate column totals
+  const calculateColumnTotal = (period) => {
+    return data.reduce((sum, row) => {
+      const value = row.cValues?.[period] || 0;
+      return sum + (typeof value === 'number' ? value : parseFloat(value) || 0);
+    }, 0);
+  };
 
-  const grandTotal = ALLOCATION_PERIODS.reduce(
-    (sum, period) => sum + calculateColumnTotal(period),
-    0
-  );
+  // Calculate row total
+  const calculateRowTotal = (row) => {
+    return PERIODS.reduce((sum, period) => {
+      const value = row.cValues?.[period] || 0;
+      return sum + (typeof value === 'number' ? value : parseFloat(value) || 0);
+    }, 0);
+  };
 
+  // Calculate peak total
+  const calculatePeakTotal = (row) => {
+    return PEAK_PERIODS.reduce((sum, period) => {
+      const value = row.cValues?.[period] || 0;
+      return sum + (typeof value === 'number' ? value : parseFloat(value) || 0);
+    }, 0);
+  };
+
+  // Calculate non-peak total
+  const calculateNonPeakTotal = (row) => {
+    return NON_PEAK_PERIODS.reduce((sum, period) => {
+      const value = row.cValues?.[period] || 0;
+      return sum + (typeof value === 'number' ? value : parseFloat(value) || 0);
+    }, 0);
+  };
+
+  // Calculate grand totals
+  const grandTotal = data.reduce((sum, row) => sum + calculateRowTotal(row), 0);
+  const grandPeakTotal = data.reduce((sum, row) => sum + calculatePeakTotal(row), 0);
+  const grandNonPeakTotal = data.reduce((sum, row) => sum + calculateNonPeakTotal(row), 0);
+
+  // Helper to check if a period is peak
   const isPeakPeriod = (period) => PEAK_PERIODS.includes(period);
-  const getPeriodLabel = (period) => {
-    const periodMap = {
-      c1: { label: 'C1', tooltip: 'Non-Peak Period' },
-      c2: { label: 'C2', tooltip: 'Peak Period' },
-      c3: { label: 'C3', tooltip: 'Peak Period' },
-      c4: { label: 'C4', tooltip: 'Non-Peak Period' },
-      c5: { label: 'C5', tooltip: 'Non-Peak Period' },
-    };
-    return periodMap[period] || { label: period.toUpperCase(), tooltip: '' };
+
+  // Render charge status chip
+  const renderChargeStatus = (row) => {
+    const isCharging = row.charge || row.cValues?.charge === 1 || row.cValues?.charge === true;
+    return (
+      <Chip
+        label={isCharging ? 'Charging' : 'Not Charging'}
+        color={isCharging ? 'success' : 'default'}
+        size="small"
+        icon={isCharging ? <CheckCircle fontSize="small" /> : <Cancel fontSize="small" />}
+      />
+    );
+  };
+
+  // Format number with 2 decimal places
+  const formatNumber = (num) => {
+    const n = typeof num === 'number' ? num : parseFloat(num) || 0;
+    return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   };
 
   return (
-    <TableContainer component={Paper} sx={{ mb: 4, boxShadow: 2, width: '100%', overflowX: 'auto', '& .MuiTable-root': { borderTop: 'none' } }}>
-      <Table sx={{ minWidth: 1500, width: '100%', border: '1px solid black', tableLayout: 'fixed' }}>
+    <TableContainer component={Paper} sx={{ mb: 4, mt: 2, boxShadow: 2, width: '100%', overflowX: 'auto' }}>
+      <Box sx={{ p: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
+        <BoltIcon color="primary" />
+        <Typography variant="h6">Allocation Details</Typography>
+      </Box>
+      <Table sx={{ border: '1px solid black', borderTop: 'none', width: '100%' }}>
         <TableHead>
           <TableRow>
-            <StyledTableHeader sx={{ minWidth: 250, width: '20%' }}>Production Site</StyledTableHeader>
-            <StyledTableHeader sx={{ minWidth: 250, width: '20%' }}>Consumption Site</StyledTableHeader>
-            {ALLOCATION_PERIODS.map((period) => {
-              const { label, tooltip } = getPeriodLabel(period);
+            <StyledTableHeader>Production Site</StyledTableHeader>
+            <StyledTableHeader>Consumption Site</StyledTableHeader>
+            <StyledTableHeader>Status</StyledTableHeader>
+            
+            {PERIODS.map((period) => {
+              const { label, tooltip, color, isPeak } = getPeriodLabel(period);
               return (
-                <StyledTableHeader key={period} align="right" sx={{ minWidth: 120, width: '8%' }}>
+                <StyledTableHeader key={period} align="right">
                   <Tooltip title={tooltip}>
                     <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
                       {label}
-                      <InfoIcon sx={{ ml: 0.5, fontSize: '1rem', color: isPeakPeriod(period) ? 'warning.light' : 'success.light' }} />
+                      <InfoIcon sx={{ ml: 0.5, fontSize: '1rem', color }} />
                     </Box>
                   </Tooltip>
                 </StyledTableHeader>
               );
             })}
-            <StyledTableHeader align="right" sx={{ minWidth: 140, width: '10%' }}>Peak Total</StyledTableHeader>
-            <StyledTableHeader align="right" sx={{ minWidth: 160, width: '12%' }}>Non-Peak Total</StyledTableHeader>
-            <StyledTableHeader align="right" sx={{ minWidth: 140, width: '10%' }}>Total Units</StyledTableHeader>
+            
+            <StyledTableHeader align="right">Peak Total</StyledTableHeader>
+            <StyledTableHeader align="right">Off-Peak Total</StyledTableHeader>
+            <StyledTableHeader align="right">Total</StyledTableHeader>
           </TableRow>
         </TableHead>
+        
         <TableBody>
-          {data.map((row) => {
-            const rowValues = ALLOCATION_PERIODS.map(period => ({
-              period,
-              value: parseFloat(row.cValues?.[period]) || 0
-            }));
+          {data.map((row, index) => {
+            const rowTotal = calculateRowTotal(row);
+            const peakTotal = calculatePeakTotal(row);
+            const nonPeakTotal = calculateNonPeakTotal(row);
             
-            const peakTotal = rowValues
-              .filter(v => isPeakPeriod(v.period))
-              .reduce((sum, v) => sum + v.value, 0);
-              
-            const nonPeakTotal = rowValues
-              .filter(v => !isPeakPeriod(v.period))
-              .reduce((sum, v) => sum + v.value, 0);
-              
-            const rowTotal = rowValues.reduce((sum, v) => sum + v.value, 0);
-
             return (
-              <TableRow key={`${row.productionSiteId}-${row.consumptionSiteId}`}>
-                <TableCell>{row.productionSiteName || row.productionSiteId}</TableCell>
-                <TableCell>{row.consumptionSiteName || row.consumptionSiteId}</TableCell>
-                {rowValues.map(({ period, value }) => (
-                  <StyledTableCell 
-                    key={period} 
-                    align="right"
-                    isPeak={isPeakPeriod(period)}
-                  >
-                    {value.toFixed(2)}
-                  </StyledTableCell>
-                ))}
+              <TableRow key={index} hover>
+                <TableCell>
+                  <Box sx={{ fontWeight: 'medium' }}>{row.productionSiteName || 'N/A'}</Box>
+                  <Typography variant="caption" color="text.secondary">
+                    ID: {row.productionSiteId || 'N/A'}
+                  </Typography>
+                </TableCell>
+                
+                <TableCell>
+                  <Box sx={{ fontWeight: 'medium' }}>{row.consumptionSiteName || 'N/A'}</Box>
+                  <Typography variant="caption" color="text.secondary">
+                    ID: {row.consumptionSiteId || 'N/A'}
+                  </Typography>
+                </TableCell>
+                
+                <TableCell>{renderChargeStatus(row)}</TableCell>
+                
+                {PERIODS.map((period) => {
+                  const value = row.cValues?.[period] || 0;
+                  const { isPeak } = getPeriodLabel(period);
+                  return (
+                    <StyledTableCell key={period} align="right" isPeak={isPeak}>
+                      {formatNumber(value)}
+                    </StyledTableCell>
+                  );
+                })}
+                
                 <TotalCell align="right" className="peak">
-                  {peakTotal.toFixed(2)}
+                  {formatNumber(peakTotal)}
                 </TotalCell>
+                
                 <TotalCell align="right" className="non-peak">
-                  {nonPeakTotal.toFixed(2)}
+                  {formatNumber(nonPeakTotal)}
                 </TotalCell>
+                
                 <TotalCell align="right">
-                  {rowTotal.toFixed(2)}
+                  {formatNumber(rowTotal)}
                 </TotalCell>
               </TableRow>
             );
           })}
-          {data.length > 0 && (
-            <TableRow sx={{ backgroundColor: 'rgba(0, 0, 0, 0.04)' }}>
-              <TableCell colSpan={2} sx={{ fontWeight: 'bold' }}>Total</TableCell>
-              {ALLOCATION_PERIODS.map((period) => (
-                <TotalCell key={period} align="right" className={isPeakPeriod(period) ? 'peak' : ''}>
-                  {calculateColumnTotal(period).toFixed(2)}
-                </TotalCell>
-              ))}
-              <TotalCell align="right" className="peak">
-                {data.reduce((sum, row) => {
-                  return sum + PEAK_PERIODS.reduce((s, p) => s + (parseFloat(row.cValues?.[p]) || 0), 0);
-                }, 0).toFixed(2)}
+          
+          {/* Grand Total Row */}
+          <TableRow>
+            <TableCell colSpan={3} align="right" sx={{ fontWeight: 'bold' }}>Grand Total:</TableCell>
+            
+            {PERIODS.map((period) => (
+              <TotalCell key={`total-${period}`} align="right">
+                {formatNumber(calculateColumnTotal(period))}
               </TotalCell>
-              <TotalCell align="right" className="non-peak">
-                {data.reduce((sum, row) => {
-                  return sum + NON_PEAK_PERIODS.reduce((s, p) => s + (parseFloat(row.cValues?.[p]) || 0), 0);
-                }, 0).toFixed(2)}
-              </TotalCell>
-              <TotalCell align="right">
-                {grandTotal.toFixed(2)}
-              </TotalCell>
-            </TableRow>
-          )}
+            ))}
+            
+            <TotalCell align="right" className="peak">
+              {formatNumber(grandPeakTotal)}
+            </TotalCell>
+            
+            <TotalCell align="right" className="non-peak">
+              {formatNumber(grandNonPeakTotal)}
+            </TotalCell>
+            
+            <TotalCell align="right">
+              {formatNumber(grandTotal)}
+            </TotalCell>
+          </TableRow>
         </TableBody>
       </Table>
     </TableContainer>
