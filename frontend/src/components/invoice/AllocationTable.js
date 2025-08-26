@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   Paper,
   Table,
@@ -10,19 +10,28 @@ import {
   Typography,
   Chip,
   Tooltip,
-  Box
+  Box,
+  TableSortLabel
 } from '@mui/material';
 import { styled } from '@mui/material/styles';
-import { CheckCircle, Cancel, Info as InfoIcon, Bolt as BoltIcon } from '@mui/icons-material';
+import { CheckCircle, Cancel, Info as InfoIcon, Bolt as BoltIcon, ArrowUpward, ArrowDownward } from '@mui/icons-material';
 
 // Styled components for consistent styling
 const StyledTableHeader = styled(TableCell)(({ theme }) => ({
   backgroundColor: theme.palette.primary.main,
-  color: theme.palette.common.white,
+  color: 'white !important',
   fontWeight: 'bold',
-  '& .MuiTypography-root': {
-    color: 'inherit',
+  '& .MuiTypography-root, & .MuiTableSortLabel-root, & .MuiSvgIcon-root': {
+    color: 'white !important',
     fontWeight: 'inherit',
+  },
+  '&:hover': {
+    '& .MuiTableSortLabel-root': {
+      color: 'white !important',
+    },
+    '& .MuiSvgIcon-root': {
+      color: 'white !important',
+    }
   }
 }));
 
@@ -106,6 +115,42 @@ const getPeriodLabel = (period) => {
 };
 
 const AllocationTable = ({ data = [] }) => {
+  const [order, setOrder] = useState('asc');
+  const [orderBy, setOrderBy] = useState('productionSiteName');
+
+  const handleRequestSort = (property) => {
+    const isAsc = orderBy === property && order === 'asc';
+    setOrder(isAsc ? 'desc' : 'asc');
+    setOrderBy(property);
+  };
+
+  const sortedData = useCallback(() => {
+    return [...data].sort((a, b) => {
+      const aValue = a[orderBy] || '';
+      const bValue = b[orderBy] || '';
+      return order === 'asc' 
+        ? aValue.localeCompare(bValue)
+        : bValue.localeCompare(aValue);
+    });
+  }, [data, order, orderBy]);
+
+  const renderSortLabel = (label, columnId) => {
+    return (
+      <TableSortLabel
+        active={orderBy === columnId}
+        direction={orderBy === columnId ? order : 'asc'}
+        onClick={() => handleRequestSort(columnId)}
+        IconComponent={orderBy === columnId ? (order === 'asc' ? ArrowUpward : ArrowDownward) : ArrowUpward}
+        sx={{ 
+          '& .MuiTableSortLabel-icon': { 
+            opacity: orderBy === columnId ? 1 : 0.5 
+          } 
+        }}
+      >
+        {label}
+      </TableSortLabel>
+    );
+  };
   // Calculate column totals
   const calculateColumnTotal = (period) => {
     return data.reduce((sum, row) => {
@@ -152,9 +197,18 @@ const AllocationTable = ({ data = [] }) => {
     return (
       <Chip
         label={isCharging ? 'Charging' : 'Not Charging'}
-        color={isCharging ? 'success' : 'default'}
+        color={isCharging ? 'success' : 'error'}
         size="small"
         icon={isCharging ? <CheckCircle fontSize="small" /> : <Cancel fontSize="small" />}
+        sx={{
+          '&.MuiChip-colorError': {
+            backgroundColor: '#ffebee',
+            color: '#d32f2f',
+            '& .MuiSvgIcon-root': {
+              color: '#d32f2f'
+            }
+          }
+        }}
       />
     );
   };
@@ -166,16 +220,16 @@ const AllocationTable = ({ data = [] }) => {
   };
 
   return (
-    <TableContainer component={Paper} sx={{ mb: 4, mt: 2, boxShadow: 2, width: '100%', overflowX: 'auto' }}>
-      <Box sx={{ p: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
-        <BoltIcon color="primary" />
-        <Typography variant="h6">Allocation Details</Typography>
-      </Box>
+    <TableContainer component={Paper} sx={{ mb: 4, boxShadow: 2, width: '100%', overflowX: 'auto' }}>
       <Table sx={{ border: '1px solid black', borderTop: 'none', width: '100%' }}>
         <TableHead>
           <TableRow>
-            <StyledTableHeader>Production Site</StyledTableHeader>
-            <StyledTableHeader>Consumption Site</StyledTableHeader>
+            <StyledTableHeader>
+              {renderSortLabel('Production Site', 'productionSiteName')}
+            </StyledTableHeader>
+            <StyledTableHeader>
+              {renderSortLabel('Consumption Site', 'consumptionSiteName')}
+            </StyledTableHeader>
             <StyledTableHeader>Status</StyledTableHeader>
             
             {PERIODS.map((period) => {
@@ -193,13 +247,13 @@ const AllocationTable = ({ data = [] }) => {
             })}
             
             <StyledTableHeader align="right">Peak Total</StyledTableHeader>
-            <StyledTableHeader align="right">Off-Peak Total</StyledTableHeader>
+            <StyledTableHeader align="right">Non-Peak Total</StyledTableHeader>
             <StyledTableHeader align="right">Total</StyledTableHeader>
           </TableRow>
         </TableHead>
         
         <TableBody>
-          {data.map((row, index) => {
+          {sortedData().map((row, index) => {
             const rowTotal = calculateRowTotal(row);
             const peakTotal = calculatePeakTotal(row);
             const nonPeakTotal = calculateNonPeakTotal(row);
@@ -208,16 +262,10 @@ const AllocationTable = ({ data = [] }) => {
               <TableRow key={index} hover>
                 <TableCell>
                   <Box sx={{ fontWeight: 'medium' }}>{row.productionSiteName || 'N/A'}</Box>
-                  <Typography variant="caption" color="text.secondary">
-                    ID: {row.productionSiteId || 'N/A'}
-                  </Typography>
                 </TableCell>
                 
                 <TableCell>
                   <Box sx={{ fontWeight: 'medium' }}>{row.consumptionSiteName || 'N/A'}</Box>
-                  <Typography variant="caption" color="text.secondary">
-                    ID: {row.consumptionSiteId || 'N/A'}
-                  </Typography>
                 </TableCell>
                 
                 <TableCell>{renderChargeStatus(row)}</TableCell>

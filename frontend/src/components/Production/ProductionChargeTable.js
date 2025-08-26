@@ -139,18 +139,6 @@ const ChargeTable = ({
         Charge Data
       </Typography>
       <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-        {onAdd && (
-          <Button
-            variant="contained"
-            color="primary"
-            size="small"
-            onClick={onAdd}
-            startIcon={<AddIcon />}
-            disabled={loading}
-          >
-            Add Charge
-          </Button>
-        )}
         <FormControl size="small" sx={{ minWidth: 200 }}>
           <InputLabel>Financial Year</InputLabel>
           <Select
@@ -165,6 +153,19 @@ const ChargeTable = ({
             ))}
           </Select>
         </FormControl>
+        {onAdd && (
+          <Button
+            variant="contained"
+            color="primary"
+            size="small"
+            onClick={onAdd}
+            startIcon={<AddIcon />}
+            disabled={loading}
+            sx={{ ml: 1 }}
+          >
+            Add Charge
+          </Button>
+        )}
       </Box>
     </Box>
   );

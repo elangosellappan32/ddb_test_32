@@ -1,5 +1,5 @@
-const { ScanCommand, GetCommand, UpdateCommand, QueryCommand } = require('@aws-sdk/lib-dynamodb');
-const { marshall } = require('@aws-sdk/util-dynamodb');  // Add this line
+const { ScanCommand, GetCommand, UpdateCommand, QueryCommand, BatchGetCommand } = require('@aws-sdk/lib-dynamodb');
+const { marshall, unmarshall } = require('@aws-sdk/util-dynamodb');
 const logger = require('../utils/logger');
 const TableNames = require('../constants/tableNames');
 const { docClient } = require('../config/aws-config');
@@ -11,6 +11,10 @@ const ddbDocClient = docClient;
 const BATCH_SIZE = 25; // Max items per batch for DynamoDB
 const MAX_RETRIES = 3;
 const SITE_TYPES = ['production', 'consumption'];
+const SITE_TABLES = {
+    production: TableNames.PRODUCTION_SITES,
+    consumption: TableNames.CONSUMPTION_SITES
+};
 
 /**
  * Validates that a site type is either 'production' or 'consumption'
@@ -609,106 +613,143 @@ const getUserSites = async (username, siteType) => {
  * @param {string} userRole - The role of the current user
  * @returns {Promise<Object>} Object containing accessible production and consumption sites
  */
-async function getAccessibleSitesForUser(username, userRole) {
+const getAccessibleSitesForUser = async (username, userRole) => {
     try {
-        // If user is admin, get all sites
+        logger.info(`[SiteAccessService] Getting accessible sites for user: ${username}, role: ${userRole}`);
+        
+        // If user is admin, return all sites
         if (userRole === 'admin') {
-            // Get all production sites
-            const productionCommand = new ScanCommand({
-                TableName: TableNames.PRODUCTION_SITES,
-                ProjectionExpression: 'siteId, siteName, companyId, state, district',
-                Limit: 1000 // Adjust based on your needs
-            });
+            logger.debug('[SiteAccessService] User is admin, returning all sites');
             
-            // Get all consumption sites
-            const consumptionCommand = new ScanCommand({
-                TableName: TableNames.CONSUMPTION_SITES,
-                ProjectionExpression: 'siteId, siteName, companyId, state, district',
-                Limit: 1000 // Adjust based on your needs
-            });
-
-            const [productionResult, consumptionResult] = await Promise.all([
-                ddbDocClient.send(productionCommand),
-                ddbDocClient.send(consumptionCommand)
+            const [productionSites, consumptionSites] = await Promise.all([
+                this.getAllSites('production'),
+                this.getAllSites('consumption')
             ]);
-
+            
             return {
-                productionSites: productionResult.Items || [],
-                consumptionSites: consumptionResult.Items || []
+                productionSites: productionSites || [],
+                consumptionSites: consumptionSites || []
             };
         }
-
-        // For non-admin users, get their accessible sites from user metadata
-        const userCommand = new GetCommand({
-            TableName: TableNames.USERS,
-            Key: { username },
-            ProjectionExpression: 'accessibleSites, accessibleSiteIds, metadata.accessibleSites'
-        });
-
-        const userResult = await ddbDocClient.send(userCommand);
         
-        if (!userResult.Item) {
+        // For non-admin users, get their accessible sites from user metadata
+        const userParams = {
+            TableName: TableNames.USERS,
+            Key: { username }
+        };
+        
+        const { Item: user } = await ddbDocClient.send(new GetCommand(userParams));
+        
+        if (!user) {
+            logger.warn(`[SiteAccessService] User not found: ${username}`);
             return { productionSites: [], consumptionSites: [] };
         }
-
-        // Get accessible site IDs from either the new or old format
-        const accessibleSites = userResult.Item.metadata?.accessibleSites || userResult.Item.accessibleSites || {};
-        const productionSiteIds = (accessibleSites.productionSites?.L || []).map(site => site.S || site);
-        const consumptionSiteIds = (accessibleSites.consumptionSites?.L || []).map(site => site.S || site);
-
-        // If using the new format with accessibleSiteIds
-        if (userResult.Item.accessibleSiteIds) {
-            return {
-                productionSites: userResult.Item.accessibleSiteIds
-                    .filter(site => site.type === 'production')
-                    .map(site => ({
-                        siteId: site.siteId,
-                        companyId: site.companyId,
-                        siteName: site.siteName || 'Unnamed Site',
-                        state: site.state || 'Unknown',
-                        district: site.district || 'Unknown'
-                    })),
-                consumptionSites: userResult.Item.accessibleSiteIds
-                    .filter(site => site.type === 'consumption')
-                    .map(site => ({
-                        siteId: site.siteId,
-                        companyId: site.companyId,
-                        siteName: site.siteName || 'Unnamed Site',
-                        state: site.state || 'Unknown',
-                        district: site.district || 'Unknown'
-                    }))
-            };
-        }
-
-        // Fallback to old format or empty arrays
-        return {
-            productionSites: productionSiteIds.map(id => ({
-                siteId: id,
-                companyId: id.split('_')[0],
-                siteName: 'Production Site',
-                state: 'Unknown',
-                district: 'Unknown'
-            })),
-            consumptionSites: consumptionSiteIds.map(id => ({
-                siteId: id,
-                companyId: id.split('_')[0],
-                siteName: 'Consumption Site',
-                state: 'Unknown',
-                district: 'Unknown'
-            }))
+        
+        // Initialize accessibleSites if it doesn't exist
+        const accessibleSites = user.metadata?.accessibleSites || {
+            productionSites: { L: [] },
+            consumptionSites: { L: [] }
         };
+        
+        // Process production sites
+        const productionSiteKeys = (accessibleSites.productionSites?.L || []).map(item => {
+            const [companyId, siteId] = item.S.split('_');
+            return { companyId, siteId };
+        });
+        
+        // Process consumption sites
+        const consumptionSiteKeys = (accessibleSites.consumptionSites?.L || []).map(item => {
+            const [companyId, siteId] = item.S.split('_');
+            return { companyId, siteId };
+        });
+        
+        // Fetch site details in parallel
+        const [productionSites, consumptionSites] = await Promise.all([
+            this.getSitesBatch('production', productionSiteKeys),
+            this.getSitesBatch('consumption', consumptionSiteKeys)
+        ]);
+        
+        return {
+            productionSites: productionSites || [],
+            consumptionSites: consumptionSites || []
+        };
+        
     } catch (error) {
-        logger.error('Error getting accessible sites for user:', { username, error });
+        logger.error(`[SiteAccessService] Error getting accessible sites: ${error.message}`, error);
         throw error;
     }
-}
+};
+
+/**
+ * Gets all sites of a specific type (admin only)
+ * @param {string} siteType - The type of site ('production' or 'consumption')
+ * @returns {Promise<Array>} Array of all sites of the specified type
+ */
+const getAllSites = async (siteType) => {
+    validateSiteType(siteType);
+    
+    try {
+        const params = {
+            TableName: SITE_TABLES[siteType],
+            ProjectionExpression: 'companyId, siteId, siteName, address, #status',
+            ExpressionAttributeNames: {
+                '#status': 'status'
+            }
+        };
+        
+        const { Items } = await ddbDocClient.send(new ScanCommand(params));
+        return Items || [];
+        
+    } catch (error) {
+        logger.error(`[SiteAccessService] Error getting all ${siteType} sites: ${error.message}`, error);
+        throw error;
+    }
+};
+
+/**
+ * Gets multiple sites in a batch
+ * @param {string} siteType - The type of site ('production' or 'consumption')
+ * @param {Array} siteKeys - Array of { companyId, siteId } objects
+ * @returns {Promise<Array>} Array of site details
+ */
+const getSitesBatch = async (siteType, siteKeys) => {
+    if (!siteKeys.length) return [];
+    
+    try {
+        const tableName = SITE_TABLES[siteType];
+        const keys = siteKeys.map(({ companyId, siteId }) => ({
+            companyId,
+            siteId
+        }));
+        
+        const params = {
+            RequestItems: {
+                [tableName]: {
+                    Keys: keys,
+                    ProjectionExpression: 'companyId, siteId, siteName, address, #status',
+                    ExpressionAttributeNames: {
+                        '#status': 'status'
+                    }
+                }
+            }
+        };
+        
+        const { Responses } = await ddbDocClient.send(new BatchGetCommand(params));
+        return Responses?.[tableName] || [];
+        
+    } catch (error) {
+        logger.error(`[SiteAccessService] Error getting ${siteType} sites batch: ${error.message}`, error);
+        throw error;
+    }
+};
 
 module.exports = {
     updateUserSiteAccess,
     addExistingSiteAccess,
     removeSiteAccess,
+    removeSiteAccessForUser,
     getUserSites,
-    validateSiteType,
     getAccessibleSitesForUser,
-    removeSiteAccessForUser
+    getAllSites,
+    getSitesBatch
 };

@@ -85,6 +85,7 @@ const create = async (item) => {
                 banking: new Decimal(item.banking || 0).toString(),
                 capacity_MW: new Decimal(item.capacity_MW || 0).toString(),
                 annualProduction_L: new Decimal(annualProduction).toString(),
+                revenuePerUnit: new Decimal(item.revenuePerUnit || 0).toString(),
                 htscNo: item.htscNo ? String(item.htscNo).trim() : '',
                 injectionVoltage_KV: new Decimal(item.injectionVoltage_KV || 0).toString(),
                 status: item.status,
@@ -197,6 +198,7 @@ const updateItem = async (companyId, productionSiteId, updates) => {
             banking: new Decimal(banking).toString(),
             capacity_MW: updates.capacity_MW ? new Decimal(updates.capacity_MW).toString() : existing.capacity_MW,
             annualProduction_L: new Decimal(annualProduction).toString(),
+            revenuePerUnit: updates.revenuePerUnit !== undefined ? new Decimal(updates.revenuePerUnit).toString() : (existing.revenuePerUnit || '0'),
             htscNo: updates.htscNo ? new Decimal(updates.htscNo).toString() : existing.htscNo,
             injectionVoltage_KV: updates.injectionVoltage_KV ? 
                 new Decimal(updates.injectionVoltage_KV).toString() : 
@@ -359,6 +361,7 @@ const getAllProductionSites = async () => {
             htscNo: item.htscNo || '0',
             injectionVoltage_KV: item.injectionVoltage_KV || '0',
             banking: String(item.banking || '0'),
+            revenuePerUnit: item.revenuePerUnit || '0',
             createdat: item.createdat || new Date().toISOString(),
             updatedat: item.updatedat || new Date().toISOString()
         }));

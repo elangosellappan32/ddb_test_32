@@ -89,7 +89,8 @@ const ProductionSiteDataForm = ({
         c2: (data?.c2 ?? '0').toString(),
         c3: (data?.c3 ?? '0').toString(),
         c4: (data?.c4 ?? '0').toString(),
-        c5: (data?.c5 ?? '0').toString()
+        c5: (data?.c5 ?? '0').toString(),
+        import: (data?.import ?? '0').toString()
       };
     }
     
@@ -138,7 +139,8 @@ const ProductionSiteDataForm = ({
         { id: 'c2', label: 'C2 Value' },
         { id: 'c3', label: 'C3 Value' },
         { id: 'c4', label: 'C4 Value' },
-        { id: 'c5', label: 'C5 Value' }
+        { id: 'c5', label: 'C5 Value' },
+        { id: 'import', label: 'Import (Units)' }
       ];
     }
 

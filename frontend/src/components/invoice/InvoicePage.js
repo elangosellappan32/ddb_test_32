@@ -319,16 +319,6 @@ const InvoicePage = () => {
                   <Typography variant="h5" gutterBottom>
                     Allocation Data
                   </Typography>
-                  <Box sx={{ display: 'flex', gap: 2 }}>
-                    <Button 
-                      variant="outlined" 
-                      color="primary"
-                      onClick={() => handleEditAllocation(null)}
-                      disabled={loading}
-                    >
-                      Add New Allocation
-                    </Button>
-                  </Box>
                 </Box>
                 <AllocationTable 
                   data={invoiceData.allocationData}
@@ -381,6 +371,7 @@ const InvoicePage = () => {
               </Typography>
               <InvoiceTemplate 
                 invoice={invoice}
+                billMonth={format(selectedDate, 'MMMM yyyy')}
                 onPrint={handlePrintInvoice}
                 onDownload={handleDownloadPdf}
               />

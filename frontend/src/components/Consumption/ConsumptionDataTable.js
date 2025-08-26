@@ -187,18 +187,6 @@ const ConsumptionDataTable = ({
         Consumption Data
       </Typography>
       <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-        {onAdd && (
-          <Button
-            variant="contained"
-            color="primary"
-            size="small"
-            onClick={onAdd}
-            startIcon={<AddIcon />}
-            disabled={loading}
-          >
-            Add Unit
-          </Button>
-        )}
         <FormControl size="small" sx={{ minWidth: 200 }}>
           <InputLabel>Financial Year</InputLabel>
           <Select
@@ -213,6 +201,18 @@ const ConsumptionDataTable = ({
             ))}
           </Select>
         </FormControl>
+        {onAdd && (
+          <Button
+            variant="contained"
+            color="primary"
+            size="small"
+            onClick={onAdd}
+            startIcon={<AddIcon />}
+            disabled={loading}
+          >
+            Add Unit
+          </Button>
+        )}
       </Box>
     </Box>
   );

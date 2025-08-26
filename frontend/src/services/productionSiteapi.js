@@ -29,6 +29,7 @@ const formatSiteData = (data) => {
       capacity_MW: Number(parseFloat(data.capacity_MW || 0)).toFixed(2),
       injectionVoltage_KV: Number(data.injectionVoltage_KV || 0),
       annualProduction_L: Number(data.annualProduction_L || 0),
+      revenuePerUnit: data.revenuePerUnit != null ? parseFloat(data.revenuePerUnit) : 0,
       htscNo: data.htscNo ? Number(data.htscNo) : 0,
       banking: Number(data.banking || 0),
       status: ['active', 'inactive', 'maintenance'].includes(String(data.status || '').toLowerCase()) ? String(data.status).toLowerCase() : 'active',
@@ -40,7 +41,7 @@ const formatSiteData = (data) => {
     logWithTime('[STEP] Formatted site data:', formatted);
     return formatted;
   } catch (error) {
-    console.error('[ProductionSiteAPI] Error formatting site data:', error);
+    console.error('[ProductionSiteAPI] Error formatting site data:', error, 'Raw data:', data);
     return null;
   }
 };
@@ -238,6 +239,7 @@ class ProductionSiteApi {
         capacity_MW: parseFloat(data.capacity_MW) || 0,
         injectionVoltage_KV: parseFloat(data.injectionVoltage_KV) || 0,
         annualProduction_L: parseFloat(data.annualProduction_L) || 0,
+        revenuePerUnit: parseFloat(data.revenuePerUnit) || 0,
         htscNo: data.htscNo ? String(data.htscNo).trim() : '',
         injectionSubstation: data.injectionSubstation ? String(data.injectionSubstation).trim() : '',
         feederName: data.feederName ? String(data.feederName).trim() : '',
@@ -278,6 +280,7 @@ class ProductionSiteApi {
         ...data,
         companyId,
         productionSiteId,
+        revenuePerUnit: parseFloat(data.revenuePerUnit) || 0,
         updatedat: new Date().toISOString()
       };
 
