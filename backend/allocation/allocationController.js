@@ -27,7 +27,7 @@ const createAllocation = async (req, res, next) => {
 
         const results = [];
         
-        // Process each allocation sequentially to properly handle lapse units
+        // Process each allocation sequentially to properly handle lapse and banking units
         for (const alloc of allocations) {
             if (!alloc.pk || !alloc.sk) {
                 throw new ValidationError('Invalid allocation: missing pk or sk');
@@ -36,44 +36,117 @@ const createAllocation = async (req, res, next) => {
             const [companyId, productionSiteId, consumptionSiteId] = alloc.pk.split('_');
             const month = alloc.sk;
             
-            // Check if site has banking enabled
+            // Check if site exists
             const site = await productionSiteDAL.getItem(companyId, productionSiteId);
             if (!site) {
                 throw new ValidationError(`Production site not found: ${productionSiteId}`);
             }
             
-            // Determine if site has banking enabled
             const bankingEnabled = Number(site.banking || 0) === 1;
+            const type = alloc.type?.toUpperCase() || 'ALLOCATION';
 
-            // Store the allocation
-            const result = await allocationDAL.putItem(alloc);
+            // Get existing records
+            const existingAlloc = await allocationDAL.getItem({ pk: alloc.pk, sk: alloc.sk });
+            let bankingRecord = null;
+            let existingLapse = null;
+
+            // Fetch banking record if banking is enabled
+            if (bankingEnabled) {
+                try {
+                    bankingRecord = await bankingDAL.getBanking(`${companyId}_${productionSiteId}`, month);
+                } catch {
+                    // Banking record doesn't exist yet
+                }
+            }
+
+            // Fetch existing lapse record
+            const lapseRecords = await lapseService.getLapsesByProductionSite(productionSiteId, month, month, companyId);
+            if (lapseRecords?.length) {
+                existingLapse = lapseRecords[0];
+            }
+
+            // Create or update the allocation
+            const merged = existingAlloc
+                ? { ...existingAlloc, ...alloc, updatedat: new Date().toISOString() }
+                : { ...alloc, createdat: new Date().toISOString(), updatedat: new Date().toISOString() };
+            
+            // Only update if there are actual changes
+            const hasChanges = ALL_PERIODS.some(period => {
+                const oldVal = Number(existingAlloc?.[period] || 0);
+                const newVal = Number(alloc[period] || 0);
+                return oldVal !== newVal;
+            });
+
+            let result;
+            if (hasChanges) {
+                result = await allocationDAL.putItem(merged);
+            } else {
+                // Return the existing record as is if no changes
+                result = existingAlloc || merged;
+                result.unchanged = true; // Flag to indicate no changes were made
+            }
             results.push(result);
 
-            if (!bankingEnabled) {
-                // For non-banking sites, calculate unused units and add to lapse
-                const lapseRecords = await lapseService.getLapsesByProductionSite(productionSiteId, month, month, companyId);
-                let existingLapse = lapseRecords?.[0];
-                const lapsePk = `${companyId}_${productionSiteId}`;
+            // Handle each period's changes
+            for (const period of ALL_PERIODS) {
+                const oldVal = Number(existingAlloc?.[period] || 0);
+                const newVal = Number(alloc[period] || 0);
+                const delta = newVal - oldVal;
+                
+                if (delta === 0) continue;
 
-                // Calculate lapse amounts for each period
-                const lapseUpdates = {};
-                for (const period of ALL_PERIODS) {
-                    const allocated = Number(alloc[period] || 0);
-                    if (allocated > 0) {
-                        const existingLapseAmount = Number(existingLapse?.allocated?.[period] || 0);
-                        lapseUpdates[period] = existingLapseAmount + allocated;
+                if (bankingEnabled) {
+                    // Handle banking site logic
+                    if (!bankingRecord) {
+                        // Create new banking record if it doesn't exist
+                        bankingRecord = {
+                            pk: `${companyId}_${productionSiteId}`,
+                            sk: month,
+                            companyId,
+                            productionSiteId,
+                            month,
+                            siteName: alloc.siteName || `${companyId}_${productionSiteId}`,
+                            type: 'BANKING',
+                            status: 'active',
+                            createdat: new Date().toISOString(),
+                            updatedat: new Date().toISOString()
+                        };
+                        
+                        // Initialize all periods to 0
+                        ALL_PERIODS.forEach(p => {
+                            bankingRecord[p] = 0;
+                        });
+                        
+                        // Save the new banking record
+                        try {
+                            await bankingDAL.putItem(bankingRecord);
+                            logger.info(`Created new banking record for ${bankingRecord.pk} ${bankingRecord.sk}`);
+                        } catch (error) {
+                            logger.error('Failed to create banking record:', error);
+                            throw error;
+                        }
                     }
-                }
 
-                if (Object.keys(lapseUpdates).length > 0) {
+                    // Update banking record
+                    bankingRecord[period] = (Number(bankingRecord[period]) || 0) + delta;
+                    bankingRecord.updatedat = new Date().toISOString();
+                    await bankingDAL.putItem(bankingRecord);
+                } else {
+                    // Handle non-banking (lapse) logic
+                    const lapsePk = `${companyId}_${productionSiteId}`;
+                    const lapseUpdates = existingLapse?.allocated || {};
+                    
+                    // Only update the periods that are being changed
+                    if (delta > 0) {
+                        lapseUpdates[period] = (Number(lapseUpdates[period]) || 0) + delta;
+                    }
+
                     if (existingLapse) {
-                        // Update existing lapse record
                         await lapseService.update(lapsePk, month, { 
                             allocated: lapseUpdates,
                             updatedat: new Date().toISOString()
                         });
                     } else {
-                        // Create new lapse record
                         await lapseService.create({
                             companyId,
                             productionSiteId,
@@ -160,25 +233,45 @@ const updateAllocation = async (req, res, next) => {
         let bankingRecord = null;
         let existingLapse = null;
 
-        // Fetch banking record if banking is enabled
+        // Initialize or get banking record if banking is enabled
         if (bankingEnabled) {
             try {
                 bankingRecord = await bankingDAL.getBanking(`${companyId}_${productionSiteId}`, month);
             } catch {
-                // Banking record doesn't exist yet
+                // Create new banking record if it doesn't exist
+                bankingRecord = {
+                    pk: `${companyId}_${productionSiteId}`,
+                    sk: month,
+                    companyId,
+                    productionSiteId,
+                    month,
+                    createdat: new Date().toISOString(),
+                    updatedat: new Date().toISOString()
+                };
+                // Initialize all periods to 0
+                ALL_PERIODS.forEach(p => { bankingRecord[p] = 0; });
             }
         }
 
-        // Fetch existing lapse record
+        // Get or initialize lapse record
         const lapseRecords = await lapseService.getLapsesByProductionSite(productionSiteId, month, month, companyId);
-        if (lapseRecords?.length) {
-            existingLapse = lapseRecords[0];
-        }
+        existingLapse = lapseRecords?.[0] || null;
+        const currentLapse = existingLapse?.allocated || {};
 
-        // Create or update the allocation
+        // Create or update the allocation, preserving existing values for unchanged fields
         const merged = existing
-            ? { ...existing, ...alloc, pk, sk, updatedat: new Date().toISOString() }
-            : { ...alloc, pk, sk, createdat: new Date().toISOString(), updatedat: new Date().toISOString() };
+            ? { 
+                ...existing, 
+                ...Object.fromEntries(
+                    Object.entries(alloc).filter(([_, v]) => v !== undefined && v !== null)
+                ),
+                updatedat: new Date().toISOString() 
+            }
+            : { 
+                ...alloc, 
+                createdat: new Date().toISOString(), 
+                updatedat: new Date().toISOString() 
+            };
         
         const result = await allocationDAL.putItem(merged);
 
@@ -188,84 +281,45 @@ const updateAllocation = async (req, res, next) => {
             const newVal = Number(alloc[period] || 0);
             const delta = newVal - oldVal;
             
-            if (delta === 0) continue;
+            if (delta === 0) continue; // Skip if no change
 
             if (bankingEnabled) {
-                // Banking site logic
+                // Update banking record with the delta
                 if (delta > 0) {
-                    // Consumption increased: Try to use banked units first
-                    const bankOld = Number(bankingRecord?.[period] || 0);
-                    const reduce = Math.min(bankOld, delta);
-                    
-                    if (reduce > 0) {
-                        // Reduce banking
-                        await bankingDAL.updateBanking(`${companyId}_${productionSiteId}`, month, {
-                            [period]: bankOld - reduce,
-                            updatedat: new Date().toISOString()
-                        });
-                    }
-                    
-                    const leftover = delta - reduce;
-                    if (leftover > 0) {
-                        // Add remaining to lapse
-                        if (existingLapse) {
-                            const lapseOld = Number(existingLapse.allocated?.[period] || 0);
-                            await lapseService.update(`${companyId}_${productionSiteId}`, month, {
-                                allocated: { [period]: lapseOld + leftover },
-                                updatedat: new Date().toISOString()
-                            });
-                        } else {
-                            await lapseService.create({
-                                companyId,
-                                productionSiteId,
-                                month,
-                                allocated: { [period]: leftover },
-                                createdat: new Date().toISOString(),
-                                updatedat: new Date().toISOString()
-                            });
-                        }
-                    }
+                    // Consumption increased: Add to banking
+                    bankingRecord[period] = (Number(bankingRecord[period]) || 0) + delta;
+                    bankingRecord.updatedat = new Date().toISOString();
+                    await bankingDAL.putItem(bankingRecord);
                 } else {
-                    // Consumption decreased: Add to banking
+                    // Consumption decreased: Reduce banking
                     const freed = -delta;
                     const bankOld = Number(bankingRecord?.[period] || 0);
-                    await bankingDAL.updateBanking(`${companyId}_${productionSiteId}`, month, {
-                        [period]: bankOld + freed,
-                        updatedat: new Date().toISOString()
-                    });
+                    bankingRecord[period] = Math.max(0, bankOld - freed);
+                    bankingRecord.updatedat = new Date().toISOString();
+                    await bankingDAL.putItem(bankingRecord);
                 }
             } else {
-                // Non-banking site: Direct lapse handling
+                // Non-banking site: Update lapse record
                 const lapsePk = `${companyId}_${productionSiteId}`;
+                const updatedLapse = { ...currentLapse };
                 
-                if (delta > 0) {
-                    // Allocation increased: Add to lapse
-                    if (existingLapse) {
-                        const lapseOld = Number(existingLapse.allocated?.[period] || 0);
-                        await lapseService.update(lapsePk, month, {
-                            allocated: { [period]: lapseOld + delta },
-                            updatedat: new Date().toISOString()
-                        });
-                    } else {
-                        await lapseService.create({
-                            companyId,
-                            productionSiteId,
-                            month,
-                            allocated: { [period]: delta },
-                            createdat: new Date().toISOString(),
-                            updatedat: new Date().toISOString()
-                        });
-                    }
+                // Update only the changed period
+                updatedLapse[period] = Math.max(0, (Number(updatedLapse[period]) || 0) + delta);
+                
+                if (existingLapse) {
+                    await lapseService.update(lapsePk, month, {
+                        allocated: updatedLapse,
+                        updatedat: new Date().toISOString()
+                    });
                 } else {
-                    // Allocation decreased: Reduce lapse
-                    if (existingLapse) {
-                        const lapseOld = Number(existingLapse.allocated?.[period] || 0);
-                        const newLapse = Math.max(0, lapseOld - (-delta)); // -delta because delta is negative
-                        await lapseService.update(lapsePk, month, {
-                            allocated: { [period]: newLapse },
-                            updatedat: new Date().toISOString()
-                        });
-                    }
+                    await lapseService.create({
+                        companyId,
+                        productionSiteId,
+                        month,
+                        allocated: updatedLapse,
+                        createdat: new Date().toISOString(),
+                        updatedat: new Date().toISOString()
+                    });
                 }
             }
         }

@@ -11,26 +11,19 @@ import { format } from 'date-fns';
  * @returns {Object} Processed allocation with consistent structure
  */
 const processAllocationItem = (item) => {
-  console.group('Processing Allocation Item');
-  console.log('Raw input item:', JSON.parse(JSON.stringify(item)));
   
   // If item is already processed by allocationService, return as is
   if (item.cValues && typeof item.cValues === 'object' && 'c1' in item.cValues) {
-    console.log('Item already processed, returning as is');
-    console.groupEnd();
     return item;
   }
 
   // Handle both direct and nested allocated values
   const source = item.original || item;
   const allocated = source.allocated || source.cValues || {};
-  console.log('Source object:', JSON.parse(JSON.stringify(source)));
-  console.log('Allocated values:', JSON.parse(JSON.stringify(allocated)));
   
   // Helper to safely get a value with case-insensitive keys
   const getValue = (obj, keys, defaultValue = 0, valueName = 'value') => {
     if (!obj) {
-      console.log(`No object provided for ${valueName}, using default:`, defaultValue);
       return defaultValue;
     }
     
@@ -39,16 +32,12 @@ const processAllocationItem = (item) => {
       ...keys.flatMap(k => [`c${k}`, `C${k}`])
     ];
     
-    console.log(`Searching for ${valueName} in keys:`, keyVariations);
     
     for (const key of keyVariations) {
       if (obj[key] !== undefined && obj[key] !== null) {
-        console.log(`Found ${valueName} at key '${key}':`, obj[key]);
         return obj[key];
       }
     }
-    
-    console.log(`No matching key found for ${valueName}, using default:`, defaultValue);
     return defaultValue;
   };
 
@@ -64,7 +53,6 @@ const processAllocationItem = (item) => {
            (allocated.charge !== undefined ? (allocated.charge === true || allocated.charge === 1 ? 1 : 0) : 0)
   };
   
-  console.log('Processed cValues:', cValues);
 
   // Calculate total allocation (excluding charge)
   const totalAllocation = Object.entries(cValues)
@@ -84,9 +72,6 @@ const processAllocationItem = (item) => {
       charge: cValues.charge
     }
   };
-  
-  console.log('Final processed item:', JSON.parse(JSON.stringify(result)));
-  console.groupEnd();
   
   return result;
 };
@@ -227,7 +212,6 @@ export const fetchAndProcessInvoiceData = async (user, date, { onlyCharging = fa
  * Normalizes charge cValues keys to uppercase C001-C011 format.
  */
 export const fetchProductionChargesForMonth = async (user, companyId, productionSiteId, date) => {
-  console.group('fetchProductionChargesForMonth');
   try {
     if (!user || !companyId || !date) {
       throw new Error('Missing required parameters: user, companyId, and date are required');
@@ -259,7 +243,6 @@ export const fetchProductionChargesForMonth = async (user, companyId, production
           allCharges.push(...chargesWithSiteId);
         }
       } catch (error) {
-        console.error(`Error fetching charges for site ${siteId}:`, error);
       }
     }
 
@@ -351,14 +334,8 @@ export const fetchProductionChargesForMonth = async (user, companyId, production
       message: `Successfully retrieved ${formattedData.length} charge records`,
       records: formattedData, // backward compatibility
     };
-
-    console.log('Production charges loaded:', result);
-
-    console.groupEnd();
     return result;
   } catch (error) {
-    console.error('Error in fetchProductionChargesForMonth:', error);
-    console.groupEnd();
     return {
       success: false,
       data: [],

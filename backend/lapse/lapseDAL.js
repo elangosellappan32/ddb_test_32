@@ -132,10 +132,8 @@ class LapseDAL {
             const command = new UpdateCommand({
                 TableName: this.tableName,
                 Key: { pk, sk },
-                UpdateExpression: updateExpressions.join(', '),
-                ExpressionAttributeValues: expressionAttributeValues,
-                // Remove allocated attribute if it exists
                 UpdateExpression: `${updateExpressions.join(', ')} REMOVE allocated`,
+                ExpressionAttributeValues: expressionAttributeValues,
                 ReturnValues: 'ALL_NEW'
             });
             

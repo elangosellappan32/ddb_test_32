@@ -524,18 +524,26 @@ const Allocation = () => {
           type: Number(prod.banking || 0) === 1 ? 'BANKING' : 'LAPSE'
         };
 
-        // Update banking/lapse allocations
+        // Update banking or lapse allocations without affecting the other
         if (entry.type === 'BANKING') {
-          setBankingAllocations(prev => prev.filter(b => b.productionSiteId !== pid).concat(entry));
-          setLapseAllocations(prev => prev.filter(l => l.productionSiteId === pid));
+          // Only update banking allocations for this site, leave lapse allocations unchanged
+          setBankingAllocations(prev => 
+            prev.filter(b => b.productionSiteId !== pid).concat(entry)
+          );
         } else {
-          setLapseAllocations(prev => prev.filter(l => l.productionSiteId !== pid).concat(entry));
-          setBankingAllocations(prev => prev.filter(b => b.productionSiteId === pid));
+          // Only update lapse allocations for this site, leave banking allocations unchanged
+          setLapseAllocations(prev => 
+            prev.filter(l => l.productionSiteId !== pid).concat(entry)
+          );
         }
       }
     } else if (type === 'banking') {
       setBankingAllocations(prev => prev.map(b =>
         b.productionSiteId === allocation.productionSiteId ? allocation : b
+      ));
+    } else if (type === 'lapse') {
+      setLapseAllocations(prev => prev.map(l =>
+        l.productionSiteId === allocation.productionSiteId ? allocation : l
       ));
     }
 
@@ -545,32 +553,16 @@ const Allocation = () => {
     });
   }, [dialogData, allocations, productionData, enqueueSnackbar]);
 
-  // When fetch completes or month/year changes, update data
-  useEffect(() => {
-    if (showAllocations && productionData.length && consumptionData.length) {
-      runAllocationCalculation();
-    }
-  }, [productionData, consumptionData, showAllocations, runAllocationCalculation]);
-
   const handleAutoAllocate = async () => {
     try {
       setLoading(true);
-      setError(null);
-
-      // Run allocation calculation
-      runAllocationCalculation();
-      
-      enqueueSnackbar('Allocations computed successfully', { 
-        variant: 'success',
-        autoHideDuration: 3000 
-      });
-    } catch (err) {
-      console.error('[Allocation] Auto allocation error:', err);
-      setError(err.message || 'Failed to compute allocations');
-      enqueueSnackbar(err.message || 'Failed to compute allocations', { 
-        variant: 'error',
-        autoHideDuration: 5000 
-      });
+      // Run the allocation calculation
+      await runAllocationCalculation();
+      // Show the allocations table
+      setShowAllocations(true);
+    } catch (error) {
+      console.error('Auto-allocation failed:', error);
+      enqueueSnackbar('Failed to perform auto-allocation', { variant: 'error' });
     } finally {
       setLoading(false);
     }

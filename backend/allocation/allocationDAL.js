@@ -27,6 +27,20 @@ class AllocationDAL {
     }
   }
 
+  async getItem({ pk, sk }) {
+    const params = {
+      TableName: this.tableName,
+      Key: { pk, sk }
+    };
+    try {
+      const { Item } = await this.docClient.send(new GetCommand(params));
+      return Item || null;
+    } catch (error) {
+      logger.error('Error getting allocation item:', error);
+      throw error;
+    }
+  }
+
   validateItem(item) {
     if (!item.pk || !item.sk) {
       throw new Error('Missing required fields: pk and sk');

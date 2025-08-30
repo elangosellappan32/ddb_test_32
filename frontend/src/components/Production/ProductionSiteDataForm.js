@@ -300,7 +300,7 @@ const ProductionSiteDataForm = ({
             views={['year', 'month']}
             value={formData.date}
             onChange={handleDateChange}
-            disabled={!canEdit || initialData} // Disable date picker if editing existing data
+            readOnly={!canEdit || !!initialData} // Use readOnly instead of disabled
             renderInput={(params) => (
               <TextField
                 {...params}
@@ -308,7 +308,10 @@ const ProductionSiteDataForm = ({
                 required
                 error={!!errors.date}
                 helperText={errors.date}
-                disabled={!canEdit || initialData}
+                InputProps={{
+                  ...params.InputProps,
+                  readOnly: !canEdit || !!initialData
+                }}
               />
             )}
           />

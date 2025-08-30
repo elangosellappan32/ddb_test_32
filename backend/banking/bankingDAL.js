@@ -30,6 +30,26 @@ class BankingDAL {
                (item.c5 || 0);
     }
 
+    async putItem(item) {
+        try {
+            const now = new Date().toISOString();
+            const params = {
+                TableName: this.tableName,
+                Item: {
+                    ...item,
+                    updatedAt: now,
+                    ...(!item.createdAt && { createdAt: now })
+                }
+            };
+
+            await this.docClient.send(new PutCommand(params));
+            return params.Item;
+        } catch (error) {
+            logger.error('Error in putItem:', error);
+            throw error;
+        }
+    }
+
     async createBanking(item) {
         try {
             const now = new Date().toISOString();
@@ -62,6 +82,8 @@ class BankingDAL {
             const { charge, ...itemWithoutCharge } = item;
             const bankingItem = {
                 ...itemWithoutCharge,
+                // Remove _BANK suffix if it exists in pk
+                pk: item.pk.endsWith('_BANK') ? item.pk.slice(0, -5) : item.pk,
                 // Use provided values directly
                 c1: Number(item.c1 || 0),
                 c2: Number(item.c2 || 0),
@@ -69,6 +91,7 @@ class BankingDAL {
                 c4: Number(item.c4 || 0),
                 c5: Number(item.c5 || 0),
                 siteName: item.siteName || '',
+                type: 'BANK', // Add type as attribute
                 createdAt: now,
                 updatedAt: now,
                 version: 1
@@ -121,6 +144,8 @@ class BankingDAL {
 
     async updateBanking(pk, sk, updates) {
         try {
+            // Remove _BANK suffix if it exists in pk
+            const cleanPk = pk.endsWith('_BANK') ? pk.slice(0, -5) : pk;
             // Create a clean copy of updates without pk/sk and with proper values
             const cleanUpdates = {};
             const now = new Date().toISOString();
@@ -181,7 +206,7 @@ class BankingDAL {
 
             const response = await this.docClient.send(new UpdateCommand({
                 TableName: this.tableName,
-                Key: { pk, sk },
+                Key: { pk: cleanPk, sk },
                 UpdateExpression: updateExpressions.join(', '),
                 ExpressionAttributeNames: expressionAttributeNames,
                 ExpressionAttributeValues: expressionAttributeValues,
@@ -197,9 +222,11 @@ class BankingDAL {
 
     async deleteBanking(pk, sk) {
         try {
+            // Remove _BANK suffix if it exists in pk
+            const cleanPk = pk.endsWith('_BANK') ? pk.slice(0, -5) : pk;
             await this.docClient.send(new DeleteCommand({
                 TableName: this.tableName,
-                Key: { pk, sk }
+                Key: { pk: cleanPk, sk }
             }));
             return true;
         } catch (error) {
