@@ -180,7 +180,7 @@ const GraphicalAllocationReport = () => {
           setSelectedPairs(selectedPairs.filter(pair => availableKeys.has(pair.key)));
         }
         if (availablePairsList.length === 0) {
-          setError('No sites selected. Please select sites to view data.');
+          setError('No allocation data found for the selected financial year. Please check back later or try a different year.');
         }
       } catch (err) {
         setError('Failed to load allocation data. Please try again.');
@@ -288,10 +288,12 @@ const GraphicalAllocationReport = () => {
       <Box sx={{ width: '100%', height: 500 }}>
         {loading ? (
           <Typography>Loading allocation data...</Typography>
-        ) : error && !availablePairs.length ? (
-          <Typography >{error}</Typography>
+        ) : error ? (
+          <Typography color="error" sx={{ p: 2 }}>{error}</Typography>
+        ) : availablePairs.length === 0 ? (
+          <Typography sx={{ p: 2 }}>No allocation data available for the selected filters.</Typography>
         ) : selectedPairs.length === 0 ? (
-          <Typography>No sites selected. Please select sites to view data.</Typography>
+          <Typography sx={{ p: 2 }}>Please select one or more sites from the dropdown to view allocation data.</Typography>
         ) : (
           <ResponsiveContainer width="100%" height="100%">
             {graphType === 'line' ? (

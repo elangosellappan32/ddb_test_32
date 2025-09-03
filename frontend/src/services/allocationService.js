@@ -296,7 +296,7 @@ class AllocationService {
     async fetchAllocationsByMonth(month) {
         try {
             console.log(`[fetchAllocationsByMonth] Fetching allocations for month: ${month}`);
-            const response = await fetch(`/api/allocations/month/${month}`, {
+            const response = await fetch(`/api/allocation/month/${month}`, {
                 headers: {
                     'Authorization': `Bearer ${localStorage.getItem('token')}`,
                     'Accept': 'application/json'
