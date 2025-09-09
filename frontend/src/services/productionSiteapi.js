@@ -68,14 +68,14 @@ class ProductionSiteApi {
   async fetchAll(forceRefresh = false, retries = 3, delay = 1000) {
     const now = Date.now();
 
-    logWithTime(`[STEP 1] fetchAll called — forceRefresh=${forceRefresh}, retries=${retries}`);
+    console.log(`[ProductionSiteAPI] fetchAll called - forceRefresh: ${forceRefresh}, retries: ${retries}`);
 
+    // Return cached data if available and not forcing refresh
     if (!forceRefresh && productionSitesCache.lastUpdated && (now - productionSitesCache.lastUpdated) < CACHE_TTL) {
-      logWithTime('[CACHE] Returning cached data');
+      console.log('[ProductionSiteAPI] Returning cached data');
       return {
         success: true,
-        data: [...productionSitesCache.data],
-        total: productionSitesCache.data.length,
+        data: productionSitesCache.data,
         fromCache: true
       };
     }
@@ -90,49 +90,67 @@ class ProductionSiteApi {
 
     const attempt = async (attemptsLeft) => {
       try {
-        logWithTime(`[STEP 2] Fetch attempt ${retries - attemptsLeft + 1}/${retries}`);
+        console.log(`[ProductionSiteAPI] Fetch attempt ${retries - attemptsLeft + 1}/${retries}`);
 
-        const response = await api.get(API_CONFIG.ENDPOINTS.PRODUCTION.SITE.GET_ALL);
-        logWithTime('[STEP 3] Raw API response:', response);
+        // Make the API call with the correct endpoint
+        const endpoint = '/production-site/all';
+        console.log(`[ProductionSiteAPI] Calling API: ${endpoint}`);
+        const response = await api.get(endpoint);
+        console.log('[ProductionSiteAPI] Raw API response:', response);
 
+        // Handle different possible response structures
         let sites = [];
         if (Array.isArray(response?.data?.data)) {
+          console.log('[ProductionSiteAPI] Found sites in response.data.data');
           sites = response.data.data;
         } else if (Array.isArray(response?.data)) {
+          console.log('[ProductionSiteAPI] Found sites in response.data');
           sites = response.data;
+        } else if (Array.isArray(response)) {
+          console.log('[ProductionSiteAPI] Response is already an array');
+          sites = response;
         } else if (response?.data) {
+          console.log('[ProductionSiteAPI] Found single site in response.data');
           sites = [response.data];
         } else {
+          console.error('[ProductionSiteAPI] Invalid response format from server:', response);
           throw new Error('Invalid response format from server');
         }
-
-        logWithTime(`[STEP 4] Sites received: ${sites.length}`);
         
-        const formattedSites = sites
-          .map((site, index) => {
-            logWithTime(`[PROCESS] Formatting site ${index + 1}/${sites.length}`);
-            return formatSiteData(site);
-          })
-          .filter(site => site !== null);
+        console.log(`[ProductionSiteAPI] Found ${sites.length} sites`);
 
-        logWithTime(`[STEP 5] Successfully formatted ${formattedSites.length} of ${sites.length} sites`);
+        // Format all sites
+        const formattedSites = sites
+          .map(site => formatSiteData(site))
+          .filter(site => site !== null);
+          
+        console.log(`[ProductionSiteAPI] Successfully formatted ${formattedSites.length} of ${sites.length} sites`);
 
         if (formattedSites.length === 0) {
-          throw new Error('No valid production sites found');
+          console.warn('[ProductionSiteAPI] No valid production sites found in response');
+          return [];
         }
 
+        // Update cache
         productionSitesCache = {
           data: formattedSites,
           lastUpdated: Date.now(),
           isUpdating: false
         };
 
-        logWithTime('[CACHE] Cache updated at', new Date(productionSitesCache.lastUpdated).toLocaleString());
+        console.log('[ProductionSiteAPI] Cache updated at', new Date(productionSitesCache.lastUpdated).toISOString());
+        
+        // Update cache and return consistent response format
+        productionSitesCache = {
+          data: formattedSites,
+          lastUpdated: Date.now(),
+          isUpdating: false
+        };
 
+        console.log('[ProductionSiteAPI] Successfully fetched and formatted sites');
         return {
           success: true,
-          data: [...formattedSites],
-          total: formattedSites.length,
+          data: formattedSites,
           fromCache: false
         };
       } catch (error) {
