@@ -8,6 +8,7 @@ const TableNames = {
     ROLES: 'RoleTable',
     BANKING: 'BankingTable',
     ALLOCATION: 'AllocationTable',
+    ALLOCATION_DETAILS: 'AllocationDetailsTable',
     LAPSE: 'LapseTable',
     COMPANY: 'CompanyTable',
     CAPTIVE: 'CaptiveTable'

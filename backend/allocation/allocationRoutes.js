@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const allocationController = require('./allocationController');
-const validateAllocation = require('./Allocationvalidator');
+const validateAllocation = require('./allocationValidator');
 const validateJson = require('../middleware/validatejson');
 
 // Create single allocation
@@ -15,6 +15,12 @@ router.get('/', allocationController.getAllAllocations);
 
 // Get all allocations for a month
 router.get('/month/:month', allocationController.getAllocations);
+
+// Get charging allocation for a month
+router.get('/month/:month/charging', allocationController.getChargingAllocation);
+
+// Get all allocations for a month with charge filter
+router.get('/month/:month/filtered', allocationController.getFilteredAllocations);
 
 // Update allocation
 router.put('/:pk/:sk', validateJson, validateAllocation, allocationController.updateAllocation);

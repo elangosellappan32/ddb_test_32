@@ -172,6 +172,7 @@ const Production = () => {
       annualProduction_L: Number(site.annualProduction_L || 0),
       htscNo: site.htscNo || '',
       banking: Number(site.banking || 0),
+      revenuePerUnit: Number(site.revenuePerUnit || 0),
       status: ['Active', 'Inactive', 'Maintenance'].includes(site.status) ? site.status : 'Unknown',
       version: Number(site.version) || 1,
       createdat: site.createdat || new Date().toISOString(),
@@ -220,6 +221,7 @@ const Production = () => {
         capacity_MW: Number(site.capacity_MW || 0),
         injectionVoltage_KV: Number(site.injectionVoltage_KV || 0),
         annualProduction_L: Number(site.annualProduction_L || 0),
+        revenuePerUnit: site.revenuePerUnit != null ? parseFloat(site.revenuePerUnit) : 0,
         htscNo: site.htscNo || '',
         banking: site.banking || 0,
         version: Number(site.version || 1),
@@ -322,6 +324,7 @@ const Production = () => {
       htscNo: '',
       status: 'Active',
       banking: 0,
+      revenuePerUnit: '',
       annualProduction_L: ''
     });
     setIsEditing(false);
@@ -586,8 +589,15 @@ const Production = () => {
         annualProduction_L: formData.annualProduction_L != null ? Number(formData.annualProduction_L) : 0,
         banking: formData.banking ? 1 : 0,
         status: formData.status || 'Active',
+        revenuePerUnit: formData.revenuePerUnit !== undefined ? Number(formData.revenuePerUnit) : 0,
         version: selectedSite ? (selectedSite.version || 1) : 1,
       };
+      
+      console.log('Processed revenuePerUnit:', {
+        original: formData.revenuePerUnit,
+        processed: submitData.revenuePerUnit,
+        type: typeof submitData.revenuePerUnit
+      });
       
       console.log('Submitting production site with company ID:', companyId, 'data:', submitData);
       
@@ -687,6 +697,7 @@ const Production = () => {
             status: result.status || formData.status || 'Active',
             capacity_MW: result.capacity_MW,
             location: result.location || formData.location,
+            revenuePerUnit: result.revenuePerUnit || formData.revenuePerUnit || 0,
             ...result
           };
           
@@ -797,7 +808,8 @@ const Production = () => {
             <TableCell align="right">Capacity (MW)</TableCell>
             <TableCell align="right">Production (L)</TableCell>
             <TableCell>HTSC No</TableCell>
-            <TableCell>Status</TableCell>
+            <TableCell>Status</TableCell> 
+            <TableCell>Revenue Per Unit</TableCell>
             <TableCell>Actions</TableCell>
           </TableRow>
         </TableHead>
@@ -837,6 +849,11 @@ const Production = () => {
                   >
                     {site.status}
                   </Box>
+                </TableCell>
+                <TableCell align="right">
+                  {site.revenuePerUnit !== undefined && !isNaN(site.revenuePerUnit) 
+                    ? `₹${Number(site.revenuePerUnit).toFixed(2)}/unit`
+                    : '₹0.00/unit'}
                 </TableCell>
                 <TableCell>
                   <Box sx={{ display: 'flex', gap: 1 }}>

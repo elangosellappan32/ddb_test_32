@@ -74,7 +74,8 @@ const createProductionSite = async (req, res) => {
         const decimalFields = {
             capacity_MW: 'Capacity (MW)',
             annualProduction_L: 'Annual Production (L)',
-            injectionVoltage_KV: 'Injection Voltage (KV)'
+            injectionVoltage_KV: 'Injection Voltage (KV)',
+            revenuePerUnit: 'Revenue Per Unit'
         };
 
         for (const [field, label] of Object.entries(decimalFields)) {
@@ -91,7 +92,7 @@ const createProductionSite = async (req, res) => {
             }
         }
 
-                // Ensure we have the company ID
+        // Ensure we have the company ID
         const companyId = req.body.companyId || (req.user && req.user.companyId);
         if (!companyId) {
             return res.status(400).json({
@@ -181,7 +182,8 @@ const updateProductionSite = async (req, res) => {
         const decimalFields = {
             capacity_MW: 'Capacity (MW)',
             annualProduction_L: 'Annual Production (L)',
-            injectionVoltage_KV: 'Injection Voltage (KV)'
+            injectionVoltage_KV: 'Injection Voltage (KV)',
+            revenuePerUnit: 'Revenue Per Unit'
         };
 
         for (const [field, label] of Object.entries(decimalFields)) {

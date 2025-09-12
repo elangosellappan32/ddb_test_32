@@ -38,12 +38,32 @@ export const useAllocationState = (initialMonth) => {
     }, [selectedMonth, showNotification]);
 
     const updateAllocation = useCallback((type, updatedItem) => {
-        setAllocations(prev => ({
-            ...prev,
-            [type]: prev[type].map(item => 
-                item.id === updatedItem.id ? updatedItem : item
-            )
-        }));
+        setAllocations(prev => {
+            // Find the existing item to merge with
+            const existingItem = prev[type].find(item => item.id === updatedItem.id);
+            
+            // If we have an existing item, merge the allocation data
+            const mergedItem = existingItem 
+                ? {
+                    ...existingItem,
+                    ...updatedItem,
+                    // Merge the allocated object if it exists
+                    ...(updatedItem.allocated && {
+                        allocated: {
+                            ...existingItem.allocated,
+                            ...updatedItem.allocated
+                        }
+                    })
+                }
+                : updatedItem;
+
+            return {
+                ...prev,
+                [type]: prev[type].map(item => 
+                    item.id === updatedItem.id ? mergedItem : item
+                )
+            };
+        });
     }, []);
 
     const addAllocation = useCallback((type, newItem) => {

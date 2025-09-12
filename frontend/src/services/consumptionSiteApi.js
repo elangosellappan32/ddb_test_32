@@ -108,15 +108,10 @@ class ConsumptionSiteApi {
     try {
       // Return cached data if available and fresh
       if (!forceRefresh && 
-          siteCache.data.length > 0 && 
           siteCache.lastUpdated && 
-          (Date.now() - siteCache.lastUpdated) < CACHE_TTL) {
-        return {
-          success: true,
-          data: [...siteCache.data],
-          total: siteCache.data.length,
-          fromCache: true
-        };
+          (Date.now() - siteCache.lastUpdated < CACHE_TTL)) {
+        console.log('[ConsumptionSiteAPI] Returning cached data');
+        return siteCache.data;
       }
 
       // If a refresh is already in progress, wait for it
@@ -127,34 +122,50 @@ class ConsumptionSiteApi {
 
       // Set the updating flag
       siteCache.isUpdating = true;
+      console.log('[ConsumptionSiteAPI] Fetching fresh data...');
 
-      // Fetch fresh data from the API
-      const response = await api.get(API_CONFIG.ENDPOINTS.CONSUMPTION.SITE.GET_ALL);
+      const response = await api.get('/consumption-site/all');
+      console.log('[ConsumptionSiteAPI] Raw API response:', response);
       
-      // Format and validate the response data
-      const formattedData = [];
-      for (const item of response.data.data || []) {
-        const formatted = formatSiteData(item);
-        if (formatted) {
-          formattedData.push(formatted);
-        }
+      if (!response) {
+        throw new Error('No response received from server');
       }
 
-      // Update the cache
-      siteCache.data = formattedData;
+      // Handle different response formats
+      let sites = [];
+      if (Array.isArray(response.data?.data)) {
+        console.log('[ConsumptionSiteAPI] Using response.data.data as sites array');
+        sites = response.data.data;
+      } else if (Array.isArray(response.data)) {
+        console.log('[ConsumptionSiteAPI] Using response.data as sites array');
+        sites = response.data;
+      } else if (Array.isArray(response)) {
+        console.log('[ConsumptionSiteAPI] Using direct response as sites array');
+        sites = response;
+      } else if (response.data) {
+        console.log('[ConsumptionSiteAPI] Wrapping single site in array');
+        sites = [response.data];
+      }
+
+      console.log(`[ConsumptionSiteAPI] Found ${sites.length} sites`);
+
+      const formattedSites = sites
+        .map(site => formatSiteData(site))
+        .filter(site => site !== null);
+
+      // Update cache
+      siteCache.data = formattedSites;
       siteCache.lastUpdated = Date.now();
       siteCache.isUpdating = false;
 
-      return {
-        success: true,
-        data: [...formattedData],
-        total: formattedData.length,
-        fromCache: false
-      };
+      console.log(`[ConsumptionSiteAPI] Successfully fetched ${formattedSites.length} sites`);
+      return formattedSites;
+
     } catch (error) {
-      console.error('[ConsumptionSiteAPI] Error fetching sites:', error);
+      siteCache.isUpdating = false;
+      console.error('[ConsumptionSiteAPI] Fetch error:', error);
       
-      // Retry on failure
+      // Retry on network errors or server errors
       if (retries > 0) {
         console.log(`[ConsumptionSiteAPI] Retrying... (${retries} attempts left)`);
         await new Promise(resolve => setTimeout(resolve, delay));

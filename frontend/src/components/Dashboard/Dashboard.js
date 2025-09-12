@@ -649,9 +649,9 @@ const Dashboard = () => {
         <Grid item xs={12} md={6} lg={3}>
           <DashboardCard
             icon={InvoiceIcon}
-            title="Invoices"
+            title="Invoice"
             color="secondary"
-            onClick={() => navigate('/invoices')}
+            onClick={() => navigate('/invoice')}
             content={
               invoiceStats.loading ? (
                 <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', minHeight: 300 }}>

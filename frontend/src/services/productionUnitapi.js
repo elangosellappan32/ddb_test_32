@@ -18,7 +18,7 @@ const stripUnitPrefix = (sk) => {
 const productionUnitApi = {
   fetchAll: async (companyId, productionSiteId) => {
     try {
-      console.log('[ProductionUnitAPI] Fetching units for site:', { companyId, productionSiteId });
+     
       const pk = `${companyId}_${productionSiteId}`;
       
       const response = await api.get(

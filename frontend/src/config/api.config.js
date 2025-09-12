@@ -161,12 +161,19 @@ export const API_CONFIG = {
         },
         CAPTATIVE: {
             BASE: '/captative',
-            GET_ALL: (companyId) => `/company/${companyId}/captative`,
-            GET_ONE: (companyId, captativeId) => `/company/${companyId}/captative/${captativeId}`,
-            CREATE: (companyId) => `/company/${companyId}/captative`,
-            UPDATE: (companyId, captativeId) => `/company/${companyId}/captative/${captativeId}`,
-            DELETE: (companyId, captativeId) => `/company/${companyId}/captative/${captativeId}`,
-            GET_BY_PERIOD: (companyId, period) => `/company/${companyId}/captative/period/${period}`
+            GET_ALL: (companyId) => `/captative/${companyId}`,
+            GET_ONE: (companyId, captativeId) => `/captative/${companyId}/${captativeId}`,
+            CREATE: (companyId) => `/captive`,
+            UPDATE: (companyId, captativeId) => `/captive/${companyId}/${captativeId}`,
+            DELETE: (companyId, captativeId) => `/captive/${companyId}/${captativeId}`,
+            GET_BY_PERIOD: (companyId, period) => `/captive/${companyId}/period/${period}`
+        },
+        INVOICE: {
+            BASE: '/invoice',
+            GENERATE: '/invoice/generate',
+            GET_ALL: '/invoice',
+            GET_ONE: (invoiceId) => `/invoice/${invoiceId}`,
+            DOWNLOAD_PDF: (invoiceId) => `/invoice/${invoiceId}/download`
         }
     }
 };

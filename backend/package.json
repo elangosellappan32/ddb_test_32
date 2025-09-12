@@ -20,6 +20,7 @@
     "express-async-handler": "^1.2.0",
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.2",
+    "notistack": "^3.0.2",
     "production-site-management-backend": "file:",
     "uuid": "^11.1.0"
   },

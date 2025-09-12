@@ -155,18 +155,6 @@ const UnitTable = ({
         Unit Data
       </Typography>
       <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-        {onAdd && (
-          <Button
-            variant="contained"
-            color="primary"
-            size="small"
-            onClick={onAdd}
-            startIcon={<AddIcon />}
-            disabled={loading}
-          >
-            Add Unit
-          </Button>
-        )}
         <FormControl size="small" sx={{ minWidth: 200 }}>
           <InputLabel>Financial Year</InputLabel>
           <Select
@@ -181,6 +169,19 @@ const UnitTable = ({
             ))}
           </Select>
         </FormControl>
+        {onAdd && (
+          <Button
+            variant="contained"
+            color="primary"
+            size="small"
+            onClick={onAdd}
+            startIcon={<AddIcon />}
+            disabled={loading}
+            sx={{ ml: 1 }}
+          >
+            Add Unit
+          </Button>
+        )}
       </Box>
     </Box>
   );
@@ -210,6 +211,7 @@ const UnitTable = ({
             <TableCell align="right">C3</TableCell>
             <TableCell align="right">C4</TableCell>
             <TableCell align="right">C5</TableCell>
+            <TableCell align="right">Import</TableCell>
             <TableCell align="right">Total</TableCell>
             <TableCell align="center">Actions</TableCell>
           </TableRow>
@@ -241,6 +243,9 @@ const UnitTable = ({
                   </TableCell>
                 );
               })}
+              <TableCell align="right" sx={{ color: '#9c27b0', fontWeight: 'medium' }}>
+                {formatNumber(row.import || 0)}
+              </TableCell>
               <TableCell 
                 align="right"
                 sx={{

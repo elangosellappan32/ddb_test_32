@@ -24,7 +24,8 @@ import {
   WbSunny as SolarIcon,
   FiberManualRecord as StatusDotIcon,
   Cached as RefreshIcon,
-  Error as ErrorIcon
+  Error as ErrorIcon,
+  AttachMoney as MoneyIcon
 } from '@mui/icons-material';
 import { formatDistanceToNow } from 'date-fns';
 
@@ -153,6 +154,7 @@ const ProductionSiteCard = ({
     htscNo: localSite?.htscNo || '',
     injectionVoltage_KV: Number(localSite?.injectionVoltage_KV || 0),
     banking: Number(localSite?.banking || 0),
+    revenuePerUnit: localSite?.revenuePerUnit != null ? parseFloat(localSite.revenuePerUnit) : 0,
     version: Number(localSite?.version || 1)
   };
   
@@ -275,10 +277,19 @@ const ProductionSiteCard = ({
           </Grid>
 
           <Grid item xs={6}>
-            <Box sx={{ display: 'flex', alignItems: 'center' }}>
-              {bankingStatus.icon}
-              <Typography variant="body2" color="text.secondary" sx={{ ml: 0.5 }}>
-                Banking
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+              <StatusDotIcon sx={{ color: getStatusColor(safeData.normalizedStatus), fontSize: '0.75rem' }} />
+              <Typography variant="caption" color={getStatusColor(safeData.normalizedStatus)}>
+                {safeData.normalizedStatus}
+              </Typography>
+            </Box>
+            <Box sx={{ display: 'flex', alignItems: 'baseline', mt: 0.5 }}>
+              <Typography component="span" sx={{ color: 'success.main', fontSize: '1.5rem', lineHeight: 1, mr: 0.5 }}>₹</Typography>
+              <Typography variant="body1" sx={{ fontWeight: 'bold', lineHeight: 1 }}>
+                {typeof safeData.revenuePerUnit === 'number' ? safeData.revenuePerUnit.toFixed(2) : '0.00'}
+                <Typography component="span" variant="body2" color="text.secondary" sx={{ ml: 0.5, fontWeight: 'normal' }}>
+                  /unit
+                </Typography>
               </Typography>
             </Box>
             <Typography variant="body1" sx={{ fontWeight: 500 }} color={bankingStatus.color}>

@@ -31,7 +31,8 @@ const INITIAL_FORM_STATE = {
   type: '',
   status: '',
   banking: 0,
-  annualProduction_L: ''
+  annualProduction_L: '',
+  revenuePerUnit: ''
 };
 
 const ProductionSiteForm = ({ initialData, onSubmit, onCancel, loading, site }) => {
@@ -68,16 +69,18 @@ const ProductionSiteForm = ({ initialData, onSubmit, onCancel, loading, site }) 
           ? normalizedStatus 
           : '';
 
+        // Parse numeric values, ensuring proper handling of null/undefined
         const newFormData = {
           name: site.name || '',
           type: validType,
           location: site.location || '',
-          capacity_MW: site.capacity_MW ?? '',
-          injectionVoltage_KV: site.injectionVoltage_KV ?? '',
+          capacity_MW: site.capacity_MW != null ? parseFloat(site.capacity_MW) : '',
+          injectionVoltage_KV: site.injectionVoltage_KV != null ? parseFloat(site.injectionVoltage_KV) : '',
           htscNo: site.htscNo || '',
-          annualProduction_L: site.annualProduction_L ?? '',
-          status: validStatus, // This will be empty if status is invalid or missing
-          banking: validStatus && INACTIVE_STATUSES.includes(validStatus) ? 0 : (site.banking || 0),
+          annualProduction_L: site.annualProduction_L != null ? parseFloat(site.annualProduction_L) : '',
+          revenuePerUnit: site.revenuePerUnit != null ? parseFloat(site.revenuePerUnit) : '',
+          status: validStatus,
+          banking: validStatus && INACTIVE_STATUSES.includes(validStatus) ? 0 : (site.banking ? 1 : 0),
         };
 
         setFormData(newFormData);
@@ -101,18 +104,20 @@ const ProductionSiteForm = ({ initialData, onSubmit, onCancel, loading, site }) 
     const requiredFields = ['name', 'location', 'capacity_MW', 'injectionVoltage_KV', 'type', 'status'];
 
     requiredFields.forEach(field => {
-      if (!data[field]) {
+      if (!data[field] && data[field] !== 0) {
         newErrors[field] = 'This field is required';
       }
     });
 
     if (data.name && data.name.length < 3) newErrors.name = 'Name must be at least 3 characters';
-    if (data.capacity_MW && (isNaN(data.capacity_MW) || data.capacity_MW <= 0))
+    if (data.capacity_MW !== undefined && (isNaN(data.capacity_MW) || data.capacity_MW <= 0))
       newErrors.capacity_MW = 'Capacity must be greater than 0';
-    if (data.injectionVoltage_KV && (isNaN(data.injectionVoltage_KV) || data.injectionVoltage_KV <= 0))
+    if (data.injectionVoltage_KV !== undefined && (isNaN(data.injectionVoltage_KV) || data.injectionVoltage_KV <= 0))
       newErrors.injectionVoltage_KV = 'Voltage must be greater than 0';
-    if (data.annualProduction_L && (isNaN(data.annualProduction_L) || data.annualProduction_L < 0))
+    if (data.annualProduction_L !== undefined && data.annualProduction_L !== '' && (isNaN(data.annualProduction_L) || data.annualProduction_L < 0))
       newErrors.annualProduction_L = 'Annual production cannot be negative';
+    if (data.revenuePerUnit !== undefined && data.revenuePerUnit !== '' && (isNaN(data.revenuePerUnit) || data.revenuePerUnit < 0))
+      newErrors.revenuePerUnit = 'Revenue per unit cannot be negative';
 
     setErrors(newErrors);
     setIsValid(Object.keys(newErrors).length === 0);
@@ -126,8 +131,15 @@ const ProductionSiteForm = ({ initialData, onSubmit, onCancel, loading, site }) 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
     let processedValue = value;
-    if (type === 'number') processedValue = value === '' ? '' : Number(value);
-    if (type === 'checkbox') processedValue = checked ? 1 : 0;
+    
+    // Special handling for revenuePerUnit to ensure proper decimal handling
+    if (name === 'revenuePerUnit') {
+      processedValue = value === '' ? '' : parseFloat(value) || 0;
+    } else if (type === 'number') {
+      processedValue = value === '' ? '' : Number(value);
+    } else if (type === 'checkbox') {
+      processedValue = checked ? 1 : 0;
+    }
 
     const updatedData = { ...formData, [name]: processedValue };
     if (name === 'status' && INACTIVE_STATUSES.includes(processedValue)) {
@@ -275,6 +287,40 @@ const ProductionSiteForm = ({ initialData, onSubmit, onCancel, loading, site }) 
                   fullWidth type="number" name="annualProduction_L" label="Annual Production (L)"
                   value={formData.annualProduction_L} onChange={handleChange}
                   InputProps={{ startAdornment: <InputAdornment position="start"><AnnualProductionIcon /></InputAdornment>, endAdornment: <InputAdornment position="end">L</InputAdornment> }}
+                />
+              </Grid>
+
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth 
+                  type="number"
+                  inputProps={{
+                    step: '0.01',
+                    min: '0',
+                    inputMode: 'decimal'
+                  }}
+                  name="revenuePerUnit" 
+                  label="Revenue per Unit (₹)" 
+                  value={formData.revenuePerUnit} 
+                  onChange={handleChange}
+                  onBlur={(e) => {
+                    // Format the value to 2 decimal places on blur
+                    if (e.target.value !== '') {
+                      const value = parseFloat(e.target.value);
+                      if (!isNaN(value)) {
+                        setFormData(prev => ({
+                          ...prev,
+                          revenuePerUnit: parseFloat(value.toFixed(2))
+                        }));
+                      }
+                    }
+                  }}
+                  error={touched.revenuePerUnit && !!errors.revenuePerUnit}
+                  helperText={touched.revenuePerUnit && errors.revenuePerUnit}
+                  InputProps={{ 
+                    startAdornment: <InputAdornment position="start">₹</InputAdornment>,
+                    endAdornment: <InputAdornment position="end">/unit</InputAdornment> 
+                  }}
                 />
               </Grid>
             </Grid>

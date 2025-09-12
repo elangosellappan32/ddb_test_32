@@ -89,11 +89,12 @@ const ProductionSiteDataForm = ({
         c2: (data?.c2 ?? '0').toString(),
         c3: (data?.c3 ?? '0').toString(),
         c4: (data?.c4 ?? '0').toString(),
-        c5: (data?.c5 ?? '0').toString()
+        c5: (data?.c5 ?? '0').toString(),
+        import: (data?.import ?? '0').toString()
       };
     }
     
-    return Array.from({ length: 10 }, (_, i) => {
+    return Array.from({ length: 11 }, (_, i) => {
       const key = `c${String(i + 1).padStart(3, '0')}`;
       return { [key]: (data?.[key] ?? '0').toString() };
     }).reduce((acc, curr) => ({ ...acc, ...curr }), {});
@@ -138,11 +139,12 @@ const ProductionSiteDataForm = ({
         { id: 'c2', label: 'C2 Value' },
         { id: 'c3', label: 'C3 Value' },
         { id: 'c4', label: 'C4 Value' },
-        { id: 'c5', label: 'C5 Value' }
+        { id: 'c5', label: 'C5 Value' },
+        { id: 'import', label: 'Import (Units)' }
       ];
     }
 
-    return Array.from({ length: 10 }, (_, i) => ({
+    return Array.from({ length: 11 }, (_, i) => ({
       id: `c${String(i + 1).padStart(3, '0')}`,
       label: `C${String(i + 1).padStart(3, '0')} Value`
     }));
@@ -298,7 +300,7 @@ const ProductionSiteDataForm = ({
             views={['year', 'month']}
             value={formData.date}
             onChange={handleDateChange}
-            disabled={!canEdit || initialData} // Disable date picker if editing existing data
+            readOnly={!canEdit || !!initialData} // Use readOnly instead of disabled
             renderInput={(params) => (
               <TextField
                 {...params}
@@ -306,7 +308,10 @@ const ProductionSiteDataForm = ({
                 required
                 error={!!errors.date}
                 helperText={errors.date}
-                disabled={!canEdit || initialData}
+                InputProps={{
+                  ...params.InputProps,
+                  readOnly: !canEdit || !!initialData
+                }}
               />
             )}
           />

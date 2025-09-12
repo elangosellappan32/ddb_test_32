@@ -103,8 +103,8 @@ class LapseDAL {
             
             this.validateSortKey(sk);
             
-            // Extract c1-c5 from updates or from allocated if present
-            const { allocated, ...restUpdates } = updates;
+            // Extract only the fields we want to update
+            const { allocated, charge, ...restUpdates } = updates;
             const cValues = {
                 c1: 0,
                 c2: 0,
@@ -132,10 +132,8 @@ class LapseDAL {
             const command = new UpdateCommand({
                 TableName: this.tableName,
                 Key: { pk, sk },
-                UpdateExpression: updateExpressions.join(', '),
-                ExpressionAttributeValues: expressionAttributeValues,
-                // Remove allocated attribute if it exists
                 UpdateExpression: `${updateExpressions.join(', ')} REMOVE allocated`,
+                ExpressionAttributeValues: expressionAttributeValues,
                 ReturnValues: 'ALL_NEW'
             });
             

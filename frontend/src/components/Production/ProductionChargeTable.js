@@ -139,18 +139,6 @@ const ChargeTable = ({
         Charge Data
       </Typography>
       <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-        {onAdd && (
-          <Button
-            variant="contained"
-            color="primary"
-            size="small"
-            onClick={onAdd}
-            startIcon={<AddIcon />}
-            disabled={loading}
-          >
-            Add Charge
-          </Button>
-        )}
         <FormControl size="small" sx={{ minWidth: 200 }}>
           <InputLabel>Financial Year</InputLabel>
           <Select
@@ -165,6 +153,19 @@ const ChargeTable = ({
             ))}
           </Select>
         </FormControl>
+        {onAdd && (
+          <Button
+            variant="contained"
+            color="primary"
+            size="small"
+            onClick={onAdd}
+            startIcon={<AddIcon />}
+            disabled={loading}
+            sx={{ ml: 1 }}
+          >
+            Add Charge
+          </Button>
+        )}
       </Box>
     </Box>
   );
@@ -205,7 +206,7 @@ const ChargeTable = ({
         <TableHead>
           <TableRow sx={{ '& th': { backgroundColor: '#1976d2', color: 'white', fontWeight: 'bold' } }}>
             <TableCell>Date</TableCell>
-            {[...Array(10)].map((_, i) => (
+            {[...Array(11)].map((_, i) => (
               <TableCell key={`header-${i}`} align="right">
                 C{(i + 1).toString().padStart(3, '0')}
               </TableCell>
@@ -221,7 +222,7 @@ const ChargeTable = ({
               sx={{ '&:hover': { cursor: 'pointer' } }}
             >
               <TableCell>{row.sk ? formatDisplayDate(row.sk) : 'N/A'}</TableCell>
-              {[...Array(10)].map((_, i) => {
+              {[...Array(11)].map((_, i) => {
                 const field = `c${(i + 1).toString().padStart(3, '0')}`;
                 return (
                   <TableCell 

@@ -72,6 +72,7 @@ exports.createProductionUnit = async (req, res) => {
                    Number(data.c3 || 0) + 
                    Number(data.c4 || 0) + 
                    Number(data.c5 || 0),
+            import:Number(data.import || 0),
             date: formatDateToMMYYYY(data.date),
             createdat: new Date().toISOString(),
             updatedat: new Date().toISOString()
@@ -159,7 +160,8 @@ exports.updateProductionUnit = async (req, res) => {
              Number(formattedData.c2 || 0) + 
              Number(formattedData.c3 || 0) + 
              Number(formattedData.c4 || 0) + 
-             Number(formattedData.c5 || 0)
+             Number(formattedData.c5 || 0),
+    import:Number(formattedData.import || 0)
     };
 
     const result = await productionUnitDAL.updateItem(pk, sk, updateData);

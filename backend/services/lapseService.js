@@ -19,9 +19,9 @@ class LapseService {
             // Normalize data
             const normalizedData = {
                 ...restData,
-                type: 'LAPSE',
+                type: 'LAPSE', // Keep type as attribute but not in PK
                 companyId: lapseData.companyId || '1',
-                pk: `${lapseData.companyId || '1'}_${lapseData.productionSiteId}`,
+                pk: `${lapseData.companyId || '1'}_${lapseData.productionSiteId}`, // Remove _LAPSE suffix
                 sk: lapseData.month,
                 // Ensure c1-c5 are at root level and are numbers
                 c1: Number(allocated?.c1 || 0) || 0,
@@ -62,20 +62,21 @@ class LapseService {
             // Extract c1-c5 values from allocated if they exist in updates
             const { allocated, ...restUpdates } = updates;
             
-            // Prepare the update payload with c1-c5 at root level
+            // Always include c1-c5 in the update payload
             const updatePayload = {
                 ...restUpdates,
-                // Only include c1-c5 if they exist in allocated
-                ...(allocated && {
-                    c1: Number(allocated.c1 || 0) || 0,
-                    c2: Number(allocated.c2 || 0) || 0,
-                    c3: Number(allocated.c3 || 0) || 0,
-                    c4: Number(allocated.c4 || 0) || 0,
-                    c5: Number(allocated.c5 || 0) || 0
-                })
+                // Convert values to numbers, ensuring 0 is preserved
+                c1: allocated ? Number(allocated.c1) : (updates.c1 !== undefined ? Number(updates.c1) : undefined),
+                c2: allocated ? Number(allocated.c2) : (updates.c2 !== undefined ? Number(updates.c2) : undefined),
+                c3: allocated ? Number(allocated.c3) : (updates.c3 !== undefined ? Number(updates.c3) : undefined),
+                c4: allocated ? Number(allocated.c4) : (updates.c4 !== undefined ? Number(updates.c4) : undefined),
+                c5: allocated ? Number(allocated.c5) : (updates.c5 !== undefined ? Number(updates.c5) : undefined)
             };
             
-            return await lapseDAL.updateLapse(pk, sk, updatePayload);
+            // Remove type suffix from pk if it exists
+            const cleanPk = pk.endsWith('_LAPSE') ? pk.slice(0, -6) : pk;
+            
+            return await lapseDAL.updateLapse(cleanPk, sk, updatePayload);
         } catch (error) {
             logger.error('[LapseService] Update Error:', error);
             throw error;
@@ -84,7 +85,9 @@ class LapseService {
 
     async delete(pk, sk) {
         try {
-            return await lapseDAL.deleteLapse(pk, sk);
+            // Remove type suffix from pk if it exists
+            const cleanPk = pk.endsWith('_LAPSE') ? pk.slice(0, -6) : pk;
+            return await lapseDAL.deleteLapse(cleanPk, sk);
         } catch (error) {
             logger.error('[LapseService] Delete Error:', error);
             throw error;
