@@ -104,6 +104,33 @@ class AllocationApi {
         }
     }
 
+    /**
+     * Fetch allocations for a specific production site
+     * @param {string} productionSiteId - The ID of the production site
+     * @param {string} month - The month in MMYYYY format
+     * @param {string} companyId - Optional company ID to filter by
+     * @returns {Promise<Array>} Array of allocation records
+     */
+    async fetchByProductionSite(productionSiteId, month, companyId) {
+        try {
+            // First get all allocations for the month and company
+            const allAllocations = await this.fetchByType('allocations', month, companyId);
+            
+            // Filter allocations for the specific production site
+            // The PK typically contains the production site ID in the format: COMPANYID_PRODUCTIONSITEID_CONSUMPTIONSITEID
+            return allAllocations.filter(allocation => {
+                // Check if the allocation's PK contains the production site ID
+                const pk = allocation.pk || '';
+                const parts = pk.split('_');
+                // The production site ID is typically the second part of the PK
+                return parts.length >= 2 && parts[1] === productionSiteId;
+            });
+        } catch (error) {
+            console.error('Error fetching allocations by production site:', error);
+            throw this.handleError(error);
+        }
+    }
+
     async fetchByType(type, month, companyId, options = {}) {
         try {
             const typeMap = {

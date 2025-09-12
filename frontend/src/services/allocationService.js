@@ -132,7 +132,7 @@ class AllocationService {
 
     validateAllocation(allocation, existingAllocations = []) {
         const errors = [];
-        const cValues = allocation.cValues || allocation.allocated;
+        const cValues = allocation.cValues || allocation.allocated || {};
         
         if (!cValues) {
             errors.push('No allocation data provided');
@@ -157,27 +157,40 @@ class AllocationService {
             }
         });
 
+        // Get the site ID and month for the current allocation
+        const siteId = allocation.pk?.split('#')[1] || allocation.siteId;
+        const monthYear = allocation.sk?.split('#')[0] || '';
+
         // Validate charge attribute
-        if (charge) {
-            // Check if another allocation for the same month is already charged
+        if (charge && siteId && monthYear) {
+            // Check if another allocation for the same site and month is already charged
             const hasExistingCharge = existingAllocations.some(existing => {
-                const existingCValues = existing.cValues || existing.allocated;
-                const existingCharge = Boolean(existingCValues?.charge || existing.charge);
+                const existingCValues = existing.cValues || existing.allocated || {};
+                const existingCharge = Boolean(existingCValues.charge || existing.charge);
+                const existingSiteId = existing.pk?.split('#')[1] || existing.siteId;
+                const existingMonthYear = existing.sk?.split('#')[0] || '';
+                
                 return (
-                    existing.sk === allocation.sk && // Same month
+                    existingSiteId === siteId &&
+                    existingMonthYear === monthYear &&
                     existing.pk !== allocation.pk && // Different allocation
                     existingCharge
                 );
             });
+
             if (hasExistingCharge) {
-                errors.push('Another allocation is already marked as charged for this month');
+                errors.push('This site already has a charge record for the selected month');
             }
         }
 
         return {
             isValid: errors.length === 0,
             errors,
-            allocation
+            allocation: {
+                ...allocation,
+                siteId: siteId,
+                monthYear: monthYear
+            }
         };
     }
 
@@ -187,8 +200,42 @@ class AllocationService {
             const processedData = this.processAllocation(data);
             
             // Get existing allocations for the same month to validate charge
-            const existingAllocations = await this.fetchAllocationsByMonth(processedData.sk || '');
+            const month = processedData.sk?.split('#')[0] || '';
+            const existingAllocations = await this.fetchAllocationsByMonth(month);
             
+            // Extract production site ID from PK (format: companyId_productionSiteId_consumptionSiteId)
+            const pkParts = (processedData.pk || '').split('_');
+            const productionSiteId = pkParts.length >= 2 ? pkParts[1] : null;
+            
+            if (!productionSiteId) {
+                throw new Error('Invalid allocation: Missing production site ID in primary key');
+            }
+            
+            // Check if this is a charge allocation
+            const isCharge = processedData.cValues?.charge || processedData.charge;
+            
+            // If this is a charge allocation, ensure no other charge exists for this production site/month
+            if (isCharge) {
+                const existingCharge = existingAllocations.find(alloc => {
+                    const allocPkParts = (alloc.pk || '').split('_');
+                    const allocProductionSiteId = allocPkParts.length >= 2 ? allocPkParts[1] : null;
+                    const allocMonth = alloc.sk?.split('#')[0] || '';
+                    const allocCharge = alloc.cValues?.charge || alloc.charge;
+                    
+                    return (allocProductionSiteId === productionSiteId && 
+                            allocMonth === month && 
+                            allocCharge);
+                });
+
+                if (existingCharge) {
+                    throw new Error(`Production site ${productionSiteId} already has a charge for ${month}. Only one charge per production site per month is allowed.`);
+                }
+            }
+            
+            // For non-charge allocations, ensure they don't exceed the allocated amounts
+            // when combined with other allocations for the same production site/month
+            
+            // Validate the allocation
             const validation = this.validateAllocation(processedData, existingAllocations);
             if (!validation.isValid) {
                 throw new Error(validation.errors.join(', '));
@@ -200,7 +247,7 @@ class AllocationService {
                 // Ensure charge is included in the allocated object for the API
                 allocated: {
                     ...(processedData.cValues || {}),
-                    charge: processedData.cValues?.charge ? 1 : 0
+                    charge: isCharge ? 1 : 0
                 }
             };
 
@@ -236,12 +283,37 @@ class AllocationService {
             });
             
             // Get existing allocations for the same month to validate charge
-            const existingAllocations = (await this.fetchAllocationsByMonth(sk))
-                .filter(a => a.pk !== pk); // Exclude current allocation
+            const month = sk?.split('#')[0] || '';
+            const existingAllocations = await this.fetchAllocationsByMonth(month);
+            const otherAllocations = existingAllocations.filter(a => a.pk !== pk);
             
-            const validation = this.validateAllocation(processedData, existingAllocations);
-            if (!validation.isValid) {
-                throw new Error(validation.errors.join(', '));
+            // Extract production site ID from PK (format: companyId_productionSiteId_consumptionSiteId)
+            const pkParts = (pk || '').split('_');
+            const productionSiteId = pkParts.length >= 2 ? pkParts[1] : null;
+            
+            if (!productionSiteId) {
+                throw new Error('Invalid allocation: Missing production site ID in primary key');
+            }
+            
+            // Check if this is a charge allocation
+            const isCharge = processedData.cValues?.charge || processedData.charge;
+            
+            // If this is a charge allocation, ensure no other charge exists for this production site/month
+            if (isCharge) {
+                const existingCharge = otherAllocations.find(alloc => {
+                    const allocPkParts = (alloc.pk || '').split('_');
+                    const allocProductionSiteId = allocPkParts.length >= 2 ? allocPkParts[1] : null;
+                    const allocMonth = alloc.sk?.split('#')[0] || '';
+                    const allocCharge = alloc.cValues?.charge || alloc.charge;
+                    
+                    return (allocProductionSiteId === productionSiteId && 
+                            allocMonth === month && 
+                            allocCharge);
+                });
+
+                if (existingCharge) {
+                    throw new Error(`Production site ${productionSiteId} already has a charge for ${month}. Only one charge per production site per month is allowed.`);
+                }
             }
 
             // Format the data for the API
@@ -250,7 +322,7 @@ class AllocationService {
                 // Ensure charge is included in the allocated object for the API
                 allocated: {
                     ...(processedData.cValues || {}),
-                    charge: processedData.cValues?.charge ? 1 : 0
+                    charge: isCharge ? 1 : 0
                 }
             };
 
@@ -274,23 +346,6 @@ class AllocationService {
             console.error('[AllocationService] Update Error:', error);
             throw error;
         }
-    }
-
-    async getAllAllocations() {
-        const response = await fetch('/api/allocations', {
-            headers: {
-                'Authorization': `Bearer ${localStorage.getItem('token')}`
-            }
-        });
-        
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.message || 'Failed to fetch allocations');
-        }
-        
-        const responseData = await response.json();
-        const allocations = Array.isArray(responseData?.data) ? responseData.data : [];
-        return allocations.map(item => this.processAllocation(item));
     }
 
     async fetchAllocationsByMonth(month) {

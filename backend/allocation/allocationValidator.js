@@ -5,8 +5,37 @@ const validateAllocation = (req, res, next) => {
         const allocation = req.body;
         const allocations = Array.isArray(allocation) ? allocation : [allocation];
         const errors = [];
-        const monthChargeMap = new Map(); // Track charge=1 allocations by month
+        // Track charge=1 allocations by site and month (format: 'siteId#month')
+        const siteMonthChargeMap = new Map(); 
 
+        // First pass: collect all charges to validate uniqueness
+        for (const alloc of allocations) {
+            const type = (alloc.type || 'ALLOCATION').toUpperCase();
+            if (type !== 'ALLOCATION') continue;
+            
+            // Parse site ID from pk (format: 'companyId_siteId_consumerId')
+            const siteId = alloc.pk?.split('_')[1];
+            const month = alloc.sk?.split('#')[0];
+            
+            if (!siteId || !month) continue;
+            
+            // Handle charge attribute
+            const charge = alloc.charge === true || alloc.charge === 1 ? 1 : 0;
+            
+            if (charge === 1) {
+                const key = `${siteId}#${month}`;
+                if (siteMonthChargeMap.has(key) && siteMonthChargeMap.get(key) !== alloc.pk) {
+                    errors.push({
+                        allocation: alloc,
+                        errors: [`Site ${siteId} already has a charge for month ${month}`]
+                    });
+                } else {
+                    siteMonthChargeMap.set(key, alloc.pk);
+                }
+            }
+        }
+        
+        // Second pass: validate each allocation
         for (const alloc of allocations) {
             const type = (alloc.type || 'ALLOCATION').toUpperCase();
             const validationErrors = [];
@@ -55,20 +84,10 @@ const validateAllocation = (req, res, next) => {
                 alloc.charge = alloc.charge === true || alloc.charge === 1 ? 1 : 0;
             }
 
-            // Additional charge validations
-            if (alloc.charge === 1) {
+            // Additional charge validations for ALLOCATION type only
+            if (type === 'ALLOCATION' && alloc.charge === 1) {
                 if (totalAllocation === 0) {
                     validationErrors.push('Cannot set charge=1 for an allocation with zero units');
-                }
-
-                // Check for unique charge=1 per month
-                if (monthChargeMap.has(alloc.sk)) {
-                    const existingChargePk = monthChargeMap.get(alloc.sk);
-                    if (existingChargePk !== alloc.pk) {
-                        validationErrors.push(`Month ${alloc.sk} already has an allocation with charge=1`);
-                    }
-                } else {
-                    monthChargeMap.set(alloc.sk, alloc.pk);
                 }
             }
 

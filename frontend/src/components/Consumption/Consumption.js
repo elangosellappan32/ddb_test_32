@@ -65,69 +65,76 @@ const Consumption = () => {
   
   // Check if user has access to any consumption sites or can create new ones
   const hasAccessToSites = useMemo(() => {
+    const isUserAdmin = isAdmin?.();
+    const hasRead = permissions?.read;
+    const hasCreate = permissions?.create;
+    const hasSites = accessibleSites?.length > 0;
+    
     // Log current access state for debugging
-    console.log('Checking site access:', {
-      isAdmin: isAdmin?.(),
+    const accessInfo = {
+      isAdmin: isUserAdmin,
       userRole: user?.role,
-      hasReadPermission: permissions?.read,
-      hasCreatePermission: permissions?.create,
+      hasReadPermission: hasRead,
+      hasCreatePermission: hasCreate,
       accessibleSitesCount: accessibleSites?.length || 0,
       permissions: user?.permissions
-    });
+    };
+    
+    console.log('Checking site access:', accessInfo);
 
-    // Admin always has full access
-    if (isAdmin?.()) {
-      console.log('User has admin access');
-      return true;
-    }
-
-    // Check for READ or CREATE permission
-    if (permissions?.read || permissions?.create) {
-      console.log('User has READ or CREATE permission');
-      return true;
-    }
-
-    // Check for explicitly assigned sites
-    const hasAssignedSites = accessibleSites && accessibleSites.length > 0;
-    if (hasAssignedSites) {
-      console.log('User has assigned sites:', accessibleSites);
-      return true;
+    // Return true for any of these conditions
+    const hasAccess = isUserAdmin || hasRead || hasCreate || hasSites;
+    
+    if (hasAccess) {
+      console.log('User has access to sites:', { isUserAdmin, hasRead, hasCreate, hasSites });
+    } else {
+      console.log('User has no access to sites. Access info:', accessInfo);
     }
     
-    console.log('Access check result:', {
-      hasAssignedSites,
-      hasReadPermission: permissions?.read,
-      hasCreatePermission: permissions?.create,
-      isAdmin: isAdmin?.(),
-      accessibleSitesCount: accessibleSites?.length,
-      user: {
-        role: user?.role,
-        hasPermissions: Boolean(user?.permissions)
-      }
-    });
-
-    return false;
+    return hasAccess;
   }, [isAdmin, accessibleSites, permissions?.read, user]);
 
   // Fetch sites
   const fetchSites = useCallback(async () => {
     try {
       setLoading(true);
+      console.log('[Consumption] Fetching sites...');
+      
+      // Get sites from API
       const response = await consumptionSiteApi.fetchAll();
-      const data = response.data || [];
+      console.log('[Consumption] API response:', response);
+      
+      // Handle different response formats
+      let sites = [];
+      if (Array.isArray(response)) {
+        sites = response;
+      } else if (response && Array.isArray(response.data)) {
+        sites = response.data;
+      } else if (response && response.data && Array.isArray(response.data.data)) {
+        sites = response.data.data;
+      } else if (response && response.data) {
+        sites = [response.data];
+      }
+      
+      console.log(`[Consumption] Processed ${sites.length} sites:`, sites);
+      
       // Filter sites based on user access
-      if (isAdmin || permissions?.read) {
+      const isUserAdmin = isAdmin?.();
+      if (isUserAdmin || permissions?.read) {
         // Admin or users with READ permission can see all sites
-        console.log('User has full access to sites');
-        setFilteredSites(data);
+        console.log('[Consumption] User has full access to all sites');
+        setFilteredSites(sites);
       } else if (accessibleSites?.length > 0) {
         // Filter sites that the user has access to
-        const filtered = data.filter(site => 
+        const filtered = sites.filter(site => 
           hasSiteAccess?.(site.companyId, site.consumptionSiteId)
         );
         
-        console.log('Filtered accessible sites');
+        console.log('[Consumption] Filtered accessible sites:', filtered);
         setFilteredSites(filtered);
+      } else {
+        console.log('[Consumption] No accessible sites found for user');
+        setFilteredSites([]);
       }
       
     } catch (error) {
@@ -283,9 +290,19 @@ const Consumption = () => {
     return (
       <Box display="flex" justifyContent="center" alignItems="center" minHeight="200px">
         <CircularProgress />
+        <Typography variant="body1" sx={{ ml: 2 }}>Loading consumption sites...</Typography>
       </Box>
     );
   }
+  
+  // Log current state for debugging
+  console.log('Rendering Consumption component', {
+    loading,
+    filteredSitesCount: filteredSites?.length,
+    hasAccessToSites,
+    permissions,
+    user: { role: user?.role, isAdmin: isAdmin?.() }
+  });
 
   // Render no access message
   if (!hasAccessToSites) {

@@ -86,7 +86,7 @@ app.use('/api/company', companyRoutes);
 app.use('/api/site-access', siteAccessRoutes);
 app.use('/api/form', formRoutes);
 app.use('/api/graphical-report', graphicalReportRoutes);
-app.use('/api/invoice', invoiceRoutes); // Mount invoice routes at /api/invoice
+app.use('/api/invoice', invoiceRoutes);
 
 // Error handling
 app.use(errorHandler);

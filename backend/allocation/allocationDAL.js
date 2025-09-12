@@ -78,11 +78,19 @@ class AllocationDAL {
       this.validateItem(item);
       const now = new Date().toISOString();
 
-      // Get existing charge allocation for this month if any
+      // Get existing charge allocation for this production site and month if any
       if (item.charge === 1) {
-        const existingCharge = await this.getChargingAllocation(item.sk);
+        // Extract production site ID from PK (format: companyId_productionSiteId_consumptionSiteId)
+        const pkParts = (item.pk || '').split('_');
+        const productionSiteId = pkParts.length >= 2 ? pkParts[1] : null;
+        
+        if (!productionSiteId) {
+          throw new Error('Invalid allocation: Missing production site ID in primary key');
+        }
+        
+        const existingCharge = await this.getChargingAllocation(item.sk, productionSiteId);
         if (existingCharge && existingCharge.pk !== item.pk) {
-          throw new Error(`Month ${item.sk} already has an allocation with charge=1 for pk: ${existingCharge.pk}`);
+          throw new Error(`Production site ${productionSiteId} already has a charge for month ${item.sk}`);
         }
       }
 
@@ -315,9 +323,20 @@ class AllocationDAL {
     }
   }
 
-  async getChargingAllocation(month) {
+  async getChargingAllocation(month, productionSiteId = null) {
     try {
       const allocations = await this.getAllocationsByMonth(month);
+      
+      // If productionSiteId is provided, find charge for that specific production site
+      if (productionSiteId) {
+        return allocations.find(a => {
+          const allocPkParts = (a.pk || '').split('_');
+          const allocProductionSiteId = allocPkParts.length >= 2 ? allocPkParts[1] : null;
+          return (a.charge === 1 && allocProductionSiteId === productionSiteId);
+        }) || null;
+      }
+      
+      // For backward compatibility, return the first charge found if no production site specified
       return allocations.find(a => a.charge === 1) || null;
     } catch (error) {
       logger.error('[AllocationDAL] GetChargingAllocation Error:', error);

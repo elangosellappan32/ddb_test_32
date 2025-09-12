@@ -11,6 +11,13 @@ import {
   TableRow,
   Divider,
   Button,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  FormHelperText,
+  CircularProgress,
+  Grid
 } from '@mui/material';
 import { styled } from '@mui/material/styles';
 import { Print as PrintIcon, Download as DownloadIcon } from '@mui/icons-material';
@@ -56,58 +63,140 @@ const ActionButtons = styled(Box)(({ theme }) => ({
 const InvoiceTemplate = ({
   billMonth,
   onPrint,
-  onDownload
+  onDownload,
+  onProductionSiteChange,
+  onConsumptionSiteChange,
+  productionSites = [],
+  consumptionSites = [],
+  selectedProductionSite = '',
+  selectedConsumptionSite = '',
+  isLoadingSites = false,
+  siteError = null,
+  invoiceData = {}
 }) => {
   // Use the invoice calculator hook to get all the data and utilities
   const {
     companyName,
     isLoading,
-    windData,
-    chargesData,
-    windHeaders,
+    windData = [],
+    chargesData = [],
+    windHeaders = [],
     invoiceNumber,
-    formatNumber,
-    formatCurrency,
-    recalculateInvoice
-  } = useInvoiceCalculator(billMonth);
+    formatNumber = (num) => num?.toLocaleString() || '0',
+    formatCurrency = (num) => `₹${num?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+    recalculateInvoice,
+    productionSiteName = '',
+    consumptionSiteName = '',
+    siteData = {}
+  } = useInvoiceCalculator(billMonth, selectedProductionSite, selectedConsumptionSite);
+
+  // Get the selected production site name
+  const getProductionSiteName = () => {
+    if (productionSiteName) return productionSiteName;
+    const site = productionSites.find(site => site.id === selectedProductionSite);
+    return site ? `${site.name} (${site.type || 'N/A'})` : 'No site selected';
+  };
 
   return (
-  <StyledPaper elevation={0}>
-    {/* Invoice Meta/Header */}
-    <Box mb={2}>
-      <Typography variant="h5" fontWeight="bold">
-        {isLoading ? 'Loading...' : companyName}
-      </Typography>
-      <Typography variant="subtitle1">
-        CC Bill Month: <b>{billMonth || 'Not Specified'}</b>
-      </Typography>
+    <StyledPaper elevation={0}>
+      {/* Invoice Meta/Header */}
+      <Box mb={2}>
+        <Grid container spacing={2} alignItems="center">
+          <Grid item xs={12} md={6}>
+            <Typography variant="h5" fontWeight="bold">
+              {isLoading ? 'Loading...' : companyName || 'Invoice'}
+            </Typography>
+            <Typography variant="subtitle1">
+              Bill Month: <b>{billMonth || 'Not Specified'}</b>
+              {invoiceNumber && ` | Invoice #: ${invoiceNumber}`}
+            </Typography>
+          </Grid>
+          <Grid item xs={12} md={6}>
+            <FormControl fullWidth variant="outlined" margin="normal" error={!!siteError}>
+              <InputLabel id="production-site-label">Production Site</InputLabel>
+              {isLoadingSites ? (
+                <Box display="flex" alignItems="center" p={2}>
+                  <CircularProgress size={24} />
+                  <Typography variant="body2" ml={1}>Loading production sites...</Typography>
+                </Box>
+              ) : (
+                <Select
+                  labelId="production-site-label"
+                  value={selectedProductionSite || ''}
+                  onChange={(e) => onProductionSiteChange?.(e.target.value)}
+                  label="Production Site"
+                  disabled={isLoadingSites || !productionSites?.length}
+                  displayEmpty
+                >
+                  <MenuItem value="" disabled>
+                    <em>Select a production site</em>
+                  </MenuItem>
+                  {productionSites?.map((site) => (
+                    <MenuItem key={site.id} value={site.id}>
+                      {site.name} ({site.type || 'N/A'})
+                    </MenuItem>
+                  ))}
+                </Select>
+              )}
+              {siteError && <FormHelperText>{siteError}</FormHelperText>}
+              {!siteError && !isLoadingSites && productionSites?.length === 0 && (
+                <FormHelperText>No production sites found</FormHelperText>
+              )}
+            </FormControl>
+          </Grid>
+      </Grid>
     </Box>
 
     <Divider sx={{ my: 2 }} />
 
     {/* Main Allocation Table */}
-    <SectionTitle variant="h6">Wind Allocation & Summary</SectionTitle>
+    <SectionTitle variant="h6">Allocation & Summary</SectionTitle>
     <TableContainer>
       <StyledTable>
         <TableHead>
           <TableRow>
             <TableCell>#</TableCell>
             <TableCell>Description</TableCell>
-            {windHeaders.map((header, idx) => (
-              <TableCell key={header} align="right">{header}</TableCell>
+            <TableCell>
+              {selectedProductionSite ? 
+                getProductionSiteName()
+                : 'Production Site'
+              }
+            </TableCell>
+            {consumptionSites.map((site) => (
+              <TableCell key={`consume-${site.id}`} align="right">
+                {site.name}
+              </TableCell>
             ))}
           </TableRow>
         </TableHead>
         <TableBody>
-          {windData.map((row, idx) => (
-            <TableRow key={idx}>
-              <TableCell>{row.slNo}</TableCell>
-              <TableCell>{row.description}</TableCell>
-              {row.values.map((val, colIdx) => (
-                <TableCell key={colIdx} align="right">{formatNumber(val)}</TableCell>
-              ))}
+          {isLoading ? (
+            <TableRow>
+              <TableCell colSpan={3 + consumptionSites.length} align="center">
+                <CircularProgress />
+                <Typography>Loading data...</Typography>
+              </TableCell>
             </TableRow>
-          ))}
+          ) : windData?.length > 0 ? (
+            windData.map((row, idx) => (
+              <TableRow key={idx}>
+                <TableCell>{row.slNo || idx + 1}</TableCell>
+                <TableCell>{row.description || 'N/A'}</TableCell>
+                {row.values?.map((val, colIdx) => (
+                  <TableCell key={colIdx} align="right">
+                    {typeof val === 'number' ? formatNumber(val) : val || '0'}
+                  </TableCell>
+                ))}
+              </TableRow>
+            ))
+          ) : (
+            <TableRow>
+              <TableCell colSpan={3 + consumptionSites.length} align="center">
+                No data available
+              </TableCell>
+            </TableRow>
+          )}
         </TableBody>
       </StyledTable>
     </TableContainer>
@@ -122,21 +211,67 @@ const InvoiceTemplate = ({
           <TableRow>
             <TableCell>#</TableCell>
             <TableCell>Description</TableCell>
-            {windHeaders.map((header, idx) => (
-              <TableCell key={header} align="right">{header}</TableCell>
+            <TableCell>
+              {selectedProductionSite ? 
+                getProductionSiteName()
+                : 'Production Site'
+              }
+            </TableCell>
+            {consumptionSites.map((site) => (
+              <TableCell key={`consume-charge-${site.id}`} align="right">
+                {site.name}
+              </TableCell>
             ))}
           </TableRow>
         </TableHead>
         <TableBody>
-          {chargesData.map((row, idx) => (
-            <TableRow key={idx}>
-              <TableCell>{row.slNo}</TableCell>
-              <TableCell>{row.description}</TableCell>
-              {row.values.map((val, colIdx) => (
-                <TableCell key={colIdx} align="right">{formatNumber(val)}</TableCell>
+          {isLoading ? (
+            <TableRow>
+              <TableCell colSpan={3 + consumptionSites.length} align="center">
+                <CircularProgress />
+                <Typography>Loading charges...</Typography>
+              </TableCell>
+            </TableRow>
+          ) : chargesData?.length > 0 ? (
+            chargesData.map((row, idx) => (
+              <TableRow key={`charge-${idx}`}>
+                <TableCell>{row.slNo || idx + 1}</TableCell>
+                <TableCell>{row.description || 'N/A'}</TableCell>
+                {row.values?.map((val, colIdx) => (
+                  <TableCell key={`charge-val-${colIdx}`} align="right">
+                    {val !== undefined && val !== null ? formatCurrency(val) : '-'}
+                  </TableCell>
+                ))}
+              </TableRow>
+            ))
+          ) : (
+            <TableRow>
+              <TableCell colSpan={3 + consumptionSites.length} align="center">
+                No charges data available
+              </TableCell>
+            </TableRow>
+          )}
+          
+          {/* Total Row */}
+          {!isLoading && chargesData?.length > 0 && (
+            <TableRow sx={{ '&:last-child td': { borderBottom: 0 } }}>
+              <TableCell colSpan={2} align="right">
+                <strong>Total</strong>
+              </TableCell>
+              {[...Array(1 + consumptionSites.length)].map((_, idx) => (
+                <TableCell key={`total-${idx}`} align="right">
+                  <strong>
+                    {formatCurrency(
+                      chargesData.reduce((sum, row) => {
+                        const val = row.values?.[idx];
+                        return sum + (typeof val === 'number' ? val : 0);
+                      }, 0)
+                    )}
+                  </strong>
+                </TableCell>
               ))}
             </TableRow>
-          ))}
+          )}
         </TableBody>
       </StyledTable>
     </TableContainer>

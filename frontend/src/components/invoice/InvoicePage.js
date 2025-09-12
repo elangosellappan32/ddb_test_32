@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Container,
   Typography,
@@ -6,29 +6,44 @@ import {
   CircularProgress,
   Alert,
   Button,
-  useTheme,
-  useMediaQuery,
-  Stack,
+  Grid,
+  Paper,
+  Menu,
+  MenuItem,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  TextField,
+  FormControl,
+  InputLabel,
+  Select,
+  FormHelperText,
 } from '@mui/material';
 import { styled } from '@mui/material/styles';
 import { LocalizationProvider, DatePicker } from '@mui/x-date-pickers';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
-import ReceiptIcon from '@mui/icons-material/Receipt';
-import { startOfMonth, format, parseISO } from 'date-fns';
+import {
+  Receipt as ReceiptIcon,
+  Print as PrintIcon,
+  MoreVert as MoreVertIcon,
+  Email as EmailIcon,
+  PictureAsPdf as PdfIcon,
+} from '@mui/icons-material';
+import { startOfMonth, format, parseISO, isValid } from 'date-fns';
 import { useNavigate, useLocation } from 'react-router-dom';
-
-import { useAuth } from '../../context/AuthContext';
+import { useReactToPrint } from 'react-to-print';
+import { saveAs } from 'file-saver';
+import { PDFDownloadLink } from '@react-pdf/renderer';
 import { enqueueSnackbar } from 'notistack';
 
-import AllocationTable from './AllocationTable';
-import ProductionChargeTable from './ChargeTable';
-import InvoiceTemplate from './InvoiceTemplate';
+import { useAuth } from '../../context/AuthContext';
 import invoiceService from '../../services/invoiceService';
-
-import {
-  fetchAndProcessInvoiceData,
-  fetchProductionChargesForMonth,
-} from '../../utils/invoiceUtils';
+import api from '../../services/api';
+import { API_CONFIG } from '../../config/api.config';
+import InvoiceTemplate from './InvoiceTemplate';
+import InvoicePDF from './InvoicePDF';
+import useInvoiceCalculator from './InvoiceCalculator';
 
 const PageWrapper = styled(Container)(({ theme }) => ({
   marginTop: theme.spacing(4),
@@ -66,13 +81,6 @@ const SectionTitle = styled(Typography)(({ theme }) => ({
   gap: theme.spacing(1),
 }));
 
-const StyledPaper = styled(Box)(({ theme }) => ({
-  padding: theme.spacing(3),
-  borderRadius: theme.shape.borderRadius,
-  boxShadow: theme.shadows[2],
-  backgroundColor: theme.palette.background.paper,
-}));
-
 const LoadingBox = styled(Box)(({ theme }) => ({
   display: 'flex',
   flexDirection: 'column',
@@ -82,39 +90,134 @@ const LoadingBox = styled(Box)(({ theme }) => ({
   gap: theme.spacing(2),
 }));
 
-const ActionButton = styled(Button)(({ theme }) => ({
-  marginTop: theme.spacing(2),
-}));
-
 const InvoicePage = () => {
   const { user, isAuthenticated, isLoading: authLoading } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const invoiceRef = useRef();
+  const [anchorEl, setAnchorEl] = useState(null);
+  const [emailDialogOpen, setEmailDialogOpen] = useState(false);
+  const [emailData, setEmailData] = useState({ email: '', subject: '', message: '' });
 
   const [selectedDate, setSelectedDate] = useState(startOfMonth(new Date()));
-
-  const [invoiceData, setInvoiceData] = useState({
-    allocationData: [],
-    chargeData: [],
-    siteMaps: { production: {}, consumption: {} },
-    meta: { financialYear: '', month: '' }
-  });
-
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-
-  const [sortConfig, setSortConfig] = useState({
-    order: 'asc',
-    orderBy: 'productionSiteName',
-  });
-
   const [invoice, setInvoice] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
   const [generatingInvoice, setGeneratingInvoice] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [siteErrorState, setSiteErrorState] = useState(null);
+  const [selectedSite, setSelectedSite] = useState(null);
+  const [selectedConsumptionSite, setSelectedConsumptionSite] = useState(null);
+  const [siteType, setSiteType] = useState('wind'); // Default to wind, can be made dynamic if needed
 
-  const fetchInvoiceData = useCallback(async (date) => {
+  const {
+    productionSites = [],
+    consumptionSites = [],
+    selectedSite: propSelectedSite,
+    selectedConsumptionSite: propSelectedConsumptionSite,
+    onProductionSiteChange,
+    onConsumptionSiteChange,
+    isLoading: sitesLoading,
+    siteError,
+    invoiceData,
+    windData = [],
+    chargesData = [],
+    invoiceNumber = []
+  } = useInvoiceCalculator(
+    format(selectedDate, 'yyyy-MM'),
+    selectedSite,
+    siteType,
+    selectedConsumptionSite
+  );
+
+  // Update selectedSite when propSelectedSite changes
+  useEffect(() => {
+    if (propSelectedSite && !selectedSite) {
+      setSelectedSite(propSelectedSite);
+    }
+  }, [propSelectedSite, selectedSite]);
+
+  // Update selectedConsumptionSite when propSelectedConsumptionSite changes
+  useEffect(() => {
+    if (propSelectedConsumptionSite && !selectedConsumptionSite) {
+      setSelectedConsumptionSite(propSelectedConsumptionSite);
+    }
+  }, [propSelectedConsumptionSite, selectedConsumptionSite]);
+
+  // Handle menu open/close
+  const handleMenuOpen = (event) => {
+    setAnchorEl(event.currentTarget);
+  };
+
+  const handleMenuClose = () => {
+    setAnchorEl(null);
+  };
+
+  // Handle email dialog
+  const handleEmailDialogOpen = () => {
+    setEmailData({
+      email: user?.email || '',
+      subject: `Invoice for ${format(selectedDate, 'MMMM yyyy')}`,
+      message: `Please find attached the invoice for ${format(selectedDate, 'MMMM yyyy')}.\n\nBest regards,\n${user?.companyName || ''}`
+    });
+    setEmailDialogOpen(true);
+    handleMenuClose();
+  };
+
+  const handleEmailDialogClose = () => {
+    setEmailDialogOpen(false);
+  };
+
+  const handleEmailSend = async () => {
+    try {
+      // Implement email sending logic here
+      enqueueSnackbar('Invoice sent successfully!', { variant: 'success' });
+      handleEmailDialogClose();
+    } catch (error) {
+      enqueueSnackbar('Failed to send email: ' + error.message, { variant: 'error' });
+    }
+  };
+
+  // Handle print
+  const handlePrint = useReactToPrint({
+    content: () => invoiceRef.current,
+    pageStyle: `
+      @page { 
+        size: A4;
+        margin: 10mm 10mm;
+      }
+      @media print {
+        body { 
+          -webkit-print-color-adjust: exact; 
+        }
+        .no-print { 
+          display: none !important; 
+        }
+      }
+    `,
+  });
+
+  // Handle download as PDF
+  const handleDownloadPdf = () => {
+    // This will be handled by the PDFDownloadLink component
+    handleMenuClose();
+  };
+
+  // Fetch invoice data
+  const fetchInvoice = useCallback(async (date) => {
     if (!user || !date) return;
+
+    // Use propSelectedSite if available, otherwise use local state
+    const currentSite = propSelectedSite || selectedSite;
+    if (!currentSite) {
+      console.log('No site selected, skipping fetch');
+      return;
+    }
+
+    // Skip if we're already loading or if the date hasn't changed
+    if (loading || (invoice && format(date, 'yyyy-MM') === invoice.billMonth)) {
+      return;
+    }
 
     setLoading(true);
     setError(null);
@@ -123,75 +226,30 @@ const InvoicePage = () => {
       const month = format(date, 'MM');
       const year = format(date, 'yyyy');
       
-      // Fetch both allocation and charge data in parallel
-      const [allocationResponse, chargeResponse] = await Promise.all([
-        fetchAndProcessInvoiceData(user, date),
-        fetchProductionChargesForMonth(user, user.companyId, null, date)
-      ]);
+      // Ensure we have a selected site
+      const currentSelectedSite = currentSite || (productionSites?.[0]?.id);
+      if (!currentSelectedSite) {
+        throw new Error('No production site available');
+      }
 
-      // Process allocation data to include charge status
-      const processedAllocations = (allocationResponse.data || []).map(item => ({
-        ...item,
-        // Ensure charge is a boolean for consistency
-        charge: Boolean(item.charge)
-      }));
-
-      setInvoiceData({
-        allocationData: processedAllocations,
-        chargeData: chargeResponse.data || [],
-        siteMaps: allocationResponse.siteMaps || { production: {}, consumption: {} },
-        meta: allocationResponse.meta || { financialYear: '', month: '' }
-      });
-
-      enqueueSnackbar('Invoice data loaded successfully', { variant: 'success' });
-    } catch (error) {
-      console.error('Error fetching invoice data:', error);
-      setError(error.message || 'Failed to fetch invoice data');
-      enqueueSnackbar(error.message || 'Failed to fetch invoice data', { variant: 'error' });
-    } finally {
-      setLoading(false);
-    }
-  }, [user]);
-
-  useEffect(() => {
-    if (!authLoading && isAuthenticated) {
-      fetchInvoiceData(selectedDate);
-    }
-    if (!authLoading && !isAuthenticated) {
-      navigate('/login', { state: { from: location }, replace: true });
-    }
-  }, [authLoading, isAuthenticated, fetchInvoiceData, navigate, location, selectedDate]);
-
-  const handleDateChange = (newDate) => {
-    setSelectedDate(newDate);
-    fetchInvoiceData(newDate);
-  };
-
-  const handleRequestSort = (property, order) => {
-    setSortConfig({ order, orderBy: property });
-  };
-
-  const handleGenerateInvoice = async () => {
-    if (!user || !selectedDate) return;
-
-    setGeneratingInvoice(true);
-    
-    try {
-      const month = format(selectedDate, 'MM');
-      const year = format(selectedDate, 'yyyy');
+      console.log('Generating invoice with data:', { companyId: user.companyId, month, year });
       
-      const { data: generatedInvoice, error } = await invoiceService.generateInvoice({
+      // Call your invoice service to get the data
+      const result = await invoiceService.generateInvoice({
         companyId: user.companyId,
+        productionSiteId: currentSelectedSite,
         month,
         year,
-        allocations: invoiceData.allocationData,
-        charges: invoiceData.chargeData,
       });
 
-      if (error) throw new Error(error);
+      if (result.error) throw new Error(result.error);
+      
+      const generatedInvoice = result.data;
 
-      setInvoice({
+      // Format the invoice data to match our template's expected format
+      const formattedInvoice = {
         ...generatedInvoice,
+        billMonth: `${year}-${month.padStart(2, '0')}`,
         company: {
           name: user.companyName || 'Your Company',
           address: {
@@ -204,182 +262,237 @@ const InvoicePage = () => {
           billingContact: user.name || 'Billing Department',
           billingEmail: user.email || 'billing@example.com',
         },
-        billingPeriod: format(selectedDate, 'MMMM yyyy'),
+        billingPeriod: format(date, 'MMMM yyyy'),
         issueDate: new Date().toISOString(),
         dueDate: new Date(new Date().setDate(new Date().getDate() + 30)).toISOString(),
-      });
+      };
 
+      setInvoice(formattedInvoice);
       enqueueSnackbar('Invoice generated successfully!', { variant: 'success' });
-    } catch (error) {
-      console.error('Error generating invoice:', error);
-      enqueueSnackbar(error.message || 'Failed to generate invoice', { variant: 'error' });
+    } catch (err) {
+      setError(err.message || 'Failed to generate invoice');
+      enqueueSnackbar(err.message || 'Failed to generate invoice', { variant: 'error' });
     } finally {
+      setLoading(false);
       setGeneratingInvoice(false);
     }
-  };
+  }, [user, selectedSite, productionSites, loading, invoice]);
 
-  const handlePrintInvoice = () => {
-    window.print();
-  };
-
-  const handleDownloadPdf = async () => {
-    // TODO: Implement PDF download functionality
-    enqueueSnackbar('PDF download will be implemented here', { variant: 'info' });
-  };
-
-  const handleEditAllocation = (allocation) => {
-    // Navigate to edit page or open edit modal
-    enqueueSnackbar(
-      allocation 
-        ? `Edit allocation for ${allocation.productionSiteName} to ${allocation.consumptionSiteName}`
-        : 'Create new allocation',
-      { variant: 'info' }
-    );
-    // TODO: Implement edit functionality
-    console.log('Edit allocation:', allocation);
-  };
-
-  const handleDeleteAllocation = async (allocation) => {
-    if (!allocation || !window.confirm(`Are you sure you want to delete this allocation?`)) {
-      return;
+  // Redirect to login if not authenticated
+  useEffect(() => {
+    if (!authLoading && !isAuthenticated) {
+      navigate('/login', { state: { from: location } });
     }
+  }, [isAuthenticated, authLoading, navigate, location]);
 
-    try {
-      // TODO: Call your API to delete the allocation
-      // await allocationService.deleteAllocation(allocation.id);
+  // Fetch invoice when date or selected site changes
+  useEffect(() => {
+    const fetchData = async () => {
+      if (!isAuthenticated) return;
       
-      // Update local state to remove the deleted allocation
-      setInvoiceData(prev => ({
-        ...prev,
-        allocationData: prev.allocationData.filter(
-          item => item.productionSiteId !== allocation.productionSiteId || 
-                 item.consumptionSiteId !== allocation.consumptionSiteId
-        )
-      }));
+      try {
+        const currentSite = propSelectedSite || selectedSite;
+        
+        if (currentSite) {
+          await fetchInvoice(selectedDate);
+        } else if (productionSites?.length > 0) {
+          // If we have sites but none selected, select the first one
+          if (typeof onProductionSiteChange === 'function') {
+            onProductionSiteChange(productionSites[0].id);
+          } else if (productionSites[0]?.id) {
+            // Fallback: Update the selectedSite directly if possible
+            setSelectedSite(productionSites[0].id);
+          }
+        }
+      } catch (error) {
+        console.error('Error in fetchData:', error);
+        enqueueSnackbar('Error loading invoice data', { variant: 'error' });
+      }
+    };
 
-      enqueueSnackbar('Allocation deleted successfully', { variant: 'success' });
-    } catch (error) {
-      console.error('Error deleting allocation:', error);
-      enqueueSnackbar(error.message || 'Failed to delete allocation', { variant: 'error' });
-    }
+    fetchData();
+  }, [isAuthenticated, selectedDate, propSelectedSite, selectedSite, productionSites, onProductionSiteChange, fetchInvoice]);
+
+  const handleDateChange = (newDate) => {
+    setSelectedDate(newDate);
+    // Don't fetch here, let the useEffect handle it
+  };
+
+  const handleGenerateInvoice = () => {
+    setGeneratingInvoice(true);
+    fetchInvoice(selectedDate);
   };
 
   return (
-    <PageWrapper maxWidth="lg">
-      <HeaderBox>
-        <SectionTitle variant="h4" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <ReceiptIcon fontSize="large" />
-          Invoice Management
-        </SectionTitle>
-        <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-          <LocalizationProvider dateAdapter={AdapterDateFns}>
-            <DatePicker
-              views={['year', 'month']}
-              label="Select Month & Year"
-              value={selectedDate}
-              onChange={handleDateChange}
-              renderInput={(params) => (
-                <Box sx={{ minWidth: 200 }}>
-                  {params.inputProps?.ref ? (
-                    <input {...params.inputProps} readOnly />
-                  ) : null}
-                  {params.InputProps?.endAdornment}
-                </Box>
-              )}
-            />
-          </LocalizationProvider>
-          <Typography variant="body1" sx={{ fontWeight: 'medium' }}>
-            {invoiceData.meta.financialYear && (
-              `Financial Year: ${invoiceData.meta.financialYear}`
-            )}
-          </Typography>
-        </Box>
-      </HeaderBox>
-
-      {loading || authLoading ? (
-        <LoadingBox>
-          <CircularProgress />
-          <Typography variant="body1">Loading invoice data...</Typography>
-        </LoadingBox>
-      ) : error ? (
-        <Box>
-          <Alert severity="error" sx={{ mb: 2 }}>
-            {error}
-          </Alert>
-          <ActionButton variant="contained" color="primary" onClick={() => fetchInvoiceData(selectedDate)}>
-            Retry
-          </ActionButton>
-        </Box>
-      ) : (
-        <>
-          <Box sx={{ borderTop: '1px solid black', pt: 2, mb: 4, width: '100%' }}>
-            <StyledPaper sx={{ width: '100%', overflow: 'hidden' }}>
-              <Box sx={{ mb: 4 }}>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                  <Typography variant="h5" gutterBottom>
-                    Allocation Data
-                  </Typography>
-                </Box>
-                <AllocationTable 
-                  data={invoiceData.allocationData}
-                  onEdit={handleEditAllocation}
-                  onDelete={handleDeleteAllocation}
-                  loading={loading}
+    <LocalizationProvider dateAdapter={AdapterDateFns}>
+      <PageWrapper maxWidth={false}>
+        <HeaderBox>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <ReceiptIcon color="primary" sx={{ fontSize: 40 }} />
+            <SectionTitle variant="h4">Invoice Management</SectionTitle>
+          </Box>
+          
+          <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
+            <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+              <LocalizationProvider dateAdapter={AdapterDateFns}>
+                <DatePicker
+                  views={['year', 'month']}
+                  label="Billing Period"
+                  minDate={new Date('2023-01-01')}
+                  maxDate={new Date()}
+                  value={selectedDate}
+                  onChange={handleDateChange}
+                  renderInput={(params) => (
+                    <TextField 
+                      {...params} 
+                      helperText={null} 
+                      sx={{ minWidth: 200 }}
+                    />
+                  )}
                 />
-              </Box>
-            </StyledPaper>
-          </Box>
-
-          <Box sx={{ mb: 4, width: '100%' }}>
-            <StyledPaper sx={{ width: '100%', overflow: 'hidden' }}>
-              <Typography variant="h5" gutterBottom>
-                Production Charges
-              </Typography>
-              <Box sx={{ borderBottom: '1px solid black', pb: 2, mb: 2 }} />
-              <Box sx={{ width: '100%', overflowX: 'auto' }}>
-                {invoiceData.chargeData.length > 0 ? (
-                  <ProductionChargeTable
-                    data={invoiceData.chargeData}
-                    sortConfig={sortConfig}
-                    onRequestSort={handleRequestSort}
-                  />
-                ) : (
-                  <Typography>No production charge data available.</Typography>
-                )}
-              </Box>
-            </StyledPaper>
-          </Box>
-
-          <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 2, mb: 4 }}>
+              </LocalizationProvider>
+            </Box>
+            
             <Button
               variant="contained"
               color="primary"
-              startIcon={generatingInvoice ? <CircularProgress size={20} color="inherit" /> : <ReceiptIcon />}
-              size="large"
-              disabled={!invoiceData.chargeData?.length || generatingInvoice}
               onClick={handleGenerateInvoice}
-              sx={{ minWidth: 200 }}
+              disabled={generatingInvoice || loading}
+              startIcon={generatingInvoice ? <CircularProgress size={20} color="inherit" /> : <ReceiptIcon />}
             >
               {generatingInvoice ? 'Generating...' : 'Generate Invoice'}
             </Button>
-          </Box>
 
-          {invoice && (
-            <Box mt={4}>
-              <Typography variant="h5" gutterBottom>
-                Generated Invoice
-              </Typography>
-              <InvoiceTemplate 
-                invoice={invoice}
-                billMonth={format(selectedDate, 'MMMM yyyy')}
-                onPrint={handlePrintInvoice}
-                onDownload={handleDownloadPdf}
-              />
-            </Box>
-          )}
-        </>
-      )}
-    </PageWrapper>
+            {invoice && (
+              <>
+                <Button
+                  variant="outlined"
+                  color="primary"
+                  onClick={handleMenuOpen}
+                  disabled={loading || generatingInvoice}
+                  endIcon={<MoreVertIcon />}
+                >
+                  More
+                </Button>
+
+                <Menu
+                  anchorEl={anchorEl}
+                  open={Boolean(anchorEl)}
+                  onClose={handleMenuClose}
+                >
+                  <MenuItem onClick={handlePrint}>
+                    <PrintIcon sx={{ mr: 1 }} /> Print
+                  </MenuItem>
+                  <PDFDownloadLink
+                    document={<InvoicePDF invoice={invoice} />}
+                    fileName={`invoice-${format(selectedDate, 'yyyy-MM')}.pdf`}
+                    style={{ textDecoration: 'none', color: 'inherit' }}
+                  >
+                    {({ loading }) => (
+                      <MenuItem onClick={handleDownloadPdf} disabled={loading}>
+                        <PdfIcon sx={{ mr: 1 }} />
+                        {loading ? 'Generating PDF...' : 'Download PDF'}
+                      </MenuItem>
+                    )}
+                  </PDFDownloadLink>
+                  <MenuItem onClick={handleEmailDialogOpen}>
+                    <EmailIcon sx={{ mr: 1 }} /> Email Invoice
+                  </MenuItem>
+                </Menu>
+              </>
+            )}
+          </Box>
+        </HeaderBox>
+        
+        {/* Black divider line */}
+        <Box sx={{ borderTop: '2px solid #000', my: 3 }} />
+
+        {loading && (
+          <LoadingBox>
+            <CircularProgress />
+            <Typography>Loading invoice data...</Typography>
+          </LoadingBox>
+        )}
+
+        {error && (
+          <Alert severity="error" sx={{ mb: 3 }}>
+            {error}
+          </Alert>
+        )}
+
+        {!loading && !error && (
+          <Box ref={invoiceRef}>
+            <InvoiceTemplate
+              billMonth={format(selectedDate, 'yyyy-MM')}
+              onPrint={handlePrint}
+              onDownload={handleDownloadPdf}
+              invoiceData={invoiceData || invoice}
+              onProductionSiteChange={(siteId) => {
+                setSelectedSite(siteId);
+                if (onProductionSiteChange) onProductionSiteChange(siteId);
+              }}
+              onConsumptionSiteChange={(siteId) => {
+                setSelectedConsumptionSite(siteId);
+                if (onConsumptionSiteChange) onConsumptionSiteChange(siteId);
+              }}
+              productionSites={productionSites}
+              consumptionSites={consumptionSites}
+              selectedProductionSite={selectedSite || propSelectedSite}
+              selectedConsumptionSite={selectedConsumptionSite}
+              isLoadingSites={sitesLoading || loading}
+              siteError={siteError || error}
+              windData={windData}
+              chargesData={chargesData}
+              invoiceNumber={invoiceNumber}
+            />
+          </Box>
+        )}
+        <Dialog open={emailDialogOpen} onClose={handleEmailDialogClose} maxWidth="sm" fullWidth>
+          <DialogTitle>Email Invoice</DialogTitle>
+          <DialogContent>
+            <TextField
+              autoFocus
+              margin="dense"
+              label="Email Address"
+              type="email"
+              fullWidth
+              variant="outlined"
+              value={emailData.email}
+              onChange={(e) => setEmailData({ ...emailData, email: e.target.value })}
+              sx={{ mb: 2 }}
+            />
+            <TextField
+              margin="dense"
+              label="Subject"
+              type="text"
+              fullWidth
+              variant="outlined"
+              value={emailData.subject}
+              onChange={(e) => setEmailData({ ...emailData, subject: e.target.value })}
+              sx={{ mb: 2 }}
+            />
+            <TextField
+              margin="dense"
+              label="Message"
+              multiline
+              rows={6}
+              fullWidth
+              variant="outlined"
+              value={emailData.message}
+              onChange={(e) => setEmailData({ ...emailData, message: e.target.value })}
+            />
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={handleEmailDialogClose} color="primary">
+              Cancel
+            </Button>
+            <Button onClick={handleEmailSend} color="primary" variant="contained">
+              Send Email
+            </Button>
+          </DialogActions>
+        </Dialog>
+      </PageWrapper>
+    </LocalizationProvider>
   );
 };
 

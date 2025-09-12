@@ -13,13 +13,13 @@ class InvoiceService {
    * @param {Array} params.charges - Array of charge records
    * @returns {Promise<Object>} Generated invoice data
    */
-  async generateInvoice({ companyId, month, year, allocations = [], charges = [] }) {
+  async generateInvoice({ companyId, productionSiteId, month, year, allocations = [], charges = [] }) {
     try {
       console.log('Generating invoice with data:', { companyId, month, year });
       
       // Validate and format the request data
-      if (!companyId || month === undefined || year === undefined) {
-        throw new Error('Missing required parameters: companyId, month, and year are required');
+      if (!companyId || !productionSiteId || month === undefined || year === undefined) {
+        throw new Error('Missing required parameters: companyId, productionSiteId, month, and year are required');
       }
 
       // Ensure month is a string and properly formatted as MM
@@ -33,6 +33,7 @@ class InvoiceService {
       // Prepare the request payload
       const payload = {
         companyId: String(companyId),
+        productionSiteId: String(productionSiteId),
         month: formattedMonth,
         year: formattedYear,
         allocations: formattedAllocations,
@@ -40,6 +41,7 @@ class InvoiceService {
       };
 
       console.log('Sending invoice generation request with payload:', payload);
+      console.log('API Endpoint:', API_CONFIG.ENDPOINTS.INVOICE.GENERATE);
       const response = await api.post(API_CONFIG.ENDPOINTS.INVOICE.GENERATE, payload);
       
       if (!response.data) {
@@ -56,6 +58,11 @@ class InvoiceService {
       console.error('Error in generateInvoice:', {
         message: error.message,
         response: error.response?.data,
+        config: {
+          url: error.config?.url,
+          method: error.config?.method,
+          data: error.config?.data
+        },
         stack: error.stack
       });
       
