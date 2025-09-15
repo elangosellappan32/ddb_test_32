@@ -224,6 +224,7 @@ const Production = () => {
         revenuePerUnit: site.revenuePerUnit != null ? parseFloat(site.revenuePerUnit) : 0,
         htscNo: site.htscNo || '',
         banking: site.banking || 0,
+        dateOfCommission: site.dateOfCommission ? new Date(site.dateOfCommission) : null,
         version: Number(site.version || 1),
         createdat: site.createdat || new Date().toISOString(),
         updatedat: site.updatedat || new Date().toISOString()

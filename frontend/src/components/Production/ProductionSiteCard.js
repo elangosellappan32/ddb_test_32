@@ -25,7 +25,8 @@ import {
   FiberManualRecord as StatusDotIcon,
   Cached as RefreshIcon,
   Error as ErrorIcon,
-  AttachMoney as MoneyIcon
+  AttachMoney as MoneyIcon,
+  Event as EventIcon
 } from '@mui/icons-material';
 import { formatDistanceToNow } from 'date-fns';
 
@@ -143,6 +144,18 @@ const ProductionSiteCard = ({
   
   // Log the raw status for debugging
   
+  // Parse dateOfCommission safely
+  const parseDateSafely = (dateValue) => {
+    if (!dateValue) return null;
+    try {
+      const date = dateValue instanceof Date ? dateValue : new Date(dateValue);
+      return !isNaN(date.getTime()) ? date : null;
+    } catch (e) {
+      console.error('Error parsing date:', e);
+      return null;
+    }
+  };
+
   // Normalize and protect site data
   const safeData = {
     name: (localSite?.name || 'Unnamed Site').replace(/_/g, ' '),
@@ -155,6 +168,7 @@ const ProductionSiteCard = ({
     injectionVoltage_KV: Number(localSite?.injectionVoltage_KV || 0),
     banking: Number(localSite?.banking || 0),
     revenuePerUnit: localSite?.revenuePerUnit != null ? parseFloat(localSite.revenuePerUnit) : 0,
+    dateOfCommission: parseDateSafely(localSite?.dateOfCommission),
     version: Number(localSite?.version || 1)
   };
   
@@ -294,6 +308,29 @@ const ProductionSiteCard = ({
             </Box>
             <Typography variant="body1" sx={{ fontWeight: 500 }} color={bankingStatus.color}>
               {bankingStatus.text}
+            </Typography>
+          </Grid>
+
+          <Grid item xs={6}>
+            <Box sx={{ display: 'flex', alignItems: 'center' }}>
+              <EventIcon sx={{ mr: 0.5, fontSize: 20, color: 'primary.main' }} />
+              <Typography variant="body2" color="text.secondary">Commissioned</Typography>
+            </Box>
+            <Typography variant="body1" sx={{ fontWeight: 500 }}>
+              {(() => {
+                try {
+                  if (!safeData.dateOfCommission) return 'N/A';
+                  const date = safeData.dateOfCommission instanceof Date 
+                    ? safeData.dateOfCommission 
+                    : new Date(safeData.dateOfCommission);
+                  return !isNaN(date.getTime()) 
+                    ? date.toLocaleDateString('en-GB') 
+                    : 'N/A';
+                } catch (e) {
+                  console.error('Error formatting date:', e);
+                  return 'N/A';
+                }
+              })()}
             </Typography>
           </Grid>
 

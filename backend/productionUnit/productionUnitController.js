@@ -58,21 +58,67 @@ exports.createProductionUnit = async (req, res) => {
             });
         }
 
+        // Calculate net export values
+        const netExportC1 = (Number(data.export_c1 || 0) - Number(data.import_c1 || 0));
+        const netExportC2 = (Number(data.export_c2 || 0) - Number(data.import_c2 || 0));
+        const netExportC3 = (Number(data.export_c3 || 0) - Number(data.import_c3 || 0));
+        const netExportC4 = (Number(data.export_c4 || 0) - Number(data.import_c4 || 0));
+        const netExportC5 = (Number(data.export_c5 || 0) - Number(data.import_c5 || 0));
+        const netExportTotal = ((Number(data.export_c1 || 0) + 
+                               Number(data.export_c2 || 0) + 
+                               Number(data.export_c3 || 0) + 
+                               Number(data.export_c4 || 0) + 
+                               Number(data.export_c5 || 0)) -
+                              (Number(data.import_c1 || 0) + 
+                               Number(data.import_c2 || 0) + 
+                               Number(data.import_c3 || 0) + 
+                               Number(data.import_c4 || 0) + 
+                               Number(data.import_c5 || 0)));
+
         const unitData = {
             pk,
             sk,
             ...data,
-            c1: Number(data.c1 || 0),
-            c2: Number(data.c2 || 0),
-            c3: Number(data.c3 || 0),
-            c4: Number(data.c4 || 0),
-            c5: Number(data.c5 || 0),
-            total: Number(data.c1 || 0) + 
-                   Number(data.c2 || 0) + 
-                   Number(data.c3 || 0) + 
-                   Number(data.c4 || 0) + 
-                   Number(data.c5 || 0),
-            import:Number(data.import || 0),
+            // Base C values (for backward compatibility)
+            c1: netExportC1,
+            c2: netExportC2,
+            c3: netExportC3,
+            c4: netExportC4,
+            c5: netExportC5,
+            total: netExportTotal,
+            
+            // Import C values
+            import_c1: Number(data.import_c1 || 0),
+            import_c2: Number(data.import_c2 || 0),
+            import_c3: Number(data.import_c3 || 0),
+            import_c4: Number(data.import_c4 || 0),
+            import_c5: Number(data.import_c5 || 0),
+            import_total: (Number(data.import_c1 || 0) + 
+                          Number(data.import_c2 || 0) + 
+                          Number(data.import_c3 || 0) + 
+                          Number(data.import_c4 || 0) + 
+                          Number(data.import_c5 || 0)),
+            
+            // Export C values
+            export_c1: Number(data.export_c1 || 0),
+            export_c2: Number(data.export_c2 || 0),
+            export_c3: Number(data.export_c3 || 0),
+            export_c4: Number(data.export_c4 || 0),
+            export_c5: Number(data.export_c5 || 0),
+            export_total: (Number(data.export_c1 || 0) + 
+                          Number(data.export_c2 || 0) + 
+                          Number(data.export_c3 || 0) + 
+                          Number(data.export_c4 || 0) + 
+                          Number(data.export_c5 || 0)),
+            
+            // Net export C values (export - import)
+            net_export_c1: netExportC1,
+            net_export_c2: netExportC2,
+            net_export_c3: netExportC3,
+            net_export_c4: netExportC4,
+            net_export_c5: netExportC5,
+            net_export_total: netExportTotal,
+            
             date: formatDateToMMYYYY(data.date),
             createdat: new Date().toISOString(),
             updatedat: new Date().toISOString()
@@ -146,22 +192,68 @@ exports.updateProductionUnit = async (req, res) => {
       });
     }
 
+    // Calculate net export values
+    const netExportC1 = (Number(formattedData.export_c1 || 0) - Number(formattedData.import_c1 || 0));
+    const netExportC2 = (Number(formattedData.export_c2 || 0) - Number(formattedData.import_c2 || 0));
+    const netExportC3 = (Number(formattedData.export_c3 || 0) - Number(formattedData.import_c3 || 0));
+    const netExportC4 = (Number(formattedData.export_c4 || 0) - Number(formattedData.import_c4 || 0));
+    const netExportC5 = (Number(formattedData.export_c5 || 0) - Number(formattedData.import_c5 || 0));
+    const netExportTotal = ((Number(formattedData.export_c1 || 0) + 
+                           Number(formattedData.export_c2 || 0) + 
+                           Number(formattedData.export_c3 || 0) + 
+                           Number(formattedData.export_c4 || 0) + 
+                           Number(formattedData.export_c5 || 0)) -
+                          (Number(formattedData.import_c1 || 0) + 
+                           Number(formattedData.import_c2 || 0) + 
+                           Number(formattedData.import_c3 || 0) + 
+                           Number(formattedData.import_c4 || 0) + 
+                           Number(formattedData.import_c5 || 0)));
+
     const updateData = {
       ...formattedData,
       pk,
       sk,
       updatedat: new Date().toISOString(),
-      c1: Number(formattedData.c1 || 0),
-      c2: Number(formattedData.c2 || 0),
-      c3: Number(formattedData.c3 || 0),
-      c4: Number(formattedData.c4 || 0),
-      c5: Number(formattedData.c5 || 0),
-      total: Number(formattedData.c1 || 0) + 
-             Number(formattedData.c2 || 0) + 
-             Number(formattedData.c3 || 0) + 
-             Number(formattedData.c4 || 0) + 
-             Number(formattedData.c5 || 0),
-    import:Number(formattedData.import || 0)
+      
+      // Base C values (for backward compatibility)
+      c1: netExportC1,
+      c2: netExportC2,
+      c3: netExportC3,
+      c4: netExportC4,
+      c5: netExportC5,
+      total: netExportTotal,
+      
+      // Import C values
+      import_c1: Number(formattedData.import_c1 || 0),
+      import_c2: Number(formattedData.import_c2 || 0),
+      import_c3: Number(formattedData.import_c3 || 0),
+      import_c4: Number(formattedData.import_c4 || 0),
+      import_c5: Number(formattedData.import_c5 || 0),
+      import_total: (Number(formattedData.import_c1 || 0) + 
+                    Number(formattedData.import_c2 || 0) + 
+                    Number(formattedData.import_c3 || 0) + 
+                    Number(formattedData.import_c4 || 0) + 
+                    Number(formattedData.import_c5 || 0)),
+      
+      // Export C values
+      export_c1: Number(formattedData.export_c1 || 0),
+      export_c2: Number(formattedData.export_c2 || 0),
+      export_c3: Number(formattedData.export_c3 || 0),
+      export_c4: Number(formattedData.export_c4 || 0),
+      export_c5: Number(formattedData.export_c5 || 0),
+      export_total: (Number(formattedData.export_c1 || 0) + 
+                    Number(formattedData.export_c2 || 0) + 
+                    Number(formattedData.export_c3 || 0) + 
+                    Number(formattedData.export_c4 || 0) + 
+                    Number(formattedData.export_c5 || 0)),
+      
+      // Net export C values (export - import)
+      net_export_c1: netExportC1,
+      net_export_c2: netExportC2,
+      net_export_c3: netExportC3,
+      net_export_c4: netExportC4,
+      net_export_c5: netExportC5,
+      net_export_total: netExportTotal
     };
 
     const result = await productionUnitDAL.updateItem(pk, sk, updateData);

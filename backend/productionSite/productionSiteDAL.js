@@ -76,6 +76,26 @@ const create = async (item) => {
             // Normalize the annualProduction field
             const annualProduction = item.annualProduction_L || item.annualProduction || 0;
 
+            // Parse and validate dateOfCommission
+            let dateOfCommission = null;
+            if (item.dateOfCommission) {
+                try {
+                    // Handle both string and Date objects
+                    const date = item.dateOfCommission instanceof Date 
+                        ? item.dateOfCommission 
+                        : new Date(item.dateOfCommission);
+                        
+                    if (!isNaN(date.getTime())) {
+                        // Store as ISO string in UTC
+                        dateOfCommission = date.toISOString();
+                    } else {
+                        logger.warn(`[ProductionSiteDAL] Invalid dateOfCommission provided: ${item.dateOfCommission}`);
+                    }
+                } catch (error) {
+                    logger.error(`[ProductionSiteDAL] Error parsing dateOfCommission: ${error.message}`);
+                }
+            }
+
             const newItem = {
                 companyId: item.companyId,
                 productionSiteId: newId,
@@ -89,6 +109,7 @@ const create = async (item) => {
                 htscNo: item.htscNo ? String(item.htscNo).trim() : '',
                 injectionVoltage_KV: new Decimal(item.injectionVoltage_KV || 0).toString(),
                 status: item.status,
+                dateOfCommission: dateOfCommission,
                 version: 1,
                 createdat: now,
                 updatedat: now,
@@ -190,6 +211,35 @@ const updateItem = async (companyId, productionSiteId, updates) => {
         const banking = (updates.status === 'Inactive' || updates.status === 'Maintenance') ? 0 : 
                        (updates.banking !== undefined ? updates.banking : existing.banking);
 
+        // Parse and validate dateOfCommission
+        let dateOfCommission = existing.dateOfCommission;
+        if ('dateOfCommission' in updates) {
+            try {
+                if (updates.dateOfCommission) {
+                    // Handle both string and Date objects
+                    const date = updates.dateOfCommission instanceof Date 
+                        ? updates.dateOfCommission 
+                        : new Date(updates.dateOfCommission);
+                        
+                    if (!isNaN(date.getTime())) {
+                        // Store as ISO string in UTC
+                        dateOfCommission = date.toISOString();
+                    } else {
+                        logger.warn(`[ProductionSiteDAL] Invalid dateOfCommission provided in update: ${updates.dateOfCommission}`);
+                        // Keep the existing date if the new one is invalid
+                        dateOfCommission = existing.dateOfCommission;
+                    }
+                } else {
+                    // If dateOfCommission is explicitly set to null/empty
+                    dateOfCommission = null;
+                }
+            } catch (error) {
+                logger.error(`[ProductionSiteDAL] Error parsing dateOfCommission in update: ${error.message}`);
+                // Keep the existing date on error
+                dateOfCommission = existing.dateOfCommission;
+            }
+        }
+
         const updatedItem = {
             ...existing,
             name: updates.name || existing.name,
@@ -199,11 +249,12 @@ const updateItem = async (companyId, productionSiteId, updates) => {
             capacity_MW: updates.capacity_MW ? new Decimal(updates.capacity_MW).toString() : existing.capacity_MW,
             annualProduction_L: new Decimal(annualProduction).toString(),
             revenuePerUnit: updates.revenuePerUnit !== undefined ? new Decimal(updates.revenuePerUnit).toString() : (existing.revenuePerUnit || '0'),
-            htscNo: updates.htscNo ? new Decimal(updates.htscNo).toString() : existing.htscNo,
+            htscNo: updates.htscNo ? String(updates.htscNo).trim() : existing.htscNo,
             injectionVoltage_KV: updates.injectionVoltage_KV ? 
                 new Decimal(updates.injectionVoltage_KV).toString() : 
                 existing.injectionVoltage_KV,
             status: updates.status || existing.status,
+            dateOfCommission: dateOfCommission,
             version: existing.version + 1,
             updatedat: new Date().toISOString()
         };
@@ -362,6 +413,7 @@ const getAllProductionSites = async () => {
             injectionVoltage_KV: item.injectionVoltage_KV || '0',
             banking: String(item.banking || '0'),
             revenuePerUnit: item.revenuePerUnit || '0',
+            dateOfCommission: item.dateOfCommission || null,
             createdat: item.createdat || new Date().toISOString(),
             updatedat: item.updatedat || new Date().toISOString()
         }));

@@ -30,15 +30,46 @@ const productionUnitApi = {
       
       const formattedData = allData
         .filter(item => item.pk === pk)
-        .map(item => ({
-          ...item,
-          date: stripUnitPrefix(item.sk),
-          c1: Number(item.c1 || 0),
-          c2: Number(item.c2 || 0),
-          c3: Number(item.c3 || 0),
-          c4: Number(item.c4 || 0),
-          c5: Number(item.c5 || 0)
-        }));
+        .map(item => {
+          // Handle both old and new data formats
+          const baseData = {
+            ...item,
+            date: stripUnitPrefix(item.sk),
+            // Import C values
+            import_c1: Number(item.import_c1 || 0),
+            import_c2: Number(item.import_c2 || 0),
+            import_c3: Number(item.import_c3 || 0),
+            import_c4: Number(item.import_c4 || 0),
+            import_c5: Number(item.import_c5 || 0),
+            import_total: Number(item.import_total || 0),
+            // Export C values
+            export_c1: Number(item.export_c1 || 0),
+            export_c2: Number(item.export_c2 || 0),
+            export_c3: Number(item.export_c3 || 0),
+            export_c4: Number(item.export_c4 || 0),
+            export_c5: Number(item.export_c5 || 0),
+            export_total: Number(item.export_total || 0),
+            // Net export C values
+            net_export_c1: Number(item.net_export_c1 || 0),
+            net_export_c2: Number(item.net_export_c2 || 0),
+            net_export_c3: Number(item.net_export_c3 || 0),
+            net_export_c4: Number(item.net_export_c4 || 0),
+            net_export_c5: Number(item.net_export_c5 || 0),
+            net_export_total: Number(item.net_export_total || 0)
+          };
+
+          // Backward compatibility for old data
+          if (item.c1 !== undefined) {
+            baseData.c1 = Number(item.c1 || 0);
+            baseData.c2 = Number(item.c2 || 0);
+            baseData.c3 = Number(item.c3 || 0);
+            baseData.c4 = Number(item.c4 || 0);
+            baseData.c5 = Number(item.c5 || 0);
+            baseData.total = Number(item.total || 0);
+          }
+
+          return baseData;
+        });
 
       return { data: formattedData };
     } catch (error) {
@@ -63,6 +94,21 @@ const productionUnitApi = {
       const pk = `${companyId}_${productionSiteId}`;
       const sk = formatDateToMMYYYY(data.date);  // Direct MMYYYY format without UNIT# prefix
 
+      // Ensure all C values are numbers with default 0
+      const importC1 = Number(data.import_c1 || 0);
+      const importC2 = Number(data.import_c2 || 0);
+      const importC3 = Number(data.import_c3 || 0);
+      const importC4 = Number(data.import_c4 || 0);
+      const importC5 = Number(data.import_c5 || 0);
+      const importTotal = importC1 + importC2 + importC3 + importC4 + importC5;
+
+      const exportC1 = Number(data.export_c1 || 0);
+      const exportC2 = Number(data.export_c2 || 0);
+      const exportC3 = Number(data.export_c3 || 0);
+      const exportC4 = Number(data.export_c4 || 0);
+      const exportC5 = Number(data.export_c5 || 0);
+      const exportTotal = exportC1 + exportC2 + exportC3 + exportC4 + exportC5;
+
       const unitData = {
         ...data,
         pk,
@@ -70,6 +116,28 @@ const productionUnitApi = {
         companyId: String(companyId),
         productionSiteId: String(productionSiteId),
         type: 'UNIT',
+        // Import C values
+        import_c1: importC1,
+        import_c2: importC2,
+        import_c3: importC3,
+        import_c4: importC4,
+        import_c5: importC5,
+        import_total: importTotal,
+        // Export C values
+        export_c1: exportC1,
+        export_c2: exportC2,
+        export_c3: exportC3,
+        export_c4: exportC4,
+        export_c5: exportC5,
+        export_total: exportTotal,
+        // Net export C values
+        net_export_c1: exportC1 - importC1,
+        net_export_c2: exportC2 - importC2,
+        net_export_c3: exportC3 - importC3,
+        net_export_c4: exportC4 - importC4,
+        net_export_c5: exportC5 - importC5,
+        net_export_total: exportTotal - importTotal,
+        // Timestamps
         createdat: new Date().toISOString(),
         updatedat: new Date().toISOString()
       };

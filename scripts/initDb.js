@@ -794,6 +794,27 @@ const createDefaultUsers = async () => {
             createdAt: timestamp,
             updatedAt: timestamp,
             lastLogin: null
+        },
+        {
+            username: 'star_admin',
+            email: 'viewer@smr.com',
+            password: 'admin123',
+            roleId: 'ROLE-1',
+            metadata: {
+                accessibleSites: {
+                    productionSites: { L: [
+                        { S: '1_1' }, { S: '1_2' }, { S: '5_3' }
+                    ]},
+                    consumptionSites: { L: [
+                        { S: '1_1' }, { S: '3_2' }, { S: '5_1' }
+                    ]}
+                }
+            },
+            isActive: true,
+            version: 1,
+            createdAt: timestamp,
+            updatedAt: timestamp,
+            lastLogin: null
         }
     ];
 

@@ -5,6 +5,9 @@ import {
   Switch, FormControlLabel, InputAdornment, FormHelperText, Typography, Paper, Card,
   CardHeader, CardContent, CardActions, Divider, Alert
 } from '@mui/material';
+import { DatePicker } from '@mui/x-date-pickers/DatePicker';
+import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
+import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { useNavigate } from 'react-router-dom';
 import {
   LocationOn as LocationIcon,
@@ -32,7 +35,8 @@ const INITIAL_FORM_STATE = {
   status: '',
   banking: 0,
   annualProduction_L: '',
-  revenuePerUnit: ''
+  revenuePerUnit: '',
+  dateOfCommission: null
 };
 
 const ProductionSiteForm = ({ initialData, onSubmit, onCancel, loading, site }) => {
@@ -69,6 +73,31 @@ const ProductionSiteForm = ({ initialData, onSubmit, onCancel, loading, site }) 
           ? normalizedStatus 
           : '';
 
+        // Parse date of commission - handle various input formats
+        let parsedDateOfCommission = null;
+        if (site.dateOfCommission) {
+          try {
+            // Handle both string and Date objects
+            const date = site.dateOfCommission instanceof Date 
+              ? site.dateOfCommission 
+              : new Date(site.dateOfCommission);
+              
+            if (!isNaN(date.getTime())) {
+              // Ensure it's a valid date and not in the future
+              const today = new Date();
+              today.setHours(0, 0, 0, 0);
+              
+              if (date <= today) {
+                parsedDateOfCommission = date;
+              } else {
+                console.warn('Date of commission is in the future, ignoring');
+              }
+            }
+          } catch (error) {
+            console.error('Error parsing dateOfCommission:', error);
+          }
+        }
+
         // Parse numeric values, ensuring proper handling of null/undefined
         const newFormData = {
           name: site.name || '',
@@ -81,6 +110,7 @@ const ProductionSiteForm = ({ initialData, onSubmit, onCancel, loading, site }) 
           revenuePerUnit: site.revenuePerUnit != null ? parseFloat(site.revenuePerUnit) : '',
           status: validStatus,
           banking: validStatus && INACTIVE_STATUSES.includes(validStatus) ? 0 : (site.banking ? 1 : 0),
+          dateOfCommission: parsedDateOfCommission,
         };
 
         setFormData(newFormData);
@@ -101,10 +131,14 @@ const ProductionSiteForm = ({ initialData, onSubmit, onCancel, loading, site }) 
   // Validate form
   const validateForm = useCallback((data = formData) => {
     const newErrors = {};
-    const requiredFields = ['name', 'location', 'capacity_MW', 'injectionVoltage_KV', 'type', 'status'];
+    const requiredFields = ['name', 'location', 'capacity_MW', 'injectionVoltage_KV', 'type', 'status', 'dateOfCommission'];
 
     requiredFields.forEach(field => {
-      if (!data[field] && data[field] !== 0) {
+      if (field === 'dateOfCommission') {
+        if (!data[field] || (data[field] instanceof Date && isNaN(data[field].getTime()))) {
+          newErrors[field] = 'This field is required';
+        }
+      } else if ((!data[field] && data[field] !== 0)) {
         newErrors[field] = 'This field is required';
       }
     });
@@ -118,6 +152,8 @@ const ProductionSiteForm = ({ initialData, onSubmit, onCancel, loading, site }) 
       newErrors.annualProduction_L = 'Annual production cannot be negative';
     if (data.revenuePerUnit !== undefined && data.revenuePerUnit !== '' && (isNaN(data.revenuePerUnit) || data.revenuePerUnit < 0))
       newErrors.revenuePerUnit = 'Revenue per unit cannot be negative';
+    if (data.dateOfCommission && new Date(data.dateOfCommission) > new Date())
+      newErrors.dateOfCommission = 'Date of commission cannot be in the future';
 
     setErrors(newErrors);
     setIsValid(Object.keys(newErrors).length === 0);
@@ -128,15 +164,35 @@ const ProductionSiteForm = ({ initialData, onSubmit, onCancel, loading, site }) 
     validateForm();
   }, [formData, validateForm]);
 
-  const handleChange = (e) => {
-    const { name, value, type, checked } = e.target;
-    let processedValue = value;
+  const handleChange = (e, value) => {
+    // Handle date picker changes (value is the second argument when coming from DatePicker)
+    if (value instanceof Date) {
+      const newFormData = { ...formData, dateOfCommission: value };
+      const newErrors = { ...errors, dateOfCommission: validateField('dateOfCommission', value) };
+      
+      setFormData(newFormData);
+      setTouched(prev => ({ ...prev, dateOfCommission: true }));
+      setErrors(newErrors);
+      setIsValid(Object.keys(newErrors).length === 0);
+      return;
+    }
+    
+    // If we get here, it's a regular input change
+    if (!e || !e.target) return;
+    
+    const { name, type, checked } = e.target;
+    let processedValue = e.target.value;
     
     // Special handling for revenuePerUnit to ensure proper decimal handling
     if (name === 'revenuePerUnit') {
-      processedValue = value === '' ? '' : parseFloat(value) || 0;
+      // Use e.target.value directly and handle empty string case
+      processedValue = e.target.value === '' ? '' : parseFloat(e.target.value) || 0;
+      // If it's a valid number, round to 2 decimal places
+      if (processedValue !== '' && !isNaN(processedValue)) {
+        processedValue = parseFloat(processedValue.toFixed(2));
+      }
     } else if (type === 'number') {
-      processedValue = value === '' ? '' : Number(value);
+      processedValue = e.target.value === '' ? '' : Number(e.target.value);
     } else if (type === 'checkbox') {
       processedValue = checked ? 1 : 0;
     }
@@ -166,6 +222,10 @@ const ProductionSiteForm = ({ initialData, onSubmit, onCancel, loading, site }) 
         return (!value || value <= 0) ? 'Injection Voltage must be greater than 0' : '';
       case 'status':
         return !value ? 'Status is required' : '';
+      case 'dateOfCommission':
+        if (!value) return 'Date of Commission is required';
+        if (new Date(value) > new Date()) return 'Date of commission cannot be in the future';
+        return '';
       default:
         return '';
     }
@@ -180,12 +240,13 @@ const ProductionSiteForm = ({ initialData, onSubmit, onCancel, loading, site }) 
 
     if (validateForm()) {
       try {
-        const submitData = {
+        const formDataToSubmit = {
           ...formData,
-          version: initialData?.version,
-          banking: INACTIVE_STATUSES.includes(formData.status) ? 0 : (formData.banking ? 1 : 0)
+          dateOfCommission: formData.dateOfCommission 
+            ? new Date(formData.dateOfCommission).toISOString()
+            : null
         };
-        await onSubmit(submitData);
+        await onSubmit(formDataToSubmit);
       } catch (error) {
         setFormError(error.message || 'Failed to save site.');
       }
@@ -299,18 +360,19 @@ const ProductionSiteForm = ({ initialData, onSubmit, onCancel, loading, site }) 
                     min: '0',
                     inputMode: 'decimal'
                   }}
-                  name="revenuePerUnit" 
+                  name="revenuePerUnit"
                   label="Revenue per Unit (₹)" 
-                  value={formData.revenuePerUnit} 
+                  value={formData.revenuePerUnit === '' ? '' : formData.revenuePerUnit}
                   onChange={handleChange}
                   onBlur={(e) => {
                     // Format the value to 2 decimal places on blur
                     if (e.target.value !== '') {
                       const value = parseFloat(e.target.value);
                       if (!isNaN(value)) {
+                        const roundedValue = parseFloat(value.toFixed(2));
                         setFormData(prev => ({
                           ...prev,
-                          revenuePerUnit: parseFloat(value.toFixed(2))
+                          revenuePerUnit: roundedValue
                         }));
                       }
                     }
@@ -322,6 +384,33 @@ const ProductionSiteForm = ({ initialData, onSubmit, onCancel, loading, site }) 
                     endAdornment: <InputAdornment position="end">/unit</InputAdornment> 
                   }}
                 />
+              </Grid>
+
+              <Grid item xs={12} sm={6}>
+                <LocalizationProvider dateAdapter={AdapterDateFns}>
+                  <DatePicker
+                    label="Date of Commission *"
+                    value={formData.dateOfCommission}
+                    onChange={(newValue) => {
+                      if (newValue && !isNaN(new Date(newValue).getTime())) {
+                        handleChange(undefined, newValue);
+                      } else {
+                        handleChange(undefined, null);
+                      }
+                    }}
+                    renderInput={(params) => (
+                      <TextField
+                        {...params}
+                        fullWidth
+                        error={touched.dateOfCommission && !!errors.dateOfCommission}
+                        helperText={touched.dateOfCommission && errors.dateOfCommission || ' '}
+                      />
+                    )}
+                    maxDate={new Date()}
+                    inputFormat="dd/MM/yyyy"
+                    disableFuture
+                  />
+                </LocalizationProvider>
               </Grid>
             </Grid>
           </CardContent>
