@@ -1,5 +1,6 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { useSnackbar } from 'notistack';
+import ClearIcon from '@mui/icons-material/Clear';
 import {
   Table,
   TableBody,
@@ -17,8 +18,12 @@ import {
   FormControl,
   InputLabel,
   Select,
-  MenuItem
+  MenuItem,
+  TextField,
+  InputAdornment,
+  Grid
 } from '@mui/material';
+import { Search as SearchIcon, FilterList as FilterListIcon, Close as CloseIcon, Tune as TuneIcon } from '@mui/icons-material';
 import { 
   Edit as EditIcon, 
   Delete as DeleteIcon, 
@@ -32,6 +37,20 @@ import { formatDisplayDate } from '../../utils/dateUtils';
 
 const currentYear = new Date().getFullYear();
 const years = Array.from({ length: 5 }, (_, i) => currentYear - 2 + i);
+const months = [
+  { value: 0, label: 'January' },
+  { value: 1, label: 'February' },
+  { value: 2, label: 'March' },
+  { value: 3, label: 'April' },
+  { value: 4, label: 'May' },
+  { value: 5, label: 'June' },
+  { value: 6, label: 'July' },
+  { value: 7, label: 'August' },
+  { value: 8, label: 'September' },
+  { value: 9, label: 'October' },
+  { value: 10, label: 'November' },
+  { value: 11, label: 'December' }
+];
 
 // Get financial year range for a given year (April 1 to March 31)
 const getFinancialYearRange = (year) => {
@@ -51,10 +70,17 @@ const UnitTable = ({
   error
 }) => {
   const { enqueueSnackbar } = useSnackbar();
-  const [selectedYear, setSelectedYear] = useState(currentYear);
+  // State for search
+  const [filters, setFilters] = useState({
+    searchTerm: '',
+    isFiltered: false  // Track if search is active
+  });
+  
   const [filteredData, setFilteredData] = useState([]);
+  
+  // Available unit types (you can modify this based on your data)
 
-  // Filter data based on selected financial year
+  // Filter data based on search
   useEffect(() => {
     if (!data || !Array.isArray(data)) {
       console.log('No data or invalid data format');
@@ -62,31 +88,68 @@ const UnitTable = ({
       return;
     }
 
-    console.log('Raw data:', data);
-    const { startDate, endDate } = getFinancialYearRange(selectedYear);
-    console.log(`Filtering for FY ${selectedYear}-${selectedYear + 1} (${startDate.toISOString()} to ${endDate.toISOString()})`);
+    const { searchTerm, isFiltered } = filters;
     
+    // If no search term, show no data
+    if (!isFiltered || !searchTerm) {
+      setFilteredData([]);
+      return;
+    }
+    
+    // Parse search term (format: 'Month YYYY' or 'Mon YYYY')
+    const searchMatch = searchTerm.match(/^(\w+)\s+(\d{4})$/i);
+    if (!searchMatch) {
+      setFilteredData([]);
+      return;
+    }
+    
+    const [, monthStr, yearStr] = searchMatch;
+    const searchMonth = months.find(m => 
+      m.label.toLowerCase() === monthStr.toLowerCase() || 
+      m.label.toLowerCase().startsWith(monthStr.toLowerCase())
+    );
+    
+    if (!searchMonth) {
+      setFilteredData([]);
+      return;
+    }
+    
+    const year = parseInt(yearStr);
+    const month = searchMonth.value;
+    
+    // Filter data for the selected month and year
     const filtered = data.filter(item => {
-      // Use sk field if available, otherwise use date field
       const dateStr = item.sk || item.date;
       if (!dateStr) return false;
       
       // Parse date in MMYYYY format
-      const month = parseInt(dateStr.substring(0, 2)) - 1; // 0-indexed month
-      const year = parseInt(dateStr.substring(2));
-      const itemDate = new Date(year, month, 1); // First day of the month
+      const itemMonth = parseInt(dateStr.substring(0, 2)) - 1; // 0-indexed month
+      const itemYear = parseInt(dateStr.substring(2));
       
-      const isInRange = itemDate >= startDate && itemDate <= endDate;
-      console.log(`Item date: ${dateStr} (${itemDate.toISOString()}) - In range: ${isInRange}`);
-      return isInRange;
+      return itemMonth === month && itemYear === year;
     });
-
-    console.log('Filtered data count:', filtered.length);
+    
     setFilteredData(filtered);
-  }, [data, selectedYear]);
+  }, [data, filters]);
+  
+  const handleFilterChange = (name, value) => {
+    setFilters(prev => ({
+      ...prev,
+      [name]: value,
+      isFiltered: name === 'searchTerm' && value.trim() !== ''
+    }));
+  };
+  
+  const resetFilters = () => {
+    setFilters({
+      searchTerm: '',
+      isFiltered: false
+    });
+  };
 
-  const handleYearChange = (event) => {
-    setSelectedYear(Number(event.target.value));
+  
+  const clearSearch = () => {
+    handleFilterChange('searchTerm', '');
   };
 
   const tableData = useMemo(() => {
@@ -143,58 +206,209 @@ const UnitTable = ({
 
   const renderHeader = () => (
     <Box sx={{ 
-      display: 'flex', 
-      justifyContent: 'space-between', 
-      alignItems: 'center',
+      mb: 3,
+      backgroundColor: 'background.paper',
+      borderRadius: 1,
       p: 2,
-      backgroundColor: 'white',
-      borderBottom: '2px solid #000000',
-      gap: 2
+      boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
     }}>
-      <Typography variant="h6" component="div" sx={{ color: '#1976d2', fontWeight: 'bold' }}>
-        Unit Data
-      </Typography>
-      <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-        <FormControl size="small" sx={{ minWidth: 200 }}>
-          <InputLabel>Financial Year</InputLabel>
-          <Select
-            value={selectedYear}
-            onChange={handleYearChange}
-            label="Financial Year"
+      <Box sx={{ 
+        display: 'flex', 
+        flexDirection: { xs: 'column', sm: 'row' },
+        justifyContent: 'space-between',
+        alignItems: { xs: 'stretch', sm: 'center' },
+        gap: 2,
+        pb: 2,
+        borderBottom: '2px solid',
+        borderColor: 'rgba(0, 0, 0, 0.87)',
+        mb: 3
+      }}>
+        <Box sx={{ 
+          display: 'flex', 
+          alignItems: 'center',
+          minWidth: { sm: '200px' },
+          mb: { xs: 1, sm: 0 }
+        }}>
+          <Typography 
+            variant="h6" 
+            component="h2"
+            sx={{ 
+              color: 'primary.main',
+              fontWeight: 600,
+              fontSize: '1.25rem',
+              lineHeight: 1.2
+            }}
           >
-            {years.map((year) => (
-              <MenuItem key={year} value={year}>
-                {`FY ${year}-${(year + 1).toString().slice(-2)}`}
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-        {onAdd && (
-          <Button
-            variant="contained"
-            color="primary"
-            size="small"
-            onClick={onAdd}
-            startIcon={<AddIcon />}
-            disabled={loading}
-            sx={{ ml: 1 }}
-          >
-            Add Unit
-          </Button>
-        )}
+            Unit Data
+          </Typography>
+        </Box>
+        
+        <Box sx={{ 
+          display: 'flex', 
+          gap: 2, 
+          alignItems: 'center',
+          flex: { sm: 1 },
+          justifyContent: 'flex-end',
+          flexWrap: 'wrap'
+        }}>
+          <Box sx={{ 
+            display: 'flex', 
+            alignItems: 'center',
+            width: { xs: '100%', sm: 'auto' },
+            maxWidth: { sm: '300px' },
+            flex: { xs: '1 1 100%', sm: '0 1 auto' },
+            position: 'relative'
+          }}>
+            <TextField
+              fullWidth
+              variant="outlined"
+              size="small"
+              placeholder="Search by month (e.g., March 2025)"
+              value={filters.searchTerm}
+              onChange={(e) => handleFilterChange('searchTerm', e.target.value)}
+              onKeyPress={(e) => {
+                if (e.key === 'Enter' && filters.searchTerm) {
+                  handleFilterChange('isFiltered', true);
+                }
+              }}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <SearchIcon color="action" />
+                  </InputAdornment>
+                ),
+                endAdornment: filters.searchTerm && (
+                  <InputAdornment position="end">
+                    <IconButton
+                      edge="end"
+                      onClick={clearSearch}
+                      size="small"
+                      sx={{
+                        '&:hover': {
+                          backgroundColor: 'action.hover',
+                        },
+                      }}
+                    >
+                      <ClearIcon fontSize="small" />
+                    </IconButton>
+                  </InputAdornment>
+                ),
+                sx: {
+                  pr: 1,
+                  '&.Mui-focused': {
+                    '& .MuiOutlinedInput-notchedOutline': {
+                      borderColor: 'primary.main',
+                    },
+                  },
+                },
+              }}
+              sx={{
+                '& .MuiOutlinedInput-root': {
+                  backgroundColor: 'background.paper',
+                  paddingRight: '40px',
+                  '&:hover .MuiOutlinedInput-notchedOutline': {
+                    borderColor: 'action.active',
+                  },
+                  '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                    borderWidth: '1px',
+                  },
+                },
+                '& .MuiInputBase-input': {
+                  paddingRight: '8px',
+                },
+              }}
+            />
+          </Box>
+          
+          {onAdd && permissions?.create && (
+            <Button
+              variant="contained"
+              color="primary"
+              onClick={onAdd}
+              startIcon={<AddIcon />}
+              size="small"
+              sx={{ 
+                whiteSpace: 'nowrap',
+                minWidth: '120px'
+              }}
+              disabled={loading}
+            >
+              Add Unit
+            </Button>
+          )}
+        </Box>
       </Box>
     </Box>
   );
 
   if (!filteredData || filteredData.length === 0) {
+    const hasSearchTerm = filters.searchTerm && filters.isFiltered;
+    
     return (
       <Box sx={{ p: 0 }}>
         {renderHeader()}
-        <Alert severity="info" sx={{ mt: 2, mx: 2, mb: 2 }}>
-          {data && data.length > 0 
-            ? `No unit data available for financial year ${selectedYear}-${(selectedYear + 1).toString().slice(-2)}`
-            : 'No unit data available. Add your first unit record.'}
-        </Alert>
+        <Box sx={{ 
+          display: 'flex', 
+          flexDirection: 'column', 
+          alignItems: 'center', 
+          justifyContent: 'center',
+          p: 4,
+          textAlign: 'center',
+          minHeight: '200px',
+          backgroundColor: 'background.paper',
+          borderRadius: 1,
+          boxShadow: 1
+        }}>
+          {hasSearchTerm ? (
+            <>
+              <InfoIcon color="action" sx={{ fontSize: 48, mb: 2, color: 'text.secondary' }} />
+              <Typography variant="h6" color="text.primary" gutterBottom>
+                No Data Found for {filters.searchTerm}
+              </Typography>
+              <Typography variant="body1" color="text.secondary" sx={{ mb: 3, maxWidth: '500px' }}>
+                We couldn't find any unit data for the selected month. 
+                Would you like to add data for this period?
+              </Typography>
+              {onAdd && permissions?.create && (
+                <Button
+                  variant="contained"
+                  color="primary"
+                  onClick={onAdd}
+                  startIcon={<AddIcon />}
+                  size="medium"
+                >
+                  Add Data for {filters.searchTerm}
+                </Button>
+              )}
+            </>
+          ) : (
+            <>
+              <InfoIcon color="action" sx={{ fontSize: 48, mb: 2, color: 'text.secondary' }} />
+              <Typography variant="h6" color="text.primary" gutterBottom>
+                {data && data.length > 0 
+                  ? 'Search for Unit Data'
+                  : 'No Unit Data Available'}
+              </Typography>
+              <Typography variant="body1" color="text.secondary">
+                {data && data.length > 0
+                  ? 'Enter a month and year (e.g., March 2025) to view data'
+                  : 'Get started by adding your first unit record.'}
+              </Typography>
+              {(!data || data.length === 0) && onAdd && permissions?.create && (
+                <Button
+                  variant="contained"
+                  color="primary"
+                  onClick={onAdd}
+                  startIcon={<AddIcon />}
+                  size="medium"
+                  sx={{ mt: 2 }}
+                >
+                  Add First Unit
+                </Button>
+              )}
+            </>
+          )}
+        </Box>
       </Box>
     );
   }
