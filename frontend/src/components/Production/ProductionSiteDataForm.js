@@ -244,7 +244,16 @@ const ProductionSiteDataForm = ({
 
     try {
       const sk = generateSK(formData.date);
-      
+
+      // Recalculate and clamp net export values to be non-negative before submit
+      const netExportUpdates = {};
+      ['c1','c2','c3','c4','c5'].forEach((c) => {
+        const importVal = parseFloat(formData[`import_${c}`] || '0');
+        const exportVal = parseFloat(formData[`export_${c}`] || '0');
+        const net = Math.max(0, exportVal - importVal);
+        netExportUpdates[`net_export_${c}`] = net;
+      });
+
       const submitData = {
         ...formData,
         sk,
@@ -257,6 +266,7 @@ const ProductionSiteDataForm = ({
           ...acc,
           [field.id]: parseFloat(formData[field.id]) || 0
         }), {}),
+        ...netExportUpdates, // ensure net export values are non-negative
         version: parseInt(formData.version) || 1
       };
 
@@ -298,8 +308,9 @@ const ProductionSiteDataForm = ({
         const importValue = parseFloat(newFormData[`import_${cNum}`] || '0');
         const exportValue = parseFloat(newFormData[`export_${cNum}`] || '0');
         const netExport = exportValue - importValue;
+        const clampedNetExport = Math.max(0, netExport); // enforce non-negative
         
-        newFormData[`net_export_${cNum}`] = netExport.toString();
+        newFormData[`net_export_${cNum}`] = clampedNetExport.toString();
       }
 
       setFormData(newFormData);

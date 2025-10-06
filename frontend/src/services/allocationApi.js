@@ -67,7 +67,7 @@ class AllocationApi {
             
             const filterByCompany = (items) => {
                 if (!companyId) return items || [];
-                return (items || []).filter(item => item.companyId === companyId);
+                return (items || []).filter(item => String(item.companyId) === String(companyId));
             };
             
             const transformCharge = (items) => {
@@ -156,7 +156,7 @@ class AllocationApi {
             const data = response.data?.data || [];
             
             const filteredData = companyId 
-                ? data.filter(item => item.companyId === companyId)
+                ? data.filter(item => String(item.companyId) === String(companyId))
                 : data;
             
             return filteredData.map(item => ({

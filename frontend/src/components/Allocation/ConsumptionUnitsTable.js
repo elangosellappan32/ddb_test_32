@@ -156,6 +156,21 @@ const ConsumptionUnitsTable = ({
     setSplitPercentages(percentages);
   }, []);
 
+  // Select the latest shareholding entry per consumption site based on effectiveFrom
+  const selectLatestShareholdingBySite = useCallback((shareholdingsList = []) => {
+    const map = new Map();
+    shareholdingsList.forEach(sh => {
+      if (!sh || !sh.consumptionSiteId) return;
+      const existing = map.get(sh.consumptionSiteId);
+      const currentDate = new Date(sh.effectiveFrom || 0);
+      const existingDate = existing ? new Date(existing.effectiveFrom || 0) : new Date(0);
+      if (!existing || currentDate >= existingDate) {
+        map.set(sh.consumptionSiteId, sh);
+      }
+    });
+    return map;
+  }, []);
+
   const handleAllocationClick = useCallback(async () => {
     try {
       setIsProcessing(true);
@@ -174,11 +189,10 @@ const ConsumptionUnitsTable = ({
       if (sites.length > 0) {
         if (filteredShareholdings.length > 0) {
           // Map shareholding percentages to sites
+          const latestBySite = selectLatestShareholdingBySite(filteredShareholdings);
           const percentages = sites.map(site => {
-            const share = filteredShareholdings.find(
-              sh => sh.consumptionSiteId === site.consumptionSiteId
-            );
-            return share ? share.shareholdingPercentage : 0;
+            const share = latestBySite.get(site.consumptionSiteId);
+            return share ? Number(share.shareholdingPercentage) || 0 : 0;
           });
           setSplitPercentages(percentages);
         } else {
@@ -196,7 +210,6 @@ const ConsumptionUnitsTable = ({
       setIsProcessing(false);
     }
   }, [companyId, shareholdings, enqueueSnackbar, initializeEqualSplitPercentages]);
-
 
   const handleAutoAllocate = useCallback(() => {
     if (consumptionSites.length === 0) return;
@@ -260,15 +273,30 @@ const ConsumptionUnitsTable = ({
     
     try {
       setIsProcessing(true);
+      // Use the latest shareholding per site
+      const filteredShareholdings = (shareholdings || []).filter(
+        sh => sh.generatorCompanyId === Number(companyId)
+      );
+      const latestBySite = selectLatestShareholdingBySite(filteredShareholdings);
+
+      // Validate presence of shareholderCompanyId for all sites
+      const missing = consumptionSites
+        .map(site => ({ site, sh: latestBySite.get(site.consumptionSiteId) }))
+        .filter(({ sh }) => !sh || !sh.shareholderCompanyId)
+        .map(({ site }) => site.name || site.consumptionSiteId);
+
+      if (missing.length > 0) {
+        setDialogError(`Missing shareholderCompanyId in captive records for: ${missing.join(', ')}`);
+        enqueueSnackbar('Please configure captive shareholdings before saving allocation', { variant: 'warning' });
+        setIsProcessing(false);
+        return;
+      }
+
       const updatePromises = consumptionSites.map((site, index) => {
-        const shareholding = shareholdings.find(
-          sh => sh.consumptionSiteId === site.consumptionSiteId && 
-                sh.generatorCompanyId === Number(companyId)
-        );
-        
+        const shareholding = latestBySite.get(site.consumptionSiteId);
         const captiveData = {
           generatorCompanyId: Number(companyId),
-          shareholderCompanyId: shareholding?.shareholderCompanyId || Number(site.consumptionSiteId),
+          shareholderCompanyId: Number(shareholding.shareholderCompanyId),
           consumptionSiteId: site.consumptionSiteId,
           siteName: site.name,
           effectiveFrom: new Date().toISOString().split('T')[0],
@@ -338,13 +366,14 @@ const ConsumptionUnitsTable = ({
         
         // Use the shareholdings passed as props, which are already filtered by companyId
         if (shareholdings && shareholdings.length > 0) {
-          // Map shareholding percentages to sites for the current company
+          // Map latest shareholding percentages to sites for the current company
+          const filteredShareholdings = shareholdings.filter(
+            sh => sh.generatorCompanyId === Number(companyId)
+          );
+          const latestBySite = selectLatestShareholdingBySite(filteredShareholdings);
           const percentages = sites.map(site => {
-            const share = shareholdings.find(
-              sh => sh.consumptionSiteId === site.consumptionSiteId && 
-                    sh.generatorCompanyId === Number(companyId)
-            );
-            return share ? share.shareholdingPercentage : 0;
+            const share = latestBySite.get(site.consumptionSiteId);
+            return share ? Number(share.shareholdingPercentage) || 0 : 0;
           });
           setSplitPercentages(percentages);
         } else {

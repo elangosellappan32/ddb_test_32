@@ -58,22 +58,18 @@ exports.createProductionUnit = async (req, res) => {
             });
         }
 
-        // Calculate net export values
-        const netExportC1 = (Number(data.export_c1 || 0) - Number(data.import_c1 || 0));
-        const netExportC2 = (Number(data.export_c2 || 0) - Number(data.import_c2 || 0));
-        const netExportC3 = (Number(data.export_c3 || 0) - Number(data.import_c3 || 0));
-        const netExportC4 = (Number(data.export_c4 || 0) - Number(data.import_c4 || 0));
-        const netExportC5 = (Number(data.export_c5 || 0) - Number(data.import_c5 || 0));
-        const netExportTotal = ((Number(data.export_c1 || 0) + 
-                               Number(data.export_c2 || 0) + 
-                               Number(data.export_c3 || 0) + 
-                               Number(data.export_c4 || 0) + 
-                               Number(data.export_c5 || 0)) -
-                              (Number(data.import_c1 || 0) + 
-                               Number(data.import_c2 || 0) + 
-                               Number(data.import_c3 || 0) + 
-                               Number(data.import_c4 || 0) + 
-                               Number(data.import_c5 || 0)));
+        // Calculate net export values and clamp negatives to zero
+        const diffC1 = Number(data.export_c1 || 0) - Number(data.import_c1 || 0);
+        const diffC2 = Number(data.export_c2 || 0) - Number(data.import_c2 || 0);
+        const diffC3 = Number(data.export_c3 || 0) - Number(data.import_c3 || 0);
+        const diffC4 = Number(data.export_c4 || 0) - Number(data.import_c4 || 0);
+        const diffC5 = Number(data.export_c5 || 0) - Number(data.import_c5 || 0);
+        const netExportC1 = Math.max(0, diffC1);
+        const netExportC2 = Math.max(0, diffC2);
+        const netExportC3 = Math.max(0, diffC3);
+        const netExportC4 = Math.max(0, diffC4);
+        const netExportC5 = Math.max(0, diffC5);
+        const netExportTotal = netExportC1 + netExportC2 + netExportC3 + netExportC4 + netExportC5;
 
         const unitData = {
             pk,
@@ -111,7 +107,7 @@ exports.createProductionUnit = async (req, res) => {
                           Number(data.export_c4 || 0) + 
                           Number(data.export_c5 || 0)),
             
-            // Net export C values (export - import)
+            // Net export C values (export - import, clamped to zero)
             net_export_c1: netExportC1,
             net_export_c2: netExportC2,
             net_export_c3: netExportC3,
@@ -192,22 +188,18 @@ exports.updateProductionUnit = async (req, res) => {
       });
     }
 
-    // Calculate net export values
-    const netExportC1 = (Number(formattedData.export_c1 || 0) - Number(formattedData.import_c1 || 0));
-    const netExportC2 = (Number(formattedData.export_c2 || 0) - Number(formattedData.import_c2 || 0));
-    const netExportC3 = (Number(formattedData.export_c3 || 0) - Number(formattedData.import_c3 || 0));
-    const netExportC4 = (Number(formattedData.export_c4 || 0) - Number(formattedData.import_c4 || 0));
-    const netExportC5 = (Number(formattedData.export_c5 || 0) - Number(formattedData.import_c5 || 0));
-    const netExportTotal = ((Number(formattedData.export_c1 || 0) + 
-                           Number(formattedData.export_c2 || 0) + 
-                           Number(formattedData.export_c3 || 0) + 
-                           Number(formattedData.export_c4 || 0) + 
-                           Number(formattedData.export_c5 || 0)) -
-                          (Number(formattedData.import_c1 || 0) + 
-                           Number(formattedData.import_c2 || 0) + 
-                           Number(formattedData.import_c3 || 0) + 
-                           Number(formattedData.import_c4 || 0) + 
-                           Number(formattedData.import_c5 || 0)));
+    // Calculate net export values and clamp negatives to zero
+    const diffC1 = Number(formattedData.export_c1 || 0) - Number(formattedData.import_c1 || 0);
+    const diffC2 = Number(formattedData.export_c2 || 0) - Number(formattedData.import_c2 || 0);
+    const diffC3 = Number(formattedData.export_c3 || 0) - Number(formattedData.import_c3 || 0);
+    const diffC4 = Number(formattedData.export_c4 || 0) - Number(formattedData.import_c4 || 0);
+    const diffC5 = Number(formattedData.export_c5 || 0) - Number(formattedData.import_c5 || 0);
+    const netExportC1 = Math.max(0, diffC1);
+    const netExportC2 = Math.max(0, diffC2);
+    const netExportC3 = Math.max(0, diffC3);
+    const netExportC4 = Math.max(0, diffC4);
+    const netExportC5 = Math.max(0, diffC5);
+    const netExportTotal = netExportC1 + netExportC2 + netExportC3 + netExportC4 + netExportC5;
 
     const updateData = {
       ...formattedData,
@@ -247,7 +239,7 @@ exports.updateProductionUnit = async (req, res) => {
                     Number(formattedData.export_c4 || 0) + 
                     Number(formattedData.export_c5 || 0)),
       
-      // Net export C values (export - import)
+      // Net export C values (export - import, clamped to zero)
       net_export_c1: netExportC1,
       net_export_c2: netExportC2,
       net_export_c3: netExportC3,

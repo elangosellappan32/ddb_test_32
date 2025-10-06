@@ -29,7 +29,8 @@ import {
   AccountCircle as ProfileIcon,
   AssignmentTurnedIn as AssignmentTurnedInIcon,
   BarChart as BarChartIcon,
-  Receipt as ReceiptIcon
+  Receipt as ReceiptIcon,
+  SyncAlt as SyncAltIcon
 } from '@mui/icons-material';
 import { useAuth } from '../context/AuthContext';
 import { useNavigation } from '../context/NavigationContext';
@@ -78,6 +79,12 @@ const Navbar = () => {
       icon: <AssignmentTurnedInIcon />,
       label: 'Allocation',
       path: '/allocation',
+      resource: 'allocation'
+    },
+    {
+      icon: <SyncAltIcon />,
+      label: 'Consumption Allocation',
+      path: '/consumption-allocation',
       resource: 'allocation'
     },
     {

@@ -644,28 +644,35 @@ const Allocation = () => {
       }, {});
 
 
-      // Calculate financial year months for filtering banking data
+      // Calculate prior months within the financial year for filtering banking data
       const financialYear = selectedMonth > 3 ? selectedYear : selectedYear - 1;
-      const financialYearMonths = [];
-      
-      // April to December of the current financial year
-      for (let month = 4; month <= 12; month++) {
-        financialYearMonths.push(`${month.toString().padStart(2, '0')}${financialYear}`);
-      }
-      // January to March of the next financial year
-      for (let month = 1; month <= 3; month++) {
-        financialYearMonths.push(`${month.toString().padStart(2, '0')}${financialYear + 1}`);
+      const priorMonthsInFY = [];
+
+      if (selectedMonth >= 4 && selectedMonth <= 12) {
+        // For April–December: include April up to month before selected month of the same year
+        for (let month = 4; month < selectedMonth; month++) {
+          priorMonthsInFY.push(`${month.toString().padStart(2, '0')}${financialYear}`);
+        }
+      } else {
+        // For January–March: include April–December of FY and Jan..(selectedMonth-1) of next year
+        for (let month = 4; month <= 12; month++) {
+          priorMonthsInFY.push(`${month.toString().padStart(2, '0')}${financialYear}`);
+        }
+        for (let month = 1; month < selectedMonth; month++) {
+          priorMonthsInFY.push(`${month.toString().padStart(2, '0')}${financialYear + 1}`);
+        }
       }
 
-      // Process banking data for the entire financial year
+
+      // Process banking data for the prior-month range within the financial year
       const allBankingData = bankingData
         .filter(unit => {
           // Check if unit is valid and in the correct period
-          if (!unit || !unit.pk || !unit.sk || !financialYearMonths.includes(unit.sk)) {
+          if (!unit || !unit.pk || !unit.sk || !priorMonthsInFY.includes(unit.sk)) {
             if (unit) {
               console.log('Filtered out banking unit (invalid or wrong period):', {
                 sk: unit.sk,
-                financialYearMonths,
+                priorMonthsInFY,
                 unit
               });
             }
@@ -673,6 +680,7 @@ const Allocation = () => {
           }
           return true;
         })
+
         .map(unit => {
           try {
             const siteInfo = siteNameMap[unit.pk] || { 
@@ -1392,7 +1400,8 @@ const Allocation = () => {
       <Box sx={{ mt: 4 }}>
         <BankingUnitsTable 
           bankingData={aggregatedBankingData}
-          selectedYear={financialYear}
+          selectedYear={selectedYear}
+          selectedMonth={selectedMonth}
         />
       </Box>
 

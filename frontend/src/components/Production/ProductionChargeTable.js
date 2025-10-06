@@ -22,7 +22,6 @@ import {
 import { 
   Edit as EditIcon, 
   Delete as DeleteIcon, 
-  ContentCopy as ContentCopyIcon,
   Info as InfoIcon,
   Add as AddIcon
 } from '@mui/icons-material';
@@ -49,7 +48,6 @@ const ChargeTable = ({
   data, 
   onEdit, 
   onDelete, 
-  onCopy,
   onAdd,
   permissions,
   loading,
@@ -162,14 +160,7 @@ const ChargeTable = ({
     }
   };
 
-  const handleCopy = (e, row) => {
-    e.stopPropagation();
-    if (permissions.create) {
-      onCopy('charge', row);
-    } else {
-      enqueueSnackbar('You do not have permission to copy charges', { variant: 'error' });
-    }
-  };
+  
 
   const renderHeader = () => (
     <Box sx={{ 
@@ -295,11 +286,6 @@ const ChargeTable = ({
     return (
       <Box>
         {renderHeader()}
-        <Alert severity="info" sx={{ mt: 2, mx: 2, mb: 2 }}>
-          {filters.isFiltered
-            ? 'No charge data found matching your search.'
-            : 'No charge data available. Use the search to find specific months or add a new record.'}
-        </Alert>
         <Box sx={{ 
           display: 'flex', 
           flexDirection: 'column', 
@@ -417,13 +403,7 @@ const ChargeTable = ({
                       </IconButton>
                     </Tooltip>
                   )}
-                  {permissions.create && (
-                    <Tooltip title="Copy">
-                      <IconButton size="small" onClick={(e) => handleCopy(e, row)} sx={{ color: 'success.main' }}>
-                        <ContentCopyIcon fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
-                  )}
+                  
                   {permissions.delete && (
                     <Tooltip title="Delete">
                       <IconButton size="small" onClick={(e) => handleDelete(e, row)} sx={{ color: 'error.main' }}>

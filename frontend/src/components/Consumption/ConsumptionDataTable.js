@@ -26,8 +26,7 @@ import { Add as AddIcon, Search as SearchIcon, Clear as ClearIcon } from '@mui/i
 import {
   Edit as EditIcon,
   Delete as DeleteIcon,
-  Info as InfoIcon,
-  ContentCopy as CopyIcon
+  Info as InfoIcon
 } from '@mui/icons-material';
 import { format } from 'date-fns';
 
@@ -50,7 +49,6 @@ const ConsumptionDataTable = ({
   data, 
   onEdit, 
   onDelete,
-  onCopy, 
   onAdd,
   permissions,
   loading,
@@ -400,22 +398,7 @@ const ConsumptionDataTable = ({
                         </IconButton>
                       </Tooltip>
                     )}
-                    {permissions?.create && onCopy && (
-                      <Tooltip title="Copy to Next Month">
-                        <IconButton 
-                          size="small" 
-                          onClick={() => onCopy(row)}
-                          sx={{
-                            color: 'success.main',
-                            '&:hover': {
-                              backgroundColor: 'success.lighter',
-                            }
-                          }}
-                        >
-                          <CopyIcon fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
-                    )}
+                    
                   </Box>
                 </TableCell>
               </TableRow>

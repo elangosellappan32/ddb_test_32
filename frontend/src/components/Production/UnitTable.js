@@ -27,7 +27,6 @@ import { Search as SearchIcon, FilterList as FilterListIcon, Close as CloseIcon,
 import { 
   Edit as EditIcon, 
   Delete as DeleteIcon, 
-  ContentCopy as ContentCopyIcon,
   Info as InfoIcon,
   Add as AddIcon
 } from '@mui/icons-material';
@@ -63,7 +62,6 @@ const UnitTable = ({
   data, 
   onEdit, 
   onDelete, 
-  onCopy,
   onAdd,
   permissions,
   loading,
@@ -179,14 +177,7 @@ const UnitTable = ({
     }
   };
 
-  const handleCopy = (e, row) => {
-    e.stopPropagation();
-    if (permissions.create) {
-      onCopy('unit', row);
-    } else {
-      enqueueSnackbar('You do not have permission to copy units', { variant: 'error' });
-    }
-  };
+  
 
   if (loading) {
     return (
@@ -542,8 +533,9 @@ const UnitTable = ({
               {[1, 2, 3, 4, 5].map((num) => {
                 const field = `net_export_c${num}`;
                 const isPeak = [2, 3].includes(num);
-                const value = row[field] || 0;
-                const isNegative = value < 0;
+                const rawValue = row[field] ?? 0;
+                const value = rawValue < 0 ? 0 : rawValue; // clamp negatives to zero for display
+                const isNegative = rawValue < 0;
                 
                 return (
                   <TableCell 
@@ -579,13 +571,7 @@ const UnitTable = ({
                       </IconButton>
                     </Tooltip>
                   )}
-                  {permissions.create && (
-                    <Tooltip title="Copy">
-                      <IconButton size="small" onClick={(e) => handleCopy(e, row)} sx={{ color: 'success.main' }}>
-                        <ContentCopyIcon fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
-                  )}
+                  
                   {permissions.delete && (
                     <Tooltip title="Delete">
                       <IconButton size="small" onClick={(e) => handleDelete(e, row)} sx={{ color: 'error.main' }}>
@@ -598,52 +584,7 @@ const UnitTable = ({
             </TableRow>
           ))}
           
-          {/* Summary Row */}
-          {tableData.length > 0 && (
-            <TableRow sx={{ '& td': { fontWeight: 'bold', backgroundColor: '#f5f5f5' } }}>
-              <TableCell>Total</TableCell>
-              
-              {/* Import Totals */}
-              {[1, 2, 3, 4, 5].map(num => {
-                const total = tableData.reduce((sum, row) => sum + (row[`import_c${num}`] || 0), 0);
-                return (
-                  <TableCell key={`import_total_${num}`} align="right" sx={{ color: '#0d47a1' }}>
-                    {formatNumber(total)}
-                  </TableCell>
-                );
-              })}
-              
-              {/* Export Totals */}
-              {[1, 2, 3, 4, 5].map(num => {
-                const total = tableData.reduce((sum, row) => sum + (row[`export_c${num}`] || 0), 0);
-                return (
-                  <TableCell key={`export_total_${num}`} align="right" sx={{ color: '#1b5e20' }}>
-                    {formatNumber(total)}
-                  </TableCell>
-                );
-              })}
-              
-              {/* Net Export Totals */}
-              {[1, 2, 3, 4, 5].map(num => {
-                const total = tableData.reduce((sum, row) => sum + (row[`net_export_c${num}`] || 0), 0);
-                const isNegative = total < 0;
-                return (
-                  <TableCell 
-                    key={`net_export_total_${num}`} 
-                    align="right" 
-                    sx={{ 
-                      color: isNegative ? '#d32f2f' : '#1b5e20',
-                      backgroundColor: isNegative ? '#ffebee' : '#e8f5e9'
-                    }}
-                  >
-                    {formatNumber(total)}
-                  </TableCell>
-                );
-              })}
-              
-              <TableCell></TableCell> {/* Empty cell for actions column */}
-            </TableRow>
-          )}
+          
         </TableBody>
       </Table>
     </TableContainer>
