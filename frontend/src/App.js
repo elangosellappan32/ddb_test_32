@@ -23,8 +23,8 @@ const ConsumptionSiteDetails = lazy(() => import("./components/Consumption/Consu
 const Allocation = lazy(() => import("./components/Allocation/Allocation"));
 const Report = lazy(() => import("./components/Reports/Report"));
 const Invoice = lazy(() => import("./components/invoice/InvoicePage"));
-const GraphicalReport = lazy(() => import("./components/Graphical-Report/GraphicalReport.js"));
-const ConsumptionAllocation = lazy(() => import("./components/Allocation/ConsumptionAllocation"));
+const GraphicalReport = lazy(() => import("./components/GraphicalReport/GraphicalReport"));
+const ConsumptionAllocation = lazy(() => import("./components/ConsumptionAllocation/ConsumptionAllocation"));
 // Loading component for suspense fallback
 const LoadingFallback = () => (
   <Box display="flex" justifyContent="center" alignItems="center" minHeight="100vh">
