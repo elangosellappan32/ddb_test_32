@@ -467,7 +467,7 @@ const ConsumptionAllocation = () => {
                             
                             {/* Available and Remaining Rows */}
                             <TableRow>
-                              <TableCell className="subtext" sx={{ pl: 4 }}>Adjustede</TableCell>
+                              <TableCell className="subtext" sx={{ pl: 4 }}>Adjust</TableCell>
                               <TableCell className="subtext" align="right">{formatNumber(available.c24)}</TableCell>
                               <TableCell className="subtext" align="right">{formatNumber(available.c1)}</TableCell>
                               <TableCell className="subtext" align="right">{formatNumber(available.c2)}</TableCell>
@@ -477,7 +477,7 @@ const ConsumptionAllocation = () => {
                             </TableRow>
                             
                             <TableRow>
-                              <TableCell className="subtext" sx={{ pl: 4, borderBottom: '2px solid #e0e0e0' }}>Remaining</TableCell>
+                              <TableCell className="subtext" sx={{ pl: 4, borderBottom: '2px solid #e0e0e0' }}>Consumption balance</TableCell>
                               <TableCell className="subtext" align="right" sx={{ borderBottom: '2px solid #e0e0e0' }}>{formatNumber(rem.c24)}</TableCell>
                               <TableCell className="subtext" align="right" sx={{ borderBottom: '2px solid #e0e0e0' }}>{formatNumber(rem.c1)}</TableCell>
                               <TableCell className="subtext" align="right" sx={{ borderBottom: '2px solid #e0e0e0' }}>{formatNumber(rem.c2)}</TableCell>

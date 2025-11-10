@@ -443,12 +443,12 @@ const createCaptiveTable = async () => {
     const params = {
         TableName: TableNames.CAPTIVE,
         KeySchema: [
-            { AttributeName: 'generatorCompanyId', KeyType: 'HASH' },
-            { AttributeName: 'shareholderCompanyId', KeyType: 'RANGE' }
+            { AttributeName: 'productionSiteId', KeyType: 'HASH' },
+            { AttributeName: 'consumptionSiteId', KeyType: 'RANGE' }
         ],
         AttributeDefinitions: [
-            { AttributeName: 'generatorCompanyId', AttributeType: 'N' },
-            { AttributeName: 'shareholderCompanyId', AttributeType: 'N' }
+            { AttributeName: 'productionSiteId', AttributeType: 'S' },
+            { AttributeName: 'consumptionSiteId', AttributeType: 'S' }
         ],
         ProvisionedThroughput: {
             ReadCapacityUnits: 5,
@@ -468,46 +468,36 @@ const createCaptiveTable = async () => {
 const createDefaultCaptiveData = async () => {
     const captiveData = [
         {
-            generatorCompanyId: 1,  // STRIO KAIZEN
-            shareholderCompanyId: 2, // POLYSPIN EXPORTS
-            consumptionSiteId: '2_1', // Format: companyId_siteId
-            productionSiteId: '1_1',  // Format: companyId_siteId
+            consumptionSiteId: '1', // Format: companyId_siteId
+            productionSiteId: '1',  // Format: companyId_siteId
             effectiveFrom: '2024-01-02',
             shareholdingPercentage: 27,
             status: 'active'
         },
         {
-            generatorCompanyId: 1,  // STRIO KAIZEN
-            shareholderCompanyId: 3, // PEL TEXTILES
-            consumptionSiteId: '3_2',
-            productionSiteId: '1_1',
+            consumptionSiteId: '2',
+            productionSiteId: '1',
             effectiveFrom: '2024-01-02',
             shareholdingPercentage: 12,
             status: 'active'
         },
         {
-            generatorCompanyId: 1,  // STRIO KAIZEN
-            shareholderCompanyId: 4, // A RAMAR AND SONS
-            consumptionSiteId: '4_3',
-            productionSiteId: '1_2',
+            consumptionSiteId: '3',
+            productionSiteId: '2',
             effectiveFrom: '2024-01-02',
             shareholdingPercentage: 61,
             status: 'active'
         },
         {
-            generatorCompanyId: 5,  // SMR ENERGY
-            shareholderCompanyId: 3, // PEL TEXTILES
-            consumptionSiteId: '3_2',
-            productionSiteId: '5_3',
+            consumptionSiteId: '2',
+            productionSiteId: '3',
             effectiveFrom: '2024-01-02',
             shareholdingPercentage: 23,
             status: 'active'
         },
         {
-            generatorCompanyId: 5,  // SMR ENERGY
-            shareholderCompanyId: 2, // POLYSPIN EXPORTS
-            consumptionSiteId: '2_1',
-            productionSiteId: '5_3',
+            consumptionSiteId: '1',
+            productionSiteId: '3',
             effectiveFrom: '2024-01-02',
             shareholdingPercentage: 33,
             status: 'active'
@@ -682,6 +672,27 @@ const createDefaultUsers = async () => {
             updatedAt: timestamp,
             lastLogin: null
         },
+        {
+            username: 'consultant_admin',
+            email: 'consultant@strio.com',
+            password: 'consultant123',
+            roleId: 'ROLE-1',
+            metadata: {
+                accessibleSites: {
+                    productionSites: { L: [
+                        { S: '1_1' }, { S: '1_2' }, { S: '5_3' }
+                    ]},
+                    consumptionSites: { L: [
+                        { S: '2_1' }, { S: '3_2' }, { S: '4_3' }
+                    ]}
+                }
+            },
+            isActive: true,
+            version: 1,
+            createdAt: timestamp,
+            updatedAt: timestamp,
+            lastLogin: null
+        },
         // STRIO User
         {
             username: 'strio_user',
@@ -689,7 +700,6 @@ const createDefaultUsers = async () => {
             password: 'user123',
             roleId: 'ROLE-2',
             metadata: {
-                companyId: '1', // STRIO KAIZEN
                 accessibleSites: {
                     productionSites: { L: [
                         { S: '1_1' }, { S: '1_2' }

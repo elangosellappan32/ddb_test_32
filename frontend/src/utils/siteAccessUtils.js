@@ -1,5 +1,19 @@
 import api from '../services/api';
 
+// Valid site types
+const SITE_TYPES = ['production', 'consumption'];
+
+/**
+ * Validates that a site type is either 'production' or 'consumption'
+ * @param {string} siteType - The site type to validate
+ * @throws {Error} If site type is invalid
+ */
+const validateSiteType = (siteType) => {
+    if (!SITE_TYPES.includes(siteType)) {
+        throw new Error(`Invalid site type: ${siteType}. Must be one of: ${SITE_TYPES.join(', ')}`);
+    }
+};
+
 /**
  * Utility functions for site access management
  */
@@ -219,6 +233,9 @@ export const addSiteToUserAccess = (user, siteId, siteType) => {
  */
 export const updateUserSiteAccess = async (user, siteData, siteType) => {
     console.log('[SiteAccess] Starting site access update:', { user, siteData, siteType });
+    
+    // Validate site type
+    validateSiteType(siteType);
     
     // Input validation - check for user ID in multiple possible fields
     const userId = user?.id || user?.userId || user?.username || user?.email;

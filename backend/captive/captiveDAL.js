@@ -12,13 +12,13 @@ const docClient = require('../utils/db');
 
 const TableName = TableNames.CAPTIVE;
 
-const getCaptive = async (generatorCompanyId, shareholderCompanyId) => {
+const getCaptive = async (productionSiteId, consumptionSiteId) => {
     try {
         const { Item } = await docClient.send(new GetCommand({
             TableName,
             Key: {
-                generatorCompanyId: Number(generatorCompanyId),
-                shareholderCompanyId: Number(shareholderCompanyId)
+                productionSiteId: String(productionSiteId),
+                consumptionSiteId: String(consumptionSiteId)
             }
         }));
         return Item;
@@ -28,13 +28,13 @@ const getCaptive = async (generatorCompanyId, shareholderCompanyId) => {
     }
 };
 
-const getCaptivesByGenerator = async (generatorCompanyId) => {
+const getCaptivesByGenerator = async (productionSiteId) => {
     try {
         const { Items } = await docClient.send(new QueryCommand({
             TableName,
-            KeyConditionExpression: 'generatorCompanyId = :generatorId',
+            KeyConditionExpression: 'productionSiteId = :productionSiteId',
             ExpressionAttributeValues: {
-                ':generatorId': Number(generatorCompanyId)
+                ':productionSiteId': String(productionSiteId)
             }
         }));
         return Items || [];
@@ -46,7 +46,7 @@ const getCaptivesByGenerator = async (generatorCompanyId) => {
 
 const getCaptivesByShareholder = async (shareholderCompanyId) => {
     try {
-        // Since we don't have a GSI, we need to scan the table
+        // Using scan since we don't have a GSI on shareholderCompanyId
         const { Items } = await docClient.send(new ScanCommand({
             TableName,
             FilterExpression: 'shareholderCompanyId = :shareholderId',

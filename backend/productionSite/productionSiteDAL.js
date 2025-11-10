@@ -148,15 +148,27 @@ const create = async (item) => {
 
 const getItem = async (companyId, productionSiteId) => {
     try {
-        // Try with both string and number types for IDs
-        const keysToTry = [
-            // Try with original types first
-            { companyId, productionSiteId },
-            // Try with string types
-            { companyId: String(companyId), productionSiteId: String(productionSiteId) },
-            // Try with number types if they can be converted
-            isNaN(Number(companyId)) ? null : { companyId: Number(companyId), productionSiteId: Number(productionSiteId) }
-        ].filter(Boolean);
+        // Normalize inputs: trim strings and keep original as fallback
+        const companyIdStr = companyId !== undefined && companyId !== null ? String(companyId).trim() : companyId;
+        const productionSiteIdStr = productionSiteId !== undefined && productionSiteId !== null ? String(productionSiteId).trim() : productionSiteId;
+
+        // Build candidate key formats to try for Get calls
+        const keysToTry = [];
+
+        // Prefer string keys (most common in this codebase after normalization)
+        keysToTry.push({ companyId: companyIdStr, productionSiteId: productionSiteIdStr });
+
+        // If numeric values are possible, try number typed keys as well
+        const companyIdNum = Number(companyIdStr);
+        const productionSiteIdNum = Number(productionSiteIdStr);
+        if (!isNaN(companyIdNum) && !isNaN(productionSiteIdNum)) {
+            keysToTry.push({ companyId: companyIdNum, productionSiteId: productionSiteIdNum });
+        }
+
+        // Also try the raw originals as a last resort
+        keysToTry.push({ companyId, productionSiteId });
+
+        logger.debug('[ProductionSiteDAL] getItem trying key formats', { keys: keysToTry });
 
         for (const keySet of keysToTry) {
             try {
@@ -166,10 +178,45 @@ const getItem = async (companyId, productionSiteId) => {
                 }));
                 if (Item) return Item;
             } catch (err) {
+                logger.debug('[ProductionSiteDAL] getItem GetCommand failed for key set', { keySet, err: err?.message });
                 // Continue to next key set
                 continue;
             }
         }
+
+        // As a fallback, try a Scan for items that match companyId and productionSiteId string value.
+        // This is slower but helps in environments where key types/formatting differ.
+        try {
+            logger.debug('[ProductionSiteDAL] getItem falling back to Scan to locate site by productionSiteId');
+            const productionIdToMatch = productionSiteIdStr || productionSiteId;
+            const companyIdToMatch = companyIdStr || companyId;
+
+            const filterExpressionParts = [];
+            const expressionAttributeValues = {};
+
+            if (companyIdToMatch !== undefined && companyIdToMatch !== null) {
+                filterExpressionParts.push('companyId = :companyId');
+                expressionAttributeValues[':companyId'] = companyIdToMatch;
+            }
+            if (productionIdToMatch !== undefined && productionIdToMatch !== null) {
+                filterExpressionParts.push('productionSiteId = :productionSiteId');
+                expressionAttributeValues[':productionSiteId'] = productionIdToMatch;
+            }
+
+            if (filterExpressionParts.length > 0) {
+                const FilterExpression = filterExpressionParts.join(' AND ');
+                const { Items } = await docClient.send(new ScanCommand({
+                    TableName,
+                    FilterExpression,
+                    ExpressionAttributeValues: expressionAttributeValues,
+                    Limit: 1
+                }));
+                if (Items && Items.length) return Items[0];
+            }
+        } catch (scanErr) {
+            logger.debug('[ProductionSiteDAL] getItem Scan fallback failed', { err: scanErr?.message });
+        }
+
         return null; // No item found with any key combination
     } catch (error) {
         logger.error('[ProductionSiteDAL] Get Item Error:', error);

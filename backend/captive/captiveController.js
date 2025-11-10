@@ -34,8 +34,8 @@ exports.getCaptiveEntriesByShareholder = async (req, res) => {
 // Get specific Captive entry
 exports.getCaptiveEntry = async (req, res) => {
     try {
-        const { generatorCompanyId, shareholderCompanyId } = req.params;
-        const entry = await captiveDAL.getCaptive(generatorCompanyId, shareholderCompanyId);
+        const { productionSiteId, consumptionSiteId } = req.params;
+        const entry = await captiveDAL.getCaptive(productionSiteId, consumptionSiteId);
         if (!entry) {
             return res.status(404).json({ 
                 message: 'Captive entry not found' 
