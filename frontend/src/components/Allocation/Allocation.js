@@ -12,7 +12,13 @@ import {
   DialogTitle,
   DialogContent,
   DialogContentText,
-  DialogActions
+  DialogActions,
+  Checkbox,
+  FormControlLabel,
+  FormControl,
+  Select,
+  Grid,
+  Paper
 } from '@mui/material';
 import {
   Assignment as AssignmentIcon,
@@ -20,6 +26,7 @@ import {
   Autorenew as AutorenewIcon
 } from '@mui/icons-material';
 import { useSnackbar } from 'notistack';
+import { useTheme } from '@mui/material/styles';
 import productionUnitApi from '../../services/productionUnitApi';
 import consumptionUnitApi from '../../services/consumptionUnitApi';
 import productionSiteapi from '../../services/productionSiteApi';
@@ -41,8 +48,13 @@ const Allocation = () => {
   const { hasSiteAccess, user } = useAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
-  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
+  // Set default to previous month
+  const currentDate = new Date();
+  const prevMonthDate = new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1);
+  const [selectedYear, setSelectedYear] = useState(prevMonthDate.getFullYear());
+  const [selectedMonth, setSelectedMonth] = useState(prevMonthDate.getMonth() + 1);
+  const [autoAllocationDialogOpen, setAutoAllocationDialogOpen] = useState(false);
+  const [selectedConsumptionSites, setSelectedConsumptionSites] = useState({});
   const [productionData, setProductionData] = useState([]);
   const [consumptionData, setConsumptionData] = useState([]);
   const [bankingData, setBankingData] = useState([]);
@@ -58,7 +70,119 @@ const Allocation = () => {
   const [showAllocations, setShowAllocations] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
-  const [dialogData, setDialogData] = useState({ type: '', data: null });
+  const [dialogData, setDialogData] = useState({ type: '', data: null, title: '', content: '' });
+
+  const handleDialogConfirm = () => {
+    // Handle confirmation logic here based on dialogData.type
+    if (dialogData.type === 'save') {
+      handleSaveAllocation();
+    } else if (dialogData.type === 'delete') {
+      // Add delete logic if needed
+    }
+    setConfirmDialogOpen(false);
+  };
+
+  // Simple ConfirmationDialog component
+  const ConfirmationDialog = ({ open, onClose, onConfirm, title, content }) => {
+    const theme = useTheme();
+    
+    return (
+      <Dialog 
+        open={open} 
+        onClose={onClose}
+        aria-labelledby="confirmation-dialog-title"
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 2,
+            boxShadow: theme.shadows[8],
+            minWidth: 400,
+            [theme.breakpoints.down('sm')]: {
+              margin: 2,
+              minWidth: 'auto',
+              width: '100%'
+            }
+          }
+        }}
+      >
+        <DialogTitle 
+          id="confirmation-dialog-title"
+          sx={{
+            backgroundColor: theme.palette.primary.main,
+            color: theme.palette.primary.contrastText,
+            padding: theme.spacing(2, 3),
+            '& .MuiTypography-root': {
+              fontWeight: 600,
+              fontSize: '1.25rem',
+              lineHeight: 1.5,
+            }
+          }}
+        >
+          {title || 'Confirm Action'}
+        </DialogTitle>
+        
+        <DialogContent sx={{ padding: theme.spacing(3) }}>
+          <DialogContentText 
+            sx={{
+              color: theme.palette.text.primary,
+              fontSize: '1rem',
+              lineHeight: 1.6,
+              '&:not(:last-child)': {
+                marginBottom: theme.spacing(2)
+              }
+            }}
+          >
+            {content || 'Are you sure you want to proceed with this action?'}
+          </DialogContentText>
+        </DialogContent>
+        
+        <DialogActions 
+          sx={{
+            padding: theme.spacing(2, 3, 3, 3),
+            justifyContent: 'flex-end',
+            '& > :not(:first-of-type)': {
+              marginLeft: theme.spacing(2)
+            }
+          }}
+        >
+          <Button 
+            onClick={onClose}
+            variant="outlined"
+            color="inherit"
+            sx={{
+              padding: theme.spacing(0.75, 2),
+              textTransform: 'none',
+              borderRadius: 1,
+              borderWidth: 1,
+              '&:hover': {
+                borderWidth: 1
+              }
+            }}
+          >
+            Cancel
+          </Button>
+          <Button 
+            onClick={onConfirm} 
+            variant="contained" 
+            color="primary" 
+            autoFocus
+            sx={{
+              padding: theme.spacing(0.75, 3),
+              textTransform: 'none',
+              borderRadius: 1,
+              boxShadow: 'none',
+              '&:hover': {
+                boxShadow: theme.shadows[2]
+              }
+            }}
+          >
+            Confirm
+          </Button>
+        </DialogActions>
+      </Dialog>
+    );
+  };
 
   // Get company ID from the logged-in user
   const companyId = user?.companyId || (user?.metadata?.companyId?.S || null);
@@ -70,74 +194,42 @@ const Allocation = () => {
     end: currentYear + 1   // Up to next year (2026)
   };
 
-  // Fetch shareholdings for a company
-  const fetchShareholdings = useCallback(async (companyId) => {
-    if (!hasSiteAccess) return [];
-    if (!companyId) {
-      console.error('No company ID provided to fetchShareholdings');
-      return [];
-    }
+  // Filter out invalid entries and format shareholdings data
+  const validateShareholdings = useCallback((shareholdings) => {
+    if (!Array.isArray(shareholdings)) return [];
     
-    try {
-      const response = await captiveApi.getByGeneratorCompanyId(companyId);
+    // Filter out invalid entries and check site access
+    const validShareholdings = shareholdings.filter(item => {
+      if (!item || !item.shareholderCompanyId || !item.allocationPercentage) return false;
       
-      // Handle different response formats
-      let shareholdings = [];
-      if (Array.isArray(response)) {
-        shareholdings = response;
-      } else if (response && response.data) {
-        shareholdings = Array.isArray(response.data) ? response.data : [response.data];
-      }
-      
-      
-      // Filter out invalid entries and check site access
-      const validShareholdings = shareholdings.filter(item => {
-        if (!item || !item.shareholderCompanyId) return false;
-        
-        // Check if user has access to this site
-        const hasAccess = hasSiteAccess(
-          item.generatorCompanyId || item.companyId, 
-          'production'
-        );
-        
-        return hasAccess && (item.shareholdingPercentage > 0 || item.percentage > 0);
-      });
-      
-      if (validShareholdings.length === 0) {
-        enqueueSnackbar('No shareholding data available for this company', { 
-          variant: 'warning',
-          autoHideDuration: 5000,
-          persist: false
-        });
-      }
-      
-      // Normalize the response format
-      return validShareholdings.map(item => ({
-        ...item,
-        shareholdingPercentage: item.shareholdingPercentage || item.percentage || 0,
-        shareholderCompanyId: item.shareholderCompanyId || item.shareholderCompanyId || 'unknown',
-        generatorCompanyId: item.generatorCompanyId || companyId
-      }));
-      
-    } catch (error) {
-      console.error('[fetchShareholdings] Error:', {
-        error,
-        message: error.message,
-        response: error.response?.data,
-        config: error.config
-      });
-      
-      enqueueSnackbar(
-        error.response?.data?.message || 'Failed to load shareholdings. Please check the console for details.', 
-        { 
-          variant: 'error',
-          autoHideDuration: 7000,
-          persist: false
-        }
+      // Check if user has access to this site
+      const hasAccess = hasSiteAccess(
+        item.generatorCompanyId || item.companyId, 
+        'production'
       );
       
-      return [];
+      return hasAccess && Number(item.allocationPercentage) > 0;
+    });
+    
+    if (validShareholdings.length === 0) {
+      enqueueSnackbar('No allocation percentage data available for this company', { 
+        variant: 'warning',
+        autoHideDuration: 5000,
+        persist: false
+      });
     }
+    
+    // Normalize the response format
+    return validShareholdings.map(item => ({
+      ...item,
+      shareholdingPercentage: Number(item.allocationPercentage) || 0,
+      shareholderCompanyId: item.shareholderCompanyId,
+      generatorCompanyId: item.generatorCompanyId,
+      // Include additional fields needed for allocation
+      generatorCompanyName: item.generatorCompanyName,
+      shareholderCompanyName: item.shareholderCompanyName,
+      allocationStatus: item.allocationStatus || 'active'
+    }));
   }, [enqueueSnackbar, hasSiteAccess]);
 
   const handleManualAllocationChange = (prodId, consId, period, value) => {
@@ -155,7 +247,8 @@ const Allocation = () => {
       bankingUnits: bankingData,
       manualAllocations: updatedManualAllocations,
       shareholdings,
-      month: `${String(selectedMonth).padStart(2, '0')}${selectedYear}`
+      month: `${String(selectedMonth).padStart(2, '0')}${selectedYear}`,
+      productionSites: productionData
     });
 
     // Filter allocations by type
@@ -191,16 +284,17 @@ const Allocation = () => {
     setShowAllocations(true);
   };
 
-  const runAllocationCalculation = useCallback((currentShareholdings = shareholdings) => {
-    if (!productionData.length || !consumptionData.length) return;
+  const runAllocationCalculation = useCallback((currentShareholdings = shareholdings, consumptionSites = consumptionData) => {
+    if (!productionData.length || !consumptionSites.length) return;
 
     const result = calculateAllocations({
       productionUnits: productionData,
-      consumptionUnits: consumptionData,
+      consumptionUnits: consumptionSites, // Use the filtered and sorted consumption sites
       bankingUnits: bankingData,
       manualAllocations,
-      shareholdings,
-      month: `${String(selectedMonth).padStart(2, '0')}${selectedYear}`
+      shareholdings: currentShareholdings,
+      month: `${String(selectedMonth).padStart(2, '0')}${selectedYear}`,
+      productionSites: productionData
     });
     
     // Filter allocations by type for logging and display
@@ -239,7 +333,7 @@ const Allocation = () => {
       variant: 'success',
       autoHideDuration: 2000 
     });
-  }, [productionData, consumptionData, bankingData, manualAllocations, enqueueSnackbar, selectedMonth, selectedYear, shareholdings, showAllocations]);
+  }, [productionData, consumptionData, bankingData, manualAllocations, enqueueSnackbar, selectedMonth, selectedYear, shareholdings]);
 
   const updateAllocationData = useCallback((currentShareholdings = shareholdings) => {
     if (!showAllocations) {
@@ -270,7 +364,8 @@ const Allocation = () => {
         bankingUnits: bankingData,
         manualAllocations,
         shareholdings,
-        month: `${String(selectedMonth).padStart(2, '0')}${selectedYear}`
+        month: `${String(selectedMonth).padStart(2, '0')}${selectedYear}`,
+        productionSites: productionData
       });
       
       console.log('Allocation calculation results:', result);
@@ -307,7 +402,8 @@ const Allocation = () => {
     originalLapseAllocations.length, 
     enqueueSnackbar,
     selectedMonth,
-    selectedYear
+    selectedYear,
+    showAllocations
   ]);
 
   const prepareAllocationPayload = useCallback((allocation, type, month, year) => {
@@ -336,7 +432,17 @@ const Allocation = () => {
       payload.allocated.charge = Math.max(0, Number(payload.allocated.charge) || 0);
     }
     
-    // Set default type if not provided
+    // Include IR (Injection/Reduction) fields in the payload
+      // Copy the irType, injection and reduction fields if they exist
+      if (payload.irType) {
+        // Keep irType as is
+      }
+      if (payload.injection) {
+        payload.injection = { ...payload.injection };
+      }
+      if (payload.reduction) {
+        payload.reduction = { ...payload.reduction };
+      }    // Set default type if not provided
     const allocationType = (type || payload.type || 'ALLOCATION').toUpperCase();
     payload.type = allocationType;
     
@@ -376,7 +482,7 @@ const Allocation = () => {
       // Try different ways to find the production site
       const productionSite = productionData.find(site => {
         // Try exact match first
-        if (site.productionSiteId == prodSiteId || site.id == prodSiteId) {
+        if (site.productionSiteId === prodSiteId || site.id === prodSiteId) {
           return true;
         }
         // Try string comparison
@@ -467,7 +573,7 @@ const Allocation = () => {
     });
     
     return payload;
-  }, [companyId, productionData, consumptionData, bankingData, manualAllocations, formatAllocationMonth]);
+  }, [companyId, productionData]);
 
   // Fix edit dialog selection: match by productionSiteId and consumptionSiteId (if present)
   const handleEditAllocation = useCallback((allocation, type) => {
@@ -481,25 +587,81 @@ const Allocation = () => {
     setConfirmDialogOpen(false);
 
     if (type === 'allocation') {
+      console.log('[Allocation] Updating allocation with data:', {
+        productionSiteId: allocation.productionSiteId,
+        consumptionSiteId: allocation.consumptionSiteId,
+        irType: allocation.irType,
+        injection: allocation.injection,
+        reduction: allocation.reduction,
+        allocated: allocation.allocated
+      });
+
       // Update the allocation
-      setAllocations(prevAllocs => prevAllocs.map(a => {
-        if (a.productionSiteId === allocation.productionSiteId &&
-            a.consumptionSiteId === allocation.consumptionSiteId) {
-          // Ensure charge value is properly set at both root and allocated level
-          const charge = allocation.charge || allocation.allocated?.charge || false;
-          return {
-            ...a,
-            charge: charge,
-            allocated: {
-              ...allocation.allocated,
-              charge: charge
-            },
-            version: (a.version || 0) + 1,
-            updatedAt: new Date().toISOString()
-          };
-        }
-        return a;
-      }));
+      setAllocations(prevAllocs => {
+        return prevAllocs.map(a => {
+          if (a.productionSiteId === allocation.productionSiteId &&
+              a.consumptionSiteId === allocation.consumptionSiteId) {
+            
+            // Create a clean IR data object
+            const irData = {
+              irType: allocation.irType || a.irType || 'normal',
+              injection: allocation.injection ? { ...allocation.injection } : (a.injection ? { ...a.injection } : {}),
+              reduction: allocation.reduction ? { ...allocation.reduction } : (a.reduction ? { ...a.reduction } : {})
+            };
+
+            // Create updated allocation with all period values
+            const updatedAllocation = {
+              ...a,
+              // Update root level period values
+              c1: allocation.c1 ?? a.c1 ?? 0,
+              c2: allocation.c2 ?? a.c2 ?? 0,
+              c3: allocation.c3 ?? a.c3 ?? 0,
+              c4: allocation.c4 ?? a.c4 ?? 0,
+              c5: allocation.c5 ?? a.c5 ?? 0,
+              // Update IR fields
+              ...irData,
+              // Update charge value
+              charge: allocation.charge ?? a.charge ?? false,
+              // Update allocated object with period values
+              allocated: {
+                ...a.allocated,
+                // Ensure we have all period values in the allocated object
+                c1: allocation.c1 ?? a.allocated?.c1 ?? 0,
+                c2: allocation.c2 ?? a.allocated?.c2 ?? 0,
+                c3: allocation.c3 ?? a.allocated?.c3 ?? 0,
+                c4: allocation.c4 ?? a.allocated?.c4 ?? 0,
+                c5: allocation.c5 ?? a.allocated?.c5 ?? 0,
+                // Update charge in allocated object
+                charge: allocation.charge ?? a.allocated?.charge ?? false,
+                // Include IR data in allocated object
+                ...irData,
+                // Preserve other allocated fields
+                ...(allocation.allocated || {})
+              },
+              version: (a.version || 0) + 1,
+              updatedAt: new Date().toISOString()
+            };
+            
+            console.log('[Allocation] Updated allocation:', {
+              before: {
+                irType: a.irType,
+                injection: a.injection,
+                reduction: a.reduction,
+                allocated: a.allocated
+              },
+              after: {
+                irType: updatedAllocation.irType,
+                injection: updatedAllocation.injection,
+                reduction: updatedAllocation.reduction,
+                allocated: updatedAllocation.allocated
+              }
+            });
+            
+            return updatedAllocation;
+          }
+          return a;
+        });
+      });
 
       // Recalculate banking and lapse for this production site
       const pid = allocation.productionSiteId;
@@ -551,21 +713,96 @@ const Allocation = () => {
       variant: 'success',
       autoHideDuration: 3000
     });
-  }, [dialogData, allocations, productionData, enqueueSnackbar]);
+  }, [dialogData, productionData, enqueueSnackbar]);
 
-  const handleAutoAllocate = async () => {
+  const handleAutoAllocateClick = () => {
+    // Initialize selected consumption sites with sequential priorities
+    const initialSelection = {};
+    consumptionData.forEach((site, index) => {
+      const siteId = site.consumptionSiteId || site.id;
+      initialSelection[siteId] = {
+        selected: true,
+        priority: index + 1 // Start with 1, 2, 3...
+      };
+    });
+    
+    // Ensure only the first site has priority 1
+    if (consumptionData.length > 0) {
+      const firstSiteId = consumptionData[0].consumptionSiteId || consumptionData[0].id;
+      initialSelection[firstSiteId].priority = 1;
+      
+      // Set other priorities to be sequential starting from 2
+      consumptionData.slice(1).forEach((site, index) => {
+        const siteId = site.consumptionSiteId || site.id;
+        initialSelection[siteId].priority = index + 2;
+      });
+    }
+    
+    setSelectedConsumptionSites(initialSelection);
+    setAutoAllocationDialogOpen(true);
+  };
+
+  const handleAutoAllocate = async (selectedSites) => {
     try {
       setLoading(true);
-      // Run the allocation calculation
-      await runAllocationCalculation();
+      // Filter consumption data based on selection and sort by priority
+      const filteredConsumptionData = consumptionData
+        .filter(site => selectedSites[site.consumptionSiteId || site.id]?.selected)
+        .sort((a, b) => {
+          const aPriority = selectedSites[a.consumptionSiteId || a.id]?.priority || 0;
+          const bPriority = selectedSites[b.consumptionSiteId || b.id]?.priority || 0;
+          return aPriority - bPriority;
+        });
+      
+      // Run the allocation calculation with filtered and sorted consumption data
+      await runAllocationCalculation(shareholdings, filteredConsumptionData);
       // Show the allocations table
       setShowAllocations(true);
+      enqueueSnackbar('Auto-allocation completed successfully', { variant: 'success' });
     } catch (error) {
       console.error('Auto-allocation failed:', error);
       enqueueSnackbar('Failed to perform auto-allocation', { variant: 'error' });
     } finally {
       setLoading(false);
+      setAutoAllocationDialogOpen(false);
     }
+  };
+
+  const handleSiteSelectionChange = (siteId, checked) => {
+    setSelectedConsumptionSites(prev => ({
+      ...prev,
+      [siteId]: {
+        ...prev[siteId],
+        selected: checked
+      }
+    }));
+  };
+
+  const handlePriorityChange = (siteId, newPriority) => {
+    setSelectedConsumptionSites(prev => {
+      const updatedSites = { ...prev };
+      newPriority = parseInt(newPriority, 10) || 1;
+      
+      // If setting priority to 1, find and reset any other site that has priority 1
+      if (newPriority === 1) {
+        Object.keys(updatedSites).forEach(id => {
+          if (id !== siteId && updatedSites[id]?.priority === 1) {
+            updatedSites[id] = {
+              ...updatedSites[id],
+              priority: 2 // Move the previous priority 1 to 2
+            };
+          }
+        });
+      }
+      
+      // Update the selected site's priority
+      updatedSites[siteId] = {
+        ...updatedSites[siteId],
+        priority: newPriority
+      };
+      
+      return updatedSites;
+    });
   };
 
   const getFinancialYear = (month, year) => {
@@ -588,16 +825,7 @@ const Allocation = () => {
     
     // Format month with leading zero if needed
     const formattedMonth = String(selectedMonth).padStart(2, '0');
-    const financialYear = selectedMonth > 3 ? selectedYear : selectedYear - 1;
     
-    const params = {
-      companyId: companyId,
-      month: selectedMonth,
-      year: selectedYear,
-      formattedMonth: `${formattedMonth}${selectedYear}`,
-      financialYear,
-      financialYearString: `${financialYear}-${financialYear + 1}`
-    };
 
     try {
       const [prodSitesResp, consSitesResp, bankingResp] = await Promise.all([
@@ -1067,10 +1295,46 @@ const Allocation = () => {
       try {
         setLoadingShareholdings(true);
         
-        const shareholdingsData = await fetchShareholdings(companyId);
+        // Update to use getByGenerator instead of getAll
+        const shareholdingsData = await captiveApi.getByGenerator(companyId);
         
         if (shareholdingsData && shareholdingsData.length > 0) {
-          setShareholdings(shareholdingsData);
+          // Filter out invalid entries and check site access
+          const validShareholdings = shareholdingsData.filter(item => {
+            if (!item || !item.shareholderCompanyId || !item.allocationPercentage) return false;
+            
+            // Check if user has access to this site
+            const hasAccess = hasSiteAccess(
+              item.generatorCompanyId || item.companyId, 
+              'production'
+            );
+            
+            return hasAccess && Number(item.allocationPercentage) > 0;
+          });
+          
+          if (validShareholdings.length === 0) {
+            console.warn('[loadShareholdings] No valid shareholding data available');
+            setShareholdings([]);
+            enqueueSnackbar('No valid shareholding data available for this company', { 
+              variant: 'warning',
+              autoHideDuration: 5000,
+              persist: false
+            });
+            return;
+          }
+          
+          // Map the data to match the expected format
+          const formattedShareholdings = validShareholdings.map(item => ({
+            ...item,
+            shareholdingPercentage: Number(item.allocationPercentage) || 0,
+            shareholderCompanyId: item.shareholderCompanyId,
+            generatorCompanyId: item.generatorCompanyId,
+            generatorCompanyName: item.generatorCompanyName,
+            shareholderCompanyName: item.shareholderCompanyName,
+            allocationStatus: item.allocationStatus || 'active'
+          }));
+          
+          setShareholdings(formattedShareholdings);
         } else {
           console.warn('[loadShareholdings] No shareholding data available');
           setShareholdings([]);
@@ -1109,7 +1373,7 @@ const Allocation = () => {
         autoHideDuration: 5000
       });
     }
-  }, [companyId, enqueueSnackbar, fetchShareholdings]);
+  }, [companyId, hasSiteAccess, enqueueSnackbar]);
 
   // Update allocations when shareholdings or data changes
   useEffect(() => {
@@ -1165,7 +1429,14 @@ const Allocation = () => {
 
       // 1. Save allocations
       if (allocations.length) {
-        const allocPayloads = allocations.map(a => prepareAllocationPayload(a, 'ALLOCATION', selectedMonth, selectedYear));
+        const allocPayloads = allocations.map(a => {
+          const payload = prepareAllocationPayload(a, 'ALLOCATION', selectedMonth, selectedYear);
+          // Ensure IR fields are included
+          if (a.irType) payload.irType = a.irType;
+          if (a.injection) payload.injection = { ...a.injection };
+          if (a.reduction) payload.reduction = { ...a.reduction };
+          return payload;
+        });
         console.log('[AllocationApi] Payload to allocation table:', JSON.stringify(allocPayloads, null, 2));
         
         // Verify all production sites exist before making API calls
@@ -1240,7 +1511,11 @@ const Allocation = () => {
         // Process each unique banking allocation
         for (const payload of consolidatedBanking) {
           try {
-            await allocationApi.createBanking(payload);
+            await allocationApi.createBanking({
+              ...payload,
+              generatorCompanyId: companyId,
+              month: payload.month
+            });
           } catch (error) {
             console.error(`[BankingApi] Error processing banking for site ${payload.productionSiteId}:`, error);
             throw error;
@@ -1254,41 +1529,39 @@ const Allocation = () => {
         
         for (const payload of lapsePayloads) {
           try {
-            // First, check if a LAPSE record already exists for this PK/SK
-            const existingRecord = await allocationApi.get(payload.pk, payload.sk, 'LAPSE').catch(() => null);
-            
-            if (existingRecord) {
-              // Record exists, update it
-              await allocationApi.update(payload.pk, payload.sk, payload, 'LAPSE');
-            } else {
-              await allocationApi.createLapse(payload);
+            // Prepare the payload with generatorCompanyId
+            const lapsePayload = {
+              ...payload,
+              generatorCompanyId: companyId,
+              month: payload.month,
+              productionSiteId: payload.productionSiteId
+            };
+
+            // First, check if a LAPSE record already exists for this site/month
+            try {
+              await allocationApi.createLapse(lapsePayload);
+            } catch (createError) {
+              if (createError.response?.status === 400 && 
+                  (createError.message?.includes('already exists') || 
+                   createError.response?.data?.message?.includes('already exists'))) {
+                // If record exists, update it
+                await allocationApi.update(lapsePayload.productionSiteId, lapsePayload.month, lapsePayload, 'LAPSE');
+              } else {
+                throw createError;
+              }
             }
           } catch (error) {
             const errorMessage = error.message || '';
             const responseMessage = error.response?.data?.message || '';
             const statusCode = error.response?.status;
             
-            console.error(`[LapseApi] Error processing LAPSE record ${payload.pk}_${payload.sk}:`, {
+            console.error(`[LapseApi] Error processing LAPSE record for site ${payload.productionSiteId}:`, {
               error: errorMessage,
               response: responseMessage,
-              statusCode
+              statusCode,
+              payload
             });
             
-            // If we get a 400 and the error message is about the record existing, try to update it
-            if (statusCode === 400 && 
-                (errorMessage.includes('already exists') || 
-                 errorMessage.includes('conditional check failed') ||
-                 responseMessage.includes('already exists') ||
-                 responseMessage.includes('conditional check failed'))) {
-              console.log('[LapseApi] Record may exist, attempting update...');
-              try {
-                await allocationApi.update(payload.pk, payload.sk, payload, 'LAPSE');
-                continue; // Success, move to next record
-              } catch (updateError) {
-              }
-            }
-            
-            // If we get here, all attempts have failed
             throw new Error(`Failed to save LAPSE record: ${errorMessage || responseMessage || 'Unknown error'}`);
           }
         }
@@ -1367,9 +1640,10 @@ const Allocation = () => {
             variant="outlined"
             startIcon={<RefreshIcon />}
             onClick={fetchAllData}
+            disabled={isSaving}
             size="small"
           >
-            Refresh
+            {isSaving ? 'Saving...' : 'Refresh'}
           </Button>
         </Box>
       </Box>
@@ -1419,7 +1693,7 @@ const Allocation = () => {
           variant="contained"
           color="primary"
           startIcon={<AutorenewIcon />}
-          onClick={handleAutoAllocate}
+          onClick={handleAutoAllocateClick}
           disabled={loading || !productionData.length || !consumptionData.length}
         >
           Auto Allocate
@@ -1431,12 +1705,10 @@ const Allocation = () => {
           <AllocationDetailsTable 
             allocations={allocations}
             bankingAllocations={bankingAllocations}
-            oldBankingAllocations={[]} // Don't use originalBankingAllocations as it might be outdated
+            oldBankingAllocations={aggregatedBankingData}
             lapseAllocations={lapseAllocations}
-            oldLapseAllocations={[]}   // Don't use originalLapseAllocations as it might be outdated
-            loading={loading || isSaving}
-            onEdit={handleEditAllocation}
-            onSave={handleSaveAllocation}
+            onEditAllocation={handleEditAllocation}
+            onEditConfirmed={handleEditAllocationConfirmed}
           />
           <Box sx={{ mt: 3 }}>
             <AllocationSummary
@@ -1450,17 +1722,117 @@ const Allocation = () => {
           </Box>
         </>
       )}
-      {/* Confirmation Dialog */}
-      <Dialog open={confirmDialogOpen} onClose={() => setConfirmDialogOpen(false)}>
-        <DialogTitle>Confirm Update</DialogTitle>
-        <DialogContent>
-          <DialogContentText>
-            Are you sure you want to update this {dialogData.type?.toLowerCase()}?
+      {confirmDialogOpen && (
+        <ConfirmationDialog
+          open={confirmDialogOpen}
+          onClose={() => setConfirmDialogOpen(false)}
+          onConfirm={handleDialogConfirm}
+          title={dialogData.title}
+          content={dialogData.content}
+        />
+      )}
+
+      {/* Auto Allocation Dialog */}
+      <Dialog 
+        open={autoAllocationDialogOpen} 
+        onClose={() => setAutoAllocationDialogOpen(false)}
+        maxWidth="md"
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 2,
+            boxShadow: theme => theme.shadows[5]
+          }
+        }}
+      >
+        <DialogTitle sx={{ 
+          backgroundColor: theme => theme.palette.primary.main,
+          color: theme => theme.palette.primary.contrastText,
+          '& .MuiTypography-root': {
+            fontWeight: 600,
+            fontSize: '1.25rem',
+          }
+        }}>
+          Auto-Allocation Setup
+        </DialogTitle>
+        <DialogContent sx={{ pt: 3 }}>
+          <DialogContentText sx={{ mb: 3, color: 'text.primary' }}>
+            Configure auto-allocation by selecting sites and setting their priority. 
+            <strong> Only one site can have Priority 1</strong> (highest priority).
           </DialogContentText>
+          <Paper variant="outlined" sx={{ p: 2, maxHeight: 400, overflow: 'auto' }}>
+            <Grid container spacing={2}>
+              <Grid item xs={12} sm={6}>
+                <Typography variant="subtitle2">Site Name</Typography>
+              </Grid>
+              <Grid item xs={6} sm={3}>
+                <Typography variant="subtitle2">Include</Typography>
+              </Grid>
+              <Grid item xs={6} sm={3}>
+                <Typography variant="subtitle2">Priority</Typography>
+              </Grid>
+              
+              {consumptionData.map((site) => (
+                <React.Fragment key={site.consumptionSiteId || site.id}>
+                  <Grid item xs={12} sm={6}>
+                    <Typography>{site.siteName || 'Unnamed Site'}</Typography>
+                  </Grid>
+                  <Grid item xs={6} sm={3}>
+                    <FormControlLabel
+                      control={
+                        <Checkbox
+                          checked={!!selectedConsumptionSites[site.consumptionSiteId || site.id]?.selected}
+                          onChange={(e) => handleSiteSelectionChange(site.consumptionSiteId || site.id, e.target.checked)}
+                          color="primary"
+                        />
+                      }
+                      label=""
+                    />
+                  </Grid>
+                  <Grid item xs={6} sm={3}>
+                    <FormControl fullWidth size="small">
+                      <Select
+                        value={selectedConsumptionSites[site.consumptionSiteId || site.id]?.priority || 1}
+                        onChange={(e) => handlePriorityChange(site.consumptionSiteId || site.id, e.target.value)}
+                        disabled={!selectedConsumptionSites[site.consumptionSiteId || site.id]?.selected}
+                        size="small"
+                        sx={{ minWidth: 100 }}
+                      >
+                        {[1, 2, 3, 4, 5].map((num) => {
+                          const isPriorityOne = num === 1 && 
+                            selectedConsumptionSites[site.consumptionSiteId || site.id]?.priority === 1;
+                          
+                          return (
+                            <MenuItem 
+                              key={num} 
+                              value={num}
+                              disabled={num === 1 && !isPriorityOne && 
+                                Object.values(selectedConsumptionSites).some(s => s.priority === 1)}
+                            >
+                              {num} {isPriorityOne ? ' (Highest)' : ''}
+                            </MenuItem>
+                          );
+                        })}
+                      </Select>
+                    </FormControl>
+                  </Grid>
+                </React.Fragment>
+              ))}
+            </Grid>
+          </Paper>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setConfirmDialogOpen(false)}>Cancel</Button>
-          <Button onClick={handleEditAllocationConfirmed} color="primary">OK</Button>
+          <Button onClick={() => setAutoAllocationDialogOpen(false)} color="primary">
+            Cancel
+          </Button>
+          <Button 
+            onClick={() => handleAutoAllocate(selectedConsumptionSites)} 
+            color="primary"
+            variant="contained"
+            disabled={!Object.values(selectedConsumptionSites).some(site => site.selected)}
+          >
+            Run Auto-Allocation
+          </Button>
         </DialogActions>
       </Dialog>
     </Box>
