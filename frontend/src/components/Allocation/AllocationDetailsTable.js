@@ -21,16 +21,42 @@ import {
     TextField,
     Tooltip,
     Alert,
-    Grid
+    Grid,
+    Tabs,
+    Tab
 } from '@mui/material';
 import { Edit as EditIcon, SaveOutlined } from '@mui/icons-material';
 import { getAllocationPeriods, getAllocationTypeColor, ALL_PERIODS } from '../../utils/allocationUtils';
+
+const TabPanel = (props) => {
+  const { children, value, index, ...other } = props;
+  return (
+    <div
+      role="tabpanel"
+      hidden={value !== index}
+      id={`ir-tabpanel-${index}`}
+      aria-labelledby={`ir-tab-${index}`}
+      {...other}
+    >
+      {value === index && (
+        <Box sx={{ p: 3 }}>
+          {children}
+        </Box>
+      )}
+    </div>
+  );
+};
 
 const AllocationDetailsTable = ({ allocations = [], bankingAllocations = [], oldBankingAllocations = [], lapseAllocations = [], oldLapseAllocations = [], loading = false, onEdit, onSave, error = null }) => {
     const [editDialog, setEditDialog] = useState(false);
     const [editingAllocation, setEditingAllocation] = useState(null);
     const [editValues, setEditValues] = useState({});
     const [validationError, setValidationError] = useState(null);
+    const [tabValue, setTabValue] = useState(0);
+
+    const handleTabChange = (event, newValue) => {
+        setTabValue(newValue);
+    };
 
     // Store allocation adjustment history
     const [allocationHistory, setAllocationHistory] = useState([]);
@@ -128,27 +154,34 @@ const AllocationDetailsTable = ({ allocations = [], bankingAllocations = [], old
         }
     }, [allocations, bankingAllocations, lapseAllocations, editingAllocation]);
 
-    const handleEdit = (row, type) => {
-        // Convert charge to boolean if it's a number
-        const charge = row.charge !== undefined ? 
-            (typeof row.charge === 'number' ? row.charge === 1 : Boolean(row.charge)) : 
-            false;
-            
-        setEditingAllocation({ 
-            ...row, 
-            type,
-            charge
+    const handleEdit = (allocation, type) => {
+        console.log('[AllocationEdit] Starting edit for allocation:', {
+            allocation,
+            allocated: allocation.allocated,
+            irType: allocation.irType,
+            injection: allocation.injection,
+            reduction: allocation.reduction
         });
+
+        setEditingAllocation({ ...allocation, type });
         
-        setEditValues({
-            c1: row.allocated?.c1 || row.c1 || 0,
-            c2: row.allocated?.c2 || row.c2 || 0,
-            c3: row.allocated?.c3 || row.c3 || 0,
-            c4: row.allocated?.c4 || row.c4 || 0,
-            c5: row.allocated?.c5 || row.c5 || 0,
-            charge: charge
-        });
+        // Initialize form values with current allocation data
+        const initialValues = {
+            c1: allocation.allocated?.c1 ?? allocation.c1 ?? 0,
+            c2: allocation.allocated?.c2 ?? allocation.c2 ?? 0,
+            c3: allocation.allocated?.c3 ?? allocation.c3 ?? 0,
+            c4: allocation.allocated?.c4 ?? allocation.c4 ?? 0,
+            c5: allocation.allocated?.c5 ?? allocation.c5 ?? 0,
+            charge: Boolean(allocation.allocated?.charge ?? allocation.charge ?? false),
+            irType: allocation.irType || 'normal',
+            injection: { ...(allocation.injection || {}) },
+            reduction: { ...(allocation.reduction || {}) }
+        };
+        
+        console.log('[AllocationEdit] Initial form values:', initialValues);
+        setEditValues(initialValues);
         setValidationError(null);
+        setTabValue(0); // Reset to first tab
         setEditDialog(true);
     };
 
@@ -162,6 +195,11 @@ const AllocationDetailsTable = ({ allocations = [], bankingAllocations = [], old
     const handleEditSave = () => {
         if (!editingAllocation) return;
 
+        console.log('[AllocationEdit] Saving allocation with values:', {
+            editValues,
+            editingAllocation
+        });
+
         // Round all C values to nearest integer and ensure they're numbers
         const roundedEditValues = {
             c1: Math.max(0, Math.round(Number(editValues.c1 || 0))),
@@ -169,8 +207,28 @@ const AllocationDetailsTable = ({ allocations = [], bankingAllocations = [], old
             c3: Math.max(0, Math.round(Number(editValues.c3 || 0))),
             c4: Math.max(0, Math.round(Number(editValues.c4 || 0))),
             c5: Math.max(0, Math.round(Number(editValues.c5 || 0))),
-            charge: Boolean(editValues.charge)
+            charge: Boolean(editValues.charge),
+            irType: editValues.irType || 'normal',
+            injection: { ...(editValues.injection || {}) },
+            reduction: { ...(editValues.reduction || {}) }
         };
+
+        // Clean up injection and reduction objects to remove undefined/zero values
+        if (roundedEditValues.injection) {
+            Object.keys(roundedEditValues.injection).forEach(key => {
+                if (roundedEditValues.injection[key] === 0 || roundedEditValues.injection[key] === undefined) {
+                    delete roundedEditValues.injection[key];
+                }
+            });
+        }
+
+        if (roundedEditValues.reduction) {
+            Object.keys(roundedEditValues.reduction).forEach(key => {
+                if (roundedEditValues.reduction[key] === 0 || roundedEditValues.reduction[key] === undefined) {
+                    delete roundedEditValues.reduction[key];
+                }
+            });
+        }
 
         // Validate that at least one C value has a value greater than 0
         const cValues = {
@@ -226,38 +284,59 @@ const AllocationDetailsTable = ({ allocations = [], bankingAllocations = [], old
 
         // If we have a valid edit, call the onEdit callback
         if (onEdit) {
+            // Ensure we have proper IR data structure
+            const irData = {
+                irType: roundedEditValues.irType || 'normal',
+                injection: roundedEditValues.injection || {},
+                reduction: roundedEditValues.reduction || {}
+            };
+
+            console.log('[AllocationEdit] Saving allocation with values:', {
+                original: {
+                    c1: editingAllocation.allocated?.c1,
+                    c2: editingAllocation.allocated?.c2,
+                    c3: editingAllocation.allocated?.c3,
+                    c4: editingAllocation.allocated?.c4,
+                    c5: editingAllocation.allocated?.c5,
+                    irType: editingAllocation.irType,
+                    injection: editingAllocation.injection,
+                    reduction: editingAllocation.reduction
+                },
+                updated: {
+                    ...cValues,
+                    ...irData
+                }
+            });
+
             // Create the updated allocation with values at root level (for backward compatibility)
             // and also in the allocated object (for new format)
             const updatedAllocation = {
                 ...editingAllocation,
                 // Root level values (for backward compatibility)
-                c1: roundedEditValues.c1,
-                c2: roundedEditValues.c2,
-                c3: roundedEditValues.c3,
-                c4: roundedEditValues.c4,
-                c5: roundedEditValues.c5,
-                charge: roundedEditValues.charge ? 1 : 0,  // Send as number (1/0) for backend
-                
-                // New format with allocated object
+                ...cValues,
+                ...irData,
                 allocated: {
-                    ...(editingAllocation.allocated || {}),
-                    c1: roundedEditValues.c1,
-                    c2: roundedEditValues.c2,
-                    c3: roundedEditValues.c3,
-                    c4: roundedEditValues.c4,
-                    c5: roundedEditValues.c5,
-                    charge: roundedEditValues.charge ? 1 : 0
+                    ...editingAllocation.allocated,
+                    ...cValues,
+                    ...irData,
+                    charge: roundedEditValues.charge
                 },
-                
-                // Metadata
                 version: (editingAllocation.version || 0) + 1,
-                updatedAt: new Date().toISOString(),
-                
-                // Include adjustments if any
-                ...(Object.keys(bankingAdjustments).length > 0 && { bankingAdjustments }),
-                ...(Object.keys(lapseAdjustments).length > 0 && { lapseAdjustments }),
-                ...(Object.keys(deltaData).length > 0 && { deltaData })
+                updatedAt: new Date().toISOString()
             };
+
+            console.log('[AllocationEdit] Updated allocation object:', updatedAllocation);
+
+            // Log the updated allocation details
+            const allocationDetails = {
+                ...Object.fromEntries(ALL_PERIODS.map(p => [p, updatedAllocation.allocated?.[p]])),
+                charge: updatedAllocation.allocated?.charge,
+                irType: updatedAllocation.allocated?.irType,
+                hasInjection: !!updatedAllocation.allocated?.injection,
+                hasReduction: !!updatedAllocation.allocated?.reduction
+            };
+            
+            console.log('[AllocationEdit] Allocation details:', allocationDetails);
             
             // Ensure we have the required fields for the backend
             if (!updatedAllocation.companyId && updatedAllocation.pk) {
@@ -455,144 +534,208 @@ const AllocationDetailsTable = ({ allocations = [], bankingAllocations = [], old
                             </TableBody>
                         </Table>
                     </TableContainer>
+                    {type === 'lapse' && onSave && (
+                        <Box sx={{ mt: 2, display: 'flex', justifyContent: 'flex-end', px: 2, pb: 2 }}>
+                            <Button 
+                                variant="contained" 
+                                color="primary" 
+                                onClick={onSave} 
+                                disabled={loading}
+                                startIcon={loading ? <CircularProgress size={20} /> : <SaveOutlined />}
+                                sx={{ minWidth: 180 }}
+                            >
+                                {loading ? 'Saving...' : 'Save Changes'}
+                            </Button>
+                        </Box>
+                    )}
                 </Box>
             </Paper>
         );
     };
 
-    // Show allocation modification history and derived banking/lapse
-    
+    const renderIRFields = () => {
+        return (
+            <Box sx={{ mt: 2 }}>
+                <Tabs
+                    value={tabValue}
+                    onChange={handleTabChange}
+                    aria-label="IR configuration tabs"
+                    variant="fullWidth"
+                >
+                    <Tab label="Allocation" />
+                    <Tab label="Injection" />
+                    <Tab label="Reduction" />
+                </Tabs>
+
+                <TabPanel value={tabValue} index={0}>
+                    <Grid container spacing={2}>
+                        {getAllocationPeriods().map(period => (
+                            <Grid item xs={12} sm={6} md={4} key={`alloc-${period.id}`}>
+                                <TextField
+                                    fullWidth
+                                    label={`Period ${period.label}`}
+                                    type="number"
+                                    value={editValues[period.id] || 0}
+                                    onChange={(e) => {
+                                        const value = Math.max(0, Math.round(Number(e.target.value) || 0));
+                                        setEditValues(prev => ({
+                                            ...prev,
+                                            [period.id]: value
+                                        }));
+                                    }}
+                                    InputProps={{
+                                        inputProps: { min: 0, step: 1 },
+                                        sx: { '& input': { textAlign: 'right' } }
+                                    }}
+                                    variant="outlined"
+                                    size="small"
+                                />
+                            </Grid>
+                        ))}
+                    </Grid>
+                </TabPanel>
+
+                <TabPanel value={tabValue} index={1}>
+                    <Typography variant="subtitle2" gutterBottom>
+                        Enter injection values for each period (positive values only)
+                    </Typography>
+                    <Grid container spacing={2}>
+                        {getAllocationPeriods().map(period => (
+                            <Grid item xs={12} sm={6} md={4} key={`inj-${period.id}`}>
+                                <TextField
+                                    fullWidth
+                                    label={`Injection ${period.label}`}
+                                    type="number"
+                                    value={editValues.injection?.[period.id] || 0}
+                                    onChange={(e) => {
+                                        const value = Math.max(0, Math.round(Number(e.target.value) || 0));
+                                        setEditValues(prev => ({
+                                            ...prev,
+                                            injection: {
+                                                ...(prev.injection || {}),
+                                                [period.id]: value
+                                            },
+                                            irType: value > 0 ? 'injection' : 'normal'
+                                        }));
+                                    }}
+                                    InputProps={{
+                                        inputProps: { min: 0, step: 1 },
+                                        sx: { '& input': { textAlign: 'right' } }
+                                    }}
+                                    variant="outlined"
+                                    size="small"
+                                />
+                            </Grid>
+                        ))}
+                    </Grid>
+                </TabPanel>
+
+                <TabPanel value={tabValue} index={2}>
+                    <Typography variant="subtitle2" gutterBottom>
+                        Enter reduction values for each period (positive values only)
+                    </Typography>
+                    <Grid container spacing={2}>
+                        {getAllocationPeriods().map(period => (
+                            <Grid item xs={12} sm={6} md={4} key={`red-${period.id}`}>
+                                <TextField
+                                    fullWidth
+                                    label={`Reduction ${period.label}`}
+                                    type="number"
+                                    value={editValues.reduction?.[period.id] || 0}
+                                    onChange={(e) => {
+                                        const value = Math.max(0, Math.round(Number(e.target.value) || 0));
+                                        setEditValues(prev => ({
+                                            ...prev,
+                                            reduction: {
+                                                ...(prev.reduction || {}),
+                                                [period.id]: value
+                                            },
+                                            irType: value > 0 ? 'reduction' : 'normal'
+                                        }));
+                                    }}
+                                    InputProps={{
+                                        inputProps: { min: 0, step: 1 },
+                                        sx: { '& input': { textAlign: 'right' } }
+                                    }}
+                                    variant="outlined"
+                                    size="small"
+                                />
+                            </Grid>
+                        ))}
+                    </Grid>
+                </TabPanel>
+            </Box>
+        );
+    };
+
+    const renderEditDialog = () => (
+        <Dialog 
+            open={editDialog} 
+            onClose={handleEditClose} 
+            maxWidth="md"
+            fullWidth
+            aria-labelledby="edit-allocation-dialog-title"
+        >
+            <DialogTitle id="edit-allocation-dialog-title">
+                Edit Allocation
+            </DialogTitle>
+            <DialogContent>
+                {validationError && (
+                    <Alert severity="error" sx={{ mb: 2 }}>{validationError}</Alert>
+                )}
+                <Grid container spacing={2} sx={{ mt: 1 }}>
+                    <Grid item xs={12} md={6}>
+                        <Typography variant="subtitle1" gutterBottom>
+                            <strong>Production:</strong> {editingAllocation?.productionSite}
+                        </Typography>
+                    </Grid>
+                    <Grid item xs={12} md={6}>
+                        <Typography variant="subtitle1" gutterBottom>
+                            <strong>Consumption:</strong> {editingAllocation?.consumptionSite}
+                        </Typography>
+                    </Grid>
+                    
+                    {renderIRFields()}
+                    
+                    <Grid item xs={12}>
+                        <FormControlLabel
+                            control={
+                                <Checkbox
+                                    checked={Boolean(editValues.charge)}
+                                    onChange={(e) => setEditValues(prev => ({
+                                        ...prev,
+                                        charge: e.target.checked
+                                    }))}
+                                    color="primary"
+                                />
+                            }
+                            label="Charge for this month"
+                        />
+                    </Grid>
+                </Grid>
+            </DialogContent>
+            <DialogActions>
+                <Button onClick={handleEditClose} color="primary">
+                    Cancel
+                </Button>
+                <Button 
+                    onClick={handleEditSave} 
+                    color="primary" 
+                    variant="contained"
+                    startIcon={<SaveOutlined />}
+                >
+                    Save Changes
+                </Button>
+            </DialogActions>
+        </Dialog>
+    );
+
     return (
         <Box>
             {renderSection('Allocations', allocations, 'allocation', '#3F51B5')}
             {renderSection('Banking', bankingAllocations, 'banking', '#4CAF50')}
             {renderSection('Lapse', lapseAllocations, 'lapse', '#FF9800')}
-            {onSave && (
-                <Box sx={{ mt: 3, display: 'flex', justifyContent: 'flex-end', gap: 2 }}>
-                    <Button 
-                        variant="contained" 
-                        color="primary" 
-                        onClick={onSave} 
-                        disabled={loading}
-                        startIcon={loading ? <CircularProgress size={20} /> : <SaveOutlined />}
-                    >
-                        {loading ? 'Saving...' : 'Save Changes'}
-                    </Button>
-                </Box>
-            )}
-
-            <Dialog 
-                open={editDialog} 
-                onClose={handleEditClose} 
-                maxWidth="sm" 
-                fullWidth
-                aria-labelledby="edit-allocation-dialog-title"
-                aria-describedby="edit-allocation-dialog-description"
-                PaperProps={{
-                    sx: { 
-                        borderRadius: 2,
-                        '&:focus': {
-                            outline: 'none'
-                        }
-                    }
-                }}
-            >
-                <DialogTitle 
-                    id="edit-allocation-dialog-title"
-                    sx={{ 
-                        backgroundColor: getAllocationTypeColor(editingAllocation?.type),
-                        color: 'white',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 1,
-                        '&:focus': {
-                            boxShadow: '0 0 0 2px #3f51b5',
-                            outline: 'none'
-                        }
-                    }}
-                >
-                    <EditIcon aria-hidden="true" /> 
-                    Edit {editingAllocation?.type || 'Allocation'}
-                </DialogTitle>
-                <DialogContent id="edit-allocation-dialog-description">
-                    <Box sx={{ pt: 2 }}>
-                        {validationError && (
-                            <Alert severity="error" sx={{ mb: 2 }}>
-                                {validationError}
-                            </Alert>
-                        )}
-                        <Grid container spacing={2}>
-                            {getAllocationPeriods().map(period => (
-                                <Grid item xs={12} sm={6} key={period.id}>
-                                    <TextField
-                                        fullWidth
-                                        label={`Period ${period.label}`}
-                                        type="number"
-                                        value={editValues[period.id] || 0}
-                                        onChange={(e) => {
-                                            setValidationError(null);
-                                            setEditValues(prev => ({
-                                                ...prev,
-                                                [period.id]: Number(e.target.value) || 0
-                                            }));
-                                        }}
-                                        InputProps={{
-                                            sx: { 
-                                                '& input': { textAlign: 'right' },
-                                                ...(period.isPeak && {
-                                                    '& input': {
-                                                        fontWeight: 'bold',
-                                                        color: 'warning.main'
-                                                    }
-                                                })
-                                            }
-                                        }}
-                                    />
-                                </Grid>
-                            ))}
-                            <Grid item xs={12}>
-                                <FormControlLabel
-                                    control={
-                                        <Checkbox
-                                            checked={Boolean(editValues.charge)}
-                                            onChange={(e) => setEditValues({ ...editValues, charge: e.target.checked })}
-                                            disabled={!editValues.charge && allocations.some(a => 
-                                                a.pk !== editingAllocation?.pk && 
-                                                a.sk === editingAllocation?.sk && 
-                                                (a.charge === true || a.charge === 1)
-                                            )}
-                                            color="primary"
-                                        />
-                                    }
-                                    label="Charge for this month"
-                                />
-                            </Grid>
-                            <Grid item xs={12}>
-                                <Box sx={{ mt: 2 }}>
-                                    <Typography variant="subtitle1">
-                                        Total: <strong>{Object.entries(editValues).reduce((sum, [key, val]) => 
-                                            key !== 'charge' ? sum + Math.round(Number(val || 0)) : sum, 0)}</strong>
-                                    </Typography>
-                                </Box>
-                            </Grid>
-                        </Grid>
-                    </Box>
-                </DialogContent>
-                <DialogActions sx={{ p: 2, gap: 1 }}>
-                    <Button onClick={handleEditClose} variant="outlined">
-                        Cancel
-                    </Button>
-                    <Button 
-                        onClick={handleEditSave} 
-                        variant="contained" 
-                        color="primary"
-                        startIcon={<SaveOutlined />}
-                        disabled={!!validationError}
-                    >
-                        Save Changes
-                    </Button>
-                </DialogActions>
-            </Dialog>
+            {renderEditDialog()}
         </Box>
     );
 };

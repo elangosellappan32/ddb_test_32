@@ -126,33 +126,35 @@ const ProductionSiteDataForm = ({
     }).reduce((acc, curr) => ({ ...acc, ...curr }), {});
   }
 
-  // Initialize form data with proper date handling
+  // Initialize form data with default values or existing data
   const [formData, setFormData] = useState(() => {
-    let initialDate;
-    let version = 1;
-    let values;
-
-    if (copiedData) {
-      // If we're copying data, use next month's date
-      initialDate = parseSKToDate(copiedData.sk);
-      initialDate = getNextMonthDate(initialDate);
-      values = generateInitialValues(type, copiedData);
-    } else if (initialData) {
-      // If we're editing existing data
-      initialDate = parseSKToDate(initialData.sk);
-      version = initialData.version || 1;
-      values = generateInitialValues(type, initialData);
-    } else {
-      // New data
-      initialDate = new Date();
-      values = generateInitialValues(type, null);
+    // Calculate previous month
+    const prevMonthDate = new Date();
+    prevMonthDate.setMonth(prevMonthDate.getMonth() - 1);
+    
+    if (initialData) {
+      return {
+        ...initialData,
+        date: initialData.date ? new Date(initialData.date) : new Date()
+      };
     }
-
-    return {
-      date: initialDate,
-      version: version,
-      ...values,
+    
+    // For new entries or copied data, use the previous month
+    const defaultData = {
+      date: prevMonthDate,
+      ...generateInitialValues(type, copiedData || null),
+      version: 1
     };
+    
+    if (copiedData) {
+      return {
+        ...copiedData,
+        ...defaultData,
+        sk: ''
+      };
+    }
+    
+    return defaultData;
   });
 
   // Initialize with empty errors

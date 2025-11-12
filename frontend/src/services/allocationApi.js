@@ -175,12 +175,40 @@ class AllocationApi {
     async createAllocation(data) {
         try {
             const formattedData = this.formatAllocationData(data, 'ALLOCATION');
-            const response = await api.post(API_CONFIG.ENDPOINTS.ALLOCATION.CREATE, formattedData);
-            return response.data;
+            
+            // Ensure we're sending the data in the format the backend expects
+            const payload = {
+                pk: formattedData.pk,
+                sk: formattedData.sk,
+                type: 'ALLOCATION',
+                c1: formattedData.c1 || 0,
+                c2: formattedData.c2 || 0,
+                c3: formattedData.c3 || 0,
+                c4: formattedData.c4 || 0,
+                c5: formattedData.c5 || 0,
+                charge: formattedData.charge || 0,
+                companyId: formattedData.companyId,
+                productionSiteId: formattedData.productionSiteId,
+                consumptionSiteId: formattedData.consumptionSiteId,
+                siteName: formattedData.siteName
+            };
+            
+            console.log('Sending allocation payload:', JSON.stringify(payload, null, 2));
+            
+            // Send as a single object, the backend will handle it as an array
+            const response = await api.post(API_CONFIG.ENDPOINTS.ALLOCATION.BASE, [payload]);
+            
+            // Return the first item if response is an array, otherwise return the response as is
+            return Array.isArray(response.data) ? response.data[0] : response.data;
         } catch (error) {
             const msg = error.response?.data?.message || '';
             if (!(error.response?.status === 400 && msg.includes('already exists'))) {
                 console.error('Error creating allocation:', error);
+                console.error('Error details:', {
+                    status: error.response?.status,
+                    data: error.response?.data,
+                    config: error.config
+                });
             }
             throw this.handleError(error);
         }

@@ -127,43 +127,25 @@ export function calculateAllocations({
   // Sort producers by commission date, newest first
   const producers = productionUnits
     .map(unit => {
-      // productionSiteId may be formatted as "companyId_productionSiteId".
-      // Parse it so we use the actual site id for matching while keeping
-      // the company id when available.
-      const rawId = unit.productionSiteId || unit.id || '';
-      let parsedCompanyId = undefined;
-      let parsedSiteId = rawId;
-      if (String(rawId).includes('_')) {
-        const parts = String(rawId).split('_');
-        // only split into two parts: company and site
-        parsedCompanyId = parts[0];
-        parsedSiteId = parts.slice(1).join('_');
-      }
-
-      // Try to find siteInfo using the parsed site id (or the raw id as fallback)
-      const siteInfo = productionSites.find(ps => {
-        const psId = String(ps.productionSiteId || ps.id || '');
-        return psId === String(parsedSiteId) || psId === String(rawId);
-      });
-
-      // Create unit using the parsed site id and attach parsed company id if present
-      const created = createUnitWithRemaining({ ...unit, productionSiteId: parsedSiteId, companyId: parsedCompanyId || unit.companyId }, true);
-
-      // Determine commission date with siteInfo fallback
-      created.commissionDate = unit.commissionDate || unit.dateOfCommission || (siteInfo && (siteInfo.dateOfCommission || siteInfo.commissionDate)) || new Date(0).toISOString();
-      created._siteInfo = siteInfo;
-      // generatorCompanyId should fallback to any available company identifiers
-      created.generatorCompanyId = created.generatorCompanyId || siteInfo?.generatorCompanyId || parsedCompanyId || created.companyId;
-
-      return created;
+      const siteInfo = productionSites.find(ps => 
+        String(ps.productionSiteId || ps.id) === String(unit.productionSiteId || unit.id)
+      );
+      
+      return {
+        ...createUnitWithRemaining(unit, true),
+        commissionDate: unit.commissionDate || unit.dateOfCommission || 
+          (siteInfo && (siteInfo.dateOfCommission || siteInfo.commissionDate)) ||
+          new Date(0).toISOString(),
+        _siteInfo: siteInfo,
+        generatorCompanyId: siteInfo?.generatorCompanyId
+      };
     })
     .sort((a, b) => new Date(b.commissionDate) - new Date(a.commissionDate));
 
   // Group producers by generator company ID for better allocation management
-  // Use a robust fallback: generatorCompanyId -> companyId -> _siteInfo.companyId
   const producersByGenerator = {};
   producers.forEach(prod => {
-    const genId = String(prod.generatorCompanyId || prod.companyId || prod._siteInfo?.companyId || '');
+    const genId = String(prod.generatorCompanyId);
     if (!producersByGenerator[genId]) {
       producersByGenerator[genId] = [];
     }
@@ -176,29 +158,17 @@ export function calculateAllocations({
   // Initialize banking units - only use current month's banking units
   const banked = bankingUnits
     .filter(unit => unit.month === monthYear) // Only use current month banking units
-    .map(unit => {
-      const rawId = unit.productionSiteId || unit.id || '';
-      let parsedCompanyId = undefined;
-      let parsedSiteId = rawId;
-      if (String(rawId).includes('_')) {
-        const parts = String(rawId).split('_');
-        parsedCompanyId = parts[0];
-        parsedSiteId = parts.slice(1).join('_');
-      }
-
-      return {
-        ...unit,
-        productionSiteId: parsedSiteId,
-        siteName: unit.siteName,
-        month: unit.month,
-        companyId: parsedCompanyId || unit.companyId,
-        generatorCompanyId: unit.generatorCompanyId || parsedCompanyId || unit.companyId,
-        remaining: ALL_PERIODS.reduce((acc, p) => { 
-          acc[p] = Number(unit[p] || 0); 
-          return acc; 
-        }, {})
-      };
-    });
+    .map(unit => ({
+      ...unit,
+      productionSiteId: unit.productionSiteId,
+      siteName: unit.siteName,
+      month: unit.month,
+      companyId: unit.companyId,
+      remaining: ALL_PERIODS.reduce((acc, p) => { 
+        acc[p] = Number(unit[p] || 0); 
+        return acc; 
+      }, {})
+    }));
 
   const allocations = [];
   const bankingAllocations = [];

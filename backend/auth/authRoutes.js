@@ -65,19 +65,34 @@ router.post('/login', async (req, res) => {
             }
         }
 
+        // Ensure we have a valid companyId
+        if (!companyId) {
+            logger.warn(`No companyId found for user: ${username}`);
+            return res.status(400).json({
+                success: false,
+                message: 'User is not associated with any company. Please contact administrator.'
+            });
+        }
+
         // Create JWT token with role permissions, accessible sites, and company ID
-        const token = jwt.sign(
-            {
-                username,
-                roleId: role.roleId,
-                roleName: role.roleName,
-                permissions: role.permissions,
-                accessibleSites: user.metadata?.accessibleSites || {
-                    productionSites: { L: [] },
-                    consumptionSites: { L: [] }
-                },
-                companyId: companyId || null
+        const tokenPayload = {
+            username,
+            roleId: role.roleId,
+            roleName: role.roleName,
+            permissions: role.permissions,
+            accessibleSites: user.metadata?.accessibleSites || {
+                productionSites: { L: [] },
+                consumptionSites: { L: [] }
             },
+            companyId: companyId,
+            metadata: {
+                department: user.metadata?.department || 'General',
+                accessLevel: role.metadata?.accessLevel || 'Basic'
+            }
+        };
+
+        const token = jwt.sign(
+            tokenPayload,
             process.env.JWT_SECRET || 'your-secret-key',
             { expiresIn: '24h' }
         );
@@ -85,26 +100,38 @@ router.post('/login', async (req, res) => {
         // Update last login time
         await authDal.updateLastLogin(username);
 
-        logger.info(`Successful login for user: ${username}`);        res.json({
-            success: true,
-            token,
-            user: {
-                username,
-                email: user.email,
-                roleId: role.roleId,
-                roleName: role.roleName,
-                permissions: role.permissions,
-                companyId,
-                metadata: {
-                    department: user.metadata?.department || 'General',
-                    accessLevel: role.metadata?.accessLevel || 'Basic',
-                    companyId,
-                    accessibleSites: user.metadata?.accessibleSites || {
-                        productionSites: { L: [] },
-                        consumptionSites: { L: [] }
-                    }
+        logger.info(`Successful login for user: ${username} (Company: ${companyId})`);
+        
+        // Prepare user data for response
+        const userResponse = {
+            username,
+            email: user.email,
+            roleId: role.roleId,
+            roleName: role.roleName,
+            permissions: role.permissions,
+            companyId: companyId,
+            metadata: {
+                department: user.metadata?.department || 'General',
+                accessLevel: role.metadata?.accessLevel || 'Basic',
+                companyId: companyId,
+                accessibleSites: user.metadata?.accessibleSites || {
+                    productionSites: { L: [] },
+                    consumptionSites: { L: [] }
                 }
             }
+        };
+
+        // Log the response for debugging
+        logger.debug('Login response:', {
+            username,
+            companyId: userResponse.companyId,
+            hasAccessibleSites: !!userResponse.metadata.accessibleSites
+        });
+
+        res.json({
+            success: true,
+            token,
+            user: userResponse
         });    } catch (error) {
         logger.error('Login error:', error);
         let statusCode = 500;

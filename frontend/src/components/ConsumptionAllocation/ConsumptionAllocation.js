@@ -71,8 +71,18 @@ const ConsumptionAllocation = () => {
   const { enqueueSnackbar } = useSnackbar();
   const { user } = useAuth();
   const [loading, setLoading] = useState(false);
-  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
-  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  const [selectedMonth, setSelectedMonth] = useState(() => {
+    const date = new Date();
+    date.setDate(1);
+    date.setMonth(date.getMonth() - 1);
+    return date.getMonth() + 1;
+  });
+  const [selectedYear, setSelectedYear] = useState(() => {
+    const date = new Date();
+    date.setDate(1);
+    date.setMonth(date.getMonth() - 1);
+    return date.getFullYear();
+  });
   const [siteMap, setSiteMap] = useState({});
   const [allocData, setAllocData] = useState([]);
   const [prodSiteMap, setProdSiteMap] = useState({});

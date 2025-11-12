@@ -5,10 +5,15 @@ const logger = require('../utils/logger');
 exports.getAllCompanies = async (req, res) => {
     try {
         const companies = await companyDAL.getAllCompanies();
-        res.status(200).json(companies);
+        res.status(200).json({
+            success: true,
+            data: companies,
+            count: companies.length
+        });
     } catch (error) {
         logger.error('Controller error in getAllCompanies:', error);
         res.status(500).json({ 
+            success: false,
             message: 'Error fetching companies', 
             error: error.message 
         });

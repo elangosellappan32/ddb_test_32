@@ -37,16 +37,76 @@ class AuthDAL {
             await this.validateTables();
             const command = new GetCommand({
                 TableName: this.userTable,
-                Key: { username }
+                Key: { username },
+                // Use ProjectionExpression with ExpressionAttributeNames for reserved keywords
+                ProjectionExpression: '#un, #pwd, #role, email, metadata, companyId, accessibleSites, userId, #status, createdAt, updatedAt',
+                ExpressionAttributeNames: {
+                    '#status': 'status',
+                    '#un': 'username',
+                    '#pwd': 'password',
+                    '#role': 'role'
+                }
             });
 
             const result = await this.docClient.send(command);
             if (!result.Item) {
+                logger.warn(`User not found: ${username}`);
                 return null;
             }
 
-            // Map the role field to roleId for consistency
             const user = result.Item;
+            logger.debug(`Retrieved user data for ${username}:`, {
+                hasMetadata: !!user.metadata,
+                hasCompanyId: !!user.companyId,
+                hasAccessibleSites: !!user.accessibleSites
+            });
+
+            // Ensure metadata exists
+            if (!user.metadata) {
+                user.metadata = {};
+            }
+
+            // Extract companyId from available sources with priority:
+            // 1. Root level companyId
+            // 2. metadata.companyId
+            // 3. First production site in accessibleSites
+            // 4. First consumption site in accessibleSites
+            if (!user.companyId) {
+                // Check metadata first
+                if (user.metadata.companyId) {
+                    user.companyId = user.metadata.companyId;
+                    logger.debug(`Using companyId from metadata: ${user.companyId}`);
+                } 
+                // Then check accessibleSites
+                else if (user.accessibleSites) {
+                    // Check production sites first
+                    if (user.accessibleSites.productionSites?.L?.length > 0) {
+                        const firstSite = user.accessibleSites.productionSites.L[0]?.S;
+                        if (firstSite && firstSite.includes('_')) {
+                            user.companyId = firstSite.split('_')[0];
+                            logger.debug(`Extracted companyId from productionSites: ${user.companyId}`);
+                        }
+                    }
+                    
+                    // If still no companyId, check consumption sites
+                    if (!user.companyId && user.accessibleSites.consumptionSites?.L?.length > 0) {
+                        const firstSite = user.accessibleSites.consumptionSites.L[0]?.S;
+                        if (firstSite && firstSite.includes('_')) {
+                            user.companyId = firstSite.split('_')[0];
+                            logger.debug(`Extracted companyId from consumptionSites: ${user.companyId}`);
+                        }
+                    }
+                }
+                
+                // If we found a companyId, ensure it's stored in metadata for future use
+                if (user.companyId && !user.metadata.companyId) {
+                    user.metadata.companyId = user.companyId;
+                    // Optionally update the user record to persist this
+                    await this.updateUserMetadata(username, user.metadata);
+                }
+            }
+
+            // Map the role field to roleId for consistency
             if (user.role && !user.roleId) {
                 // Convert role to roleId based on our schema
                 user.roleId = user.role === 'admin' ? 'ROLE-1' : 

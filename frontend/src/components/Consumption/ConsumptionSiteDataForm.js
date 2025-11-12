@@ -105,19 +105,23 @@ const ConsumptionSiteDataForm = ({
     let version = 1;
     let values;
 
+    // Calculate previous month's date
+    const prevMonthDate = new Date();
+    prevMonthDate.setMonth(prevMonthDate.getMonth() - 1);
+    
     if (copiedData) {
-      // If we're copying data, use next month's date
+      // If we're copying data, use next month's date from the copied data
       initialDate = new Date(copiedData.date);
       initialDate = getNextMonthDate(initialDate);
       values = generateInitialValues(type, copiedData);
     } else if (initialData) {
-      // If we're editing existing data
+      // If we're editing existing data, use the existing date
       initialDate = new Date(initialData.date);
       version = initialData.version || 1;
       values = generateInitialValues(type, initialData);
     } else {
-      // New data
-      initialDate = new Date();
+      // For new data, default to previous month
+      initialDate = prevMonthDate;
       values = generateInitialValues(type, null);
     }
 

@@ -119,7 +119,7 @@ app.use('/api/production-charge', authenticateToken,
     
 app.use('/api/consumption-unit', authenticateToken,
     checkPermission('consumption-units', 'READ'),
-    consumptionUnitRoutes);
+    removeAuthForDetail(consumptionUnitRoutes));
     
 app.use('/api/allocation', authenticateToken,
     checkPermission('allocation', 'READ'),

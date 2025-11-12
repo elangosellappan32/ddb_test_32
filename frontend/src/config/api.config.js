@@ -1,9 +1,9 @@
-// Get API base URL from environment variable with fallback tobuld it relative path
-const ENV_API_URL = process.env.REACT_APP_API_URL || '';
+// Get API base URL from environment variable with fallback to localhost:3333
+const ENV_API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3333';
 
 export const API_BASE_URL = ENV_API_URL.endsWith('/api') 
   ? ENV_API_URL 
-  : ENV_API_URL ? `${ENV_API_URL}/api` : '/api';
+  : `${ENV_API_URL}/api`;
 
 // Log the API configuration in development
 if (process.env.NODE_ENV === 'development') {
@@ -51,14 +51,12 @@ export const API_CONFIG = {
         },
         CAPTIVE: {
             BASE: '/captive',
-            GET_ALL: '/captive/all',
-            GET_BY_GENERATOR_SHAREHOLDER: (generatorCompanyId, shareholderCompanyId) => 
-                `/captive/${generatorCompanyId}/${shareholderCompanyId}`,
+            GET_ALL: () => '/captive',
+            GET_BY_GENERATOR: (generatorCompanyId) => `/captive/generator/${generatorCompanyId}`,
+            GET_BY_COMPANIES: (generatorCompanyId, shareholderCompanyId) => `/captive/${generatorCompanyId}/${shareholderCompanyId}`,
             CREATE: '/captive',
-            UPDATE: (generatorCompanyId, shareholderCompanyId) => 
-                `/captive/${generatorCompanyId}/${shareholderCompanyId}`,
-            DELETE: (generatorCompanyId, shareholderCompanyId) => 
-                `/captive/${generatorCompanyId}/${shareholderCompanyId}`
+            UPDATE: (generatorCompanyId, shareholderCompanyId) => `/captive/${generatorCompanyId}/${shareholderCompanyId}`,
+            DELETE: (generatorCompanyId, shareholderCompanyId) => `/captive/${generatorCompanyId}/${shareholderCompanyId}`
         },
         ROLES: {
             BASE: '/roles',
@@ -159,22 +157,14 @@ export const API_CONFIG = {
             UPDATE: (companyId) => `/company/${companyId}`,
             DELETE: (companyId) => `/company/${companyId}`
         },
-        CAPTATIVE: {
-            BASE: '/captative',
-            GET_ALL: (companyId) => `/captative/${companyId}`,
-            GET_ONE: (companyId, captativeId) => `/captative/${companyId}/${captativeId}`,
-            CREATE: (companyId) => `/captive`,
-            UPDATE: (companyId, captativeId) => `/captive/${companyId}/${captativeId}`,
-            DELETE: (companyId, captativeId) => `/captive/${companyId}/${captativeId}`,
-            GET_BY_PERIOD: (companyId, period) => `/captive/${companyId}/period/${period}`
-        },
         INVOICE: {
             BASE: '/invoice',
             GENERATE: '/invoice/generate',
             GET_ALL: '/invoice',
             GET_ONE: (invoiceId) => `/invoice/${invoiceId}`,
             DOWNLOAD_PDF: (invoiceId) => `/invoice/${invoiceId}/download`
-        }
+        },
+
     }
 };
 

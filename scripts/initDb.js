@@ -443,12 +443,12 @@ const createCaptiveTable = async () => {
     const params = {
         TableName: TableNames.CAPTIVE,
         KeySchema: [
-            { AttributeName: 'productionSiteId', KeyType: 'HASH' },
-            { AttributeName: 'consumptionSiteId', KeyType: 'RANGE' }
+            { AttributeName: 'generatorCompanyId', KeyType: 'HASH' },
+            { AttributeName: 'shareholderCompanyId', KeyType: 'RANGE' }
         ],
         AttributeDefinitions: [
-            { AttributeName: 'productionSiteId', AttributeType: 'S' },
-            { AttributeName: 'consumptionSiteId', AttributeType: 'S' }
+            { AttributeName: 'generatorCompanyId', AttributeType: 'N' },
+            { AttributeName: 'shareholderCompanyId', AttributeType: 'N' }
         ],
         ProvisionedThroughput: {
             ReadCapacityUnits: 5,
@@ -458,7 +458,7 @@ const createCaptiveTable = async () => {
 
     try {
         await client.send(new CreateTableCommand(params));
-        console.log('Captive table created successfully');
+        console.log('Captive table created successfully with generatorCompanyId as PK and shareholderCompanyId as SK');
     } catch (error) {
         console.error('Error creating Captive table:', error);
         throw error;
@@ -466,53 +466,136 @@ const createCaptiveTable = async () => {
 };
 
 const createDefaultCaptiveData = async () => {
+    const timestamp = new Date().toISOString();
+    
+    // Flat structure with all attributes at the top level
     const captiveData = [
+        // STRIO KAIZEN - PEL TEXTILES
         {
-            consumptionSiteId: '1', // Format: companyId_siteId
-            productionSiteId: '1',  // Format: companyId_siteId
-            effectiveFrom: '2024-01-02',
-            shareholdingPercentage: 27,
-            status: 'active'
+            generatorCompanyId: 1,
+            shareholderCompanyId: 3,
+            generatorCompanyName: 'STRIO KAIZEN',
+            shareholderCompanyName: 'PEL TEXTILES',
+            consumptionSiteName: 'PEL TEXTILES Unit 1',
+            allocationPercentage: 10,
+            allocationStatus: 'active',
+            createdAt: timestamp,
+            updatedAt: timestamp
         },
+        
+        // STRIO KAIZEN - RAMAR & SONS
         {
-            consumptionSiteId: '2',
-            productionSiteId: '1',
-            effectiveFrom: '2024-01-02',
-            shareholdingPercentage: 12,
-            status: 'active'
+            generatorCompanyId: 1,
+            shareholderCompanyId: 4,
+            generatorCompanyName: 'STRIO KAIZEN',
+            shareholderCompanyName: 'RAMAR & SONS',
+            consumptionSiteName: 'RAMAR & SONS Factory',
+            allocationPercentage: 9,
+            allocationStatus: 'active',
+            createdAt: timestamp,
+            updatedAt: timestamp
         },
+        
+        // STRIO KAIZEN - POLYSPIN
         {
-            consumptionSiteId: '3',
-            productionSiteId: '2',
-            effectiveFrom: '2024-01-02',
-            shareholdingPercentage: 61,
-            status: 'active'
+            generatorCompanyId: 1,
+            shareholderCompanyId: 2,
+            generatorCompanyName: 'STRIO KAIZEN',
+            shareholderCompanyName: 'POLYSPIN',
+            consumptionSiteName: 'POLYSPIN Manufacturing',
+            allocationPercentage: 8,
+            allocationStatus: 'active',
+            createdAt: timestamp,
+            updatedAt: timestamp
         },
+        
+        // SMR ENERGY - RAMAR & SONS
         {
-            consumptionSiteId: '2',
-            productionSiteId: '3',
-            effectiveFrom: '2024-01-02',
-            shareholdingPercentage: 23,
-            status: 'active'
+            generatorCompanyId: 5,
+            shareholderCompanyId: 4,
+            generatorCompanyName: 'SMR ENERGY',
+            shareholderCompanyName: 'RAMAR & SONS',
+            consumptionSiteName: 'RAMAR & SONS Factory',
+            allocationPercentage: 8,
+            allocationStatus: 'active',
+            createdAt: timestamp,
+            updatedAt: timestamp
         },
+        
+        // SMR ENERGY - PEL TEXTILES
         {
-            consumptionSiteId: '1',
-            productionSiteId: '3',
-            effectiveFrom: '2024-01-02',
-            shareholdingPercentage: 33,
-            status: 'active'
+            generatorCompanyId: 5,
+            shareholderCompanyId: 3,
+            generatorCompanyName: 'SMR ENERGY',
+            shareholderCompanyName: 'PEL TEXTILES',
+            consumptionSiteName: 'PEL TEXTILES Unit 1',
+            allocationPercentage: 9,
+            allocationStatus: 'active',
+            createdAt: timestamp,
+            updatedAt: timestamp
+        },
+        
+        // SMR ENERGY - POLYSPIN
+        {
+            generatorCompanyId: 5,
+            shareholderCompanyId: 2,
+            generatorCompanyName: 'SMR ENERGY',
+            shareholderCompanyName: 'POLYSPIN EXPORTS LTD',
+            consumptionSiteName: 'POLYSPIN Manufacturing',
+            allocationPercentage: 7,
+            allocationStatus: 'active',
+            createdAt: timestamp,
+            updatedAt: timestamp
         }
     ];
 
+    // First verify allocation percentages
+    const generatorAllocations = {};
+    for (const data of captiveData) {
+        const genId = data.generatorCompanyId;
+        if (!generatorAllocations[genId]) {
+            generatorAllocations[genId] = 0;
+        }
+        generatorAllocations[genId] += data.allocationPercentage;
+    }
+
+    // Verify totals
+    for (const [genId, total] of Object.entries(generatorAllocations)) {
+        const expectedTotal = genId === '1' ? 27 : 24;  // STRIO KAIZEN: 27%, SMR ENERGY: 24%
+        if (Math.abs(total - expectedTotal) > 0.01) { // Allow for small floating point differences
+            throw new Error(`Invalid allocation total for generator ${genId}: ${total}% (expected ${expectedTotal}%)`);
+        }
+        console.log(`Verified allocations for generator ${genId}: ${total}%`);
+    }
+
     for (const data of captiveData) {
         try {
+            // Create a new item with all the flat attributes
+            const item = { ...data };
+            
+            // Ensure numeric fields are numbers
+            item.generatorCompanyId = Number(item.generatorCompanyId);
+            item.shareholderCompanyId = Number(item.shareholderCompanyId);
+            item.allocationPercentage = Number(item.allocationPercentage) || 0;
+            
+            // Ensure timestamps are set
+            const now = new Date().toISOString();
+            item.createdAt = item.createdAt || now;
+            item.updatedAt = now;
+            
             await docClient.send(new PutCommand({
                 TableName: TableNames.CAPTIVE,
-                Item: data
+                Item: item
             }));
-            console.log(`Created Captive entry for Generator ${data.generatorCompanyId} and Shareholder ${data.shareholderCompanyId}`);
+            
+            console.log(`Created Captive entry for Generator ${item.generatorCompanyId} and Shareholder ${item.shareholderCompanyId} (${item.shareholdingPercentage}%)`);
         } catch (error) {
-            console.error(`Error creating Captive entry for Generator ${data.generatorCompanyId} and Shareholder ${data.shareholderCompanyId}:`, error);
+            console.error('Error creating Captive entry:', {
+                error: error.message,
+                data: data,
+                stack: error.stack
+            });
+            throw error; // Re-throw to stop execution on error
         }
     }
 };
@@ -663,6 +746,9 @@ const createDefaultUsers = async () => {
                     ]},
                     consumptionSites: { L: [
                         { S: '2_1' }, { S: '3_2' }
+                    ]},
+                    company: { L: [
+                        { S: '1' }
                     ]}
                 }
             },
@@ -672,6 +758,7 @@ const createDefaultUsers = async () => {
             updatedAt: timestamp,
             lastLogin: null
         },
+        // Consultant Admin
         {
             username: 'consultant_admin',
             email: 'consultant@strio.com',
@@ -684,6 +771,9 @@ const createDefaultUsers = async () => {
                     ]},
                     consumptionSites: { L: [
                         { S: '2_1' }, { S: '3_2' }, { S: '4_3' }
+                    ]},
+                    company: { L: [
+                        { S: '1' }, { S: '5' }
                     ]}
                 }
             },
@@ -706,6 +796,9 @@ const createDefaultUsers = async () => {
                     ]},
                     consumptionSites: { L: [
                         { S: '2_1' }, { S: '3_2' }
+                    ]},
+                    company: { L: [
+                        { S: '1' }
                     ]}
                 }
             },
@@ -728,6 +821,9 @@ const createDefaultUsers = async () => {
                     ]},
                     consumptionSites: { L: [
                         { S: '2_1' }, { S: '3_2' }
+                    ]},
+                    company: { L: [
+                        { S: '1' }
                     ]}
                 }
             },
@@ -749,9 +845,10 @@ const createDefaultUsers = async () => {
                         { S: '5_3' }
                     ]},
                     consumptionSites: { L: [
-                        
                         { S: '2_1' }, { S: '3_2' }
-
+                    ]},
+                    company: { L: [
+                        { S: '5' }
                     ]}
                 }
             },
@@ -773,7 +870,10 @@ const createDefaultUsers = async () => {
                         { S: '5_3' }
                     ]},
                     consumptionSites: { L: [
-                        { S: '2_1' }, { S: '3_2' },
+                        { S: '2_1' }, { S: '3_2' }
+                    ]},
+                    company: { L: [
+                        { S: '5' }
                     ]}
                 }
             },
@@ -795,7 +895,10 @@ const createDefaultUsers = async () => {
                         { S: '5_3' }
                     ]},
                     consumptionSites: { L: [
-                        { S: '2_1' },
+                        { S: '2_1' }
+                    ]},
+                    company: { L: [
+                        { S: '5' }
                     ]}
                 }
             },
@@ -817,6 +920,9 @@ const createDefaultUsers = async () => {
                     ]},
                     consumptionSites: { L: [
                         { S: '1_1' }, { S: '3_2' }, { S: '5_1' }
+                    ]},
+                    company: { L: [
+                        { S: '1' }, { S: '5' }
                     ]}
                 }
             },
@@ -841,24 +947,199 @@ const createDefaultUsers = async () => {
     }
 };
 
-const init = async () => {
-    await createRoleTable();
-    await createUserTable();
-    await createBankingTable();
-    await createAllocationTable();
-    await createCompanyTable();
-    await createProductionSitesTable();
-    await createProductionUnitTable();
-    await createProductionChargeTable();
-    await createConsumptionSitesTable();
-    await createConsumptionUnitTable();
-    await createLapseTable();
-    await createCaptiveTable();
-    await createDefaultUsers();
-    await createDefaultCompanies();
-    await createDefaultCaptiveData();
+const generateCaptiveData = () => {
+    const timestamp = new Date().toISOString();
+    
+    // Define the captive data with specific allocation percentages
+    const captiveData = [
+        // STRIO KAIZEN (Generator Company 1) - Total 27%
+        {
+            generatorCompanyId: 1, // Primary hash key
+            shareholderCompanyId: 3, // Primary range key
+            generatorCompanyName: 'STRIO KAIZEN',
+            shareholderCompanyName: 'PEL TEXTILES',
+            allocationPercentage: 10,  // Adjusted allocation
+            allocationStatus: 'active',
+            createdAt: timestamp,
+            updatedAt: timestamp
+        },
+        // STRIO KAIZEN - RAMAR & SONS
+        {
+            generatorCompanyId: 1, // Primary hash key
+            shareholderCompanyId: 4, // Primary range key
+            generatorCompanyName: 'STRIO KAIZEN',
+            shareholderCompanyName: 'RAMAR & SONS',
+            allocationPercentage: 9,  // Part of 27% total
+            allocationStatus: 'active',
+            createdAt: timestamp,
+            updatedAt: timestamp
+        },
+        
+        // STRIO KAIZEN - POLYSPIN EXPORTS
+        {
+            generatorCompanyId: 1, // Primary hash key
+            shareholderCompanyId: 2, // Primary range key
+            generatorCompanyName: 'STRIO KAIZEN',
+            shareholderCompanyName: 'POLYSPIN EXPORTS LTD',
+            allocationPercentage: 8,  // Part of 27% total
+            allocationStatus: 'active',
+            createdAt: timestamp,
+            updatedAt: timestamp
+        },
+        
+        // SMR ENERGY - PEL TEXTILES
+        {
+            generatorCompanyId: 5, // Primary hash key
+            shareholderCompanyId: 3, // Primary range key
+            generatorCompanyName: 'SMR ENERGY',
+            shareholderCompanyName: 'PEL TEXTILES',
+            allocationPercentage: 9,  // Part of 24% total
+            allocationStatus: 'active',
+            createdAt: timestamp,
+            updatedAt: timestamp
+        },
+        
+        // SMR ENERGY - RAMAR & SONS
+        {
+            generatorCompanyId: 5, // Primary hash key
+            shareholderCompanyId: 4, // Primary range key
+            generatorCompanyName: 'SMR ENERGY',
+            shareholderCompanyName: 'RAMAR & SONS',
+            allocationPercentage: 8,  // Part of 24% total
+            allocationStatus: 'active',
+            createdAt: timestamp,
+            updatedAt: timestamp
+        },
+        
+        // SMR ENERGY - POLYSPIN EXPORTS
+        {
+            generatorCompanyId: 5, // Primary hash key
+            shareholderCompanyId: 2, // Primary range key
+            generatorCompanyName: 'SMR ENERGY',
+            shareholderCompanyName: 'POLYSPIN EXPORTS LTD',
+            allocationPercentage: 7,  // Part of 24% total
+            allocationStatus: 'active',
+            createdAt: timestamp,
+            updatedAt: timestamp
+        }
+    ];
+
+    // Verify allocation percentages per generator company
+    const verifyAllocations = () => {
+        const generatorTotals = {};
+        const shareholderAllocations = {};
+        
+        captiveData.forEach(item => {
+            // Track generator totals
+            if (!generatorTotals[item.generatorCompanyId]) {
+                generatorTotals[item.generatorCompanyId] = 0;
+            }
+            generatorTotals[item.generatorCompanyId] += item.allocationPercentage;
+            
+            // Track shareholder allocations per generator
+            const key = `${item.generatorCompanyId}-${item.shareholderCompanyId}`;
+            shareholderAllocations[key] = item.allocationPercentage;
+        });
+
+        // Verify STRIO KAIZEN (1) has 27% total with proper split
+        if (Math.abs(generatorTotals[1] - 27) > 0.01) {
+            throw new Error(`STRIO KAIZEN allocations total ${generatorTotals[1]}%, expected 27%`);
+        }
+        
+        // Verify PEL TEXTILES (3) allocation for STRIO KAIZEN
+        if (shareholderAllocations['1-3'] !== 10) {
+            throw new Error(`Invalid allocation for PEL TEXTILES from STRIO KAIZEN: ${shareholderAllocations['1-3']}%, expected 10%`);
+        }
+        
+        // Verify RAMAR & SONS (4) allocation for STRIO KAIZEN
+        if (shareholderAllocations['1-4'] !== 9) {
+            throw new Error(`Invalid allocation for RAMAR & SONS from STRIO KAIZEN: ${shareholderAllocations['1-4']}%, expected 9%`);
+        }
+        
+        // Verify POLYSPIN (2) allocation for STRIO KAIZEN
+        if (shareholderAllocations['1-2'] !== 8) {
+            throw new Error(`Invalid allocation for POLYSPIN from STRIO KAIZEN: ${shareholderAllocations['1-2']}%, expected 8%`);
+        }
+
+        // Verify SMR ENERGY (5) has 24% total with proper split
+        if (Math.abs(generatorTotals[5] - 24) > 0.01) {
+            throw new Error(`SMR ENERGY allocations total ${generatorTotals[5]}%, expected 24%`);
+        }
+        
+        // Verify PEL TEXTILES (3) allocation for SMR ENERGY
+        if (shareholderAllocations['5-3'] !== 9) {
+            throw new Error(`Invalid allocation for PEL TEXTILES from SMR ENERGY: ${shareholderAllocations['5-3']}%, expected 9%`);
+        }
+        
+        // Verify RAMAR & SONS (4) allocation for SMR ENERGY
+        if (shareholderAllocations['5-4'] !== 8) {
+            throw new Error(`Invalid allocation for RAMAR & SONS from SMR ENERGY: ${shareholderAllocations['5-4']}%, expected 8%`);
+        }
+        
+        // Verify POLYSPIN (2) allocation for SMR ENERGY
+        if (shareholderAllocations['5-2'] !== 7) {
+            throw new Error(`Invalid allocation for POLYSPIN from SMR ENERGY: ${shareholderAllocations['5-2']}%, expected 7%`);
+        }
+
+        console.log('Allocation percentages verified successfully');
+        console.log('Generator company totals:', generatorTotals);
+        console.log('Individual shareholder allocations:', shareholderAllocations);
+    };
+
+    // Verify before returning
+    verifyAllocations();
+    return captiveData;
 };
 
-init()
-    .then(() => console.log('Database initialized successfully'))
-    .catch(console.error);
+// Main initialization function
+const init = async () => {
+    try {
+        // Create all tables
+        await createRoleTable();
+        await createBankingTable();
+        await createAllocationTable();
+        await createProductionSitesTable();
+        await createProductionUnitTable();
+        await createProductionChargeTable();
+        await createConsumptionSitesTable();
+        await createConsumptionUnitTable();
+        await createLapseTable();
+        await createCaptiveTable();
+        await createCompanyTable();
+        await createUserTable();
+        
+        // Create default data
+        await createDefaultCompanies();
+        await createDefaultUsers();
+        
+        // Generate and insert captive data
+        const captiveData = generateCaptiveData();
+        console.log(`Generated ${captiveData.length} captive data entries`);
+        
+        // Insert captive data in batches
+        const batchSize = 10;
+        for (let i = 0; i < captiveData.length; i += batchSize) {
+            const batch = captiveData.slice(i, i + batchSize);
+            await Promise.all(batch.map(async (item) => {
+                const params = {
+                    TableName: TableNames.CAPTIVE,
+                    Item: item
+                };
+                try {
+                    await docClient.send(new PutCommand(params));
+                    console.log(`Inserted captive data for Generator ${item.generatorCompanyId} and Shareholder ${item.shareholderCompanyId}`);
+                } catch (error) {
+                    console.error('Error inserting captive data:', error);
+                }
+            }));
+        }
+        
+        console.log('Database initialized successfully with captive data');
+    } catch (error) {
+        console.error('Error initializing database:', error);
+        throw error;
+    }
+};
+
+// Start the initialization process
+init().catch(console.error);
