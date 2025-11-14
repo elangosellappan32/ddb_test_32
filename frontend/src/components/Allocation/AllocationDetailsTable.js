@@ -236,36 +236,46 @@ const AllocationDetailsTable = ({
         return total;
     };
 
-    // Sort allocations by production site commission date (newest first) and consumption site priority
+    // Sort allocations to show consumption sites first, then production sites
     const sortAllocationsByOrder = (data) => {
         if (!Array.isArray(data) || data.length === 0) return data;
 
         return [...data].sort((a, b) => {
-            // First, sort by production site commission date (descending - newest first)
+            // First, sort by consumption site (if available)
+            const aHasConsumption = Boolean(a.consumptionSiteId || a.consumptionSite);
+            const bHasConsumption = Boolean(b.consumptionSiteId || b.consumptionSite);
+            
+            // If one has consumption and the other doesn't, sort consumption first
+            if (aHasConsumption && !bHasConsumption) return -1;
+            if (!aHasConsumption && bHasConsumption) return 1;
+            
+            // If both have consumption sites, sort by consumption site priority
+            if (aHasConsumption && bHasConsumption) {
+                const aConsId = String(a.consumptionSiteId || a.id || '');
+                const bConsId = String(b.consumptionSiteId || b.id || '');
+                
+                const aPriority = consumptionSitePriorityMap[aConsId] || Number.MAX_VALUE;
+                const bPriority = consumptionSitePriorityMap[bConsId] || Number.MAX_VALUE;
+                
+                if (aPriority !== bPriority) {
+                    return aPriority - bPriority;
+                }
+                
+                // If same priority, sort by consumption site name
+                const aConsName = a.consumptionSite || '';
+                const bConsName = b.consumptionSite || '';
+                const nameCompare = aConsName.localeCompare(bConsName);
+                if (nameCompare !== 0) return nameCompare;
+            }
+            
+            // Then sort by production site commission date (newest first)
             const aProdSite = productionSites.find(ps => String(ps.productionSiteId) === String(a.productionSiteId));
             const bProdSite = productionSites.find(ps => String(ps.productionSiteId) === String(b.productionSiteId));
             
             const aCommissionDate = new Date(aProdSite?.dateOfCommission || aProdSite?.commissionDate || new Date(0));
             const bCommissionDate = new Date(bProdSite?.dateOfCommission || bProdSite?.commissionDate || new Date(0));
             
-            const dateCompare = bCommissionDate.getTime() - aCommissionDate.getTime();
-            if (dateCompare !== 0) return dateCompare;
-            
-            // If same production site, sort by consumption site priority (ascending)
-            const aConsId = String(a.consumptionSiteId || a.id || '');
-            const bConsId = String(b.consumptionSiteId || b.id || '');
-            
-            const aPriority = consumptionSitePriorityMap[aConsId] || Number.MAX_VALUE;
-            const bPriority = consumptionSitePriorityMap[bConsId] || Number.MAX_VALUE;
-            
-            if (aPriority !== Number.MAX_VALUE || bPriority !== Number.MAX_VALUE) {
-                return aPriority - bPriority;
-            }
-            
-            // Fallback: sort by consumption site name
-            const aConsName = a.consumptionSite || '';
-            const bConsName = b.consumptionSite || '';
-            return aConsName.localeCompare(bConsName);
+            return bCommissionDate.getTime() - aCommissionDate.getTime();
         });
     };
 
@@ -327,18 +337,13 @@ const AllocationDetailsTable = ({
                         <Table size="small" sx={{ mt: 1, border: '1px solid black' }}>
                             <TableHead>
                                 <TableRow sx={{ background: bgColor }}>
+                                    <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Consumption Site</TableCell>
                                     <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Production Site</TableCell>
-                                    {type === 'allocation' && (
-                                        <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Consumption Site</TableCell>
-                                    )}
                                     {getAllocationPeriods().map(period => (
                                         <TableCell key={period.id} align="right" sx={{ color: 'white', fontWeight: 'bold' }}>
                                             {period.label}
                                         </TableCell>
                                     ))}
-                                    {type === 'allocation' && (
-                                        <TableCell align="center" sx={{ color: 'white', fontWeight: 'bold' }}>Charge</TableCell>
-                                    )}
                                     <TableCell align="right" sx={{ color: 'white', fontWeight: 'bold' }}>Total</TableCell>
                                     {type === 'allocation' && (
                                         <TableCell align="center" sx={{ color: 'white', fontWeight: 'bold' }}>Actions</TableCell>
@@ -359,76 +364,54 @@ const AllocationDetailsTable = ({
                                     >
                                         <TableCell>
                                             <Box>
-                                                <Box display="flex" alignItems="center" gap={1}>
-                                                    <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                                                        {allocation.productionSite || allocation.siteName || `Site ${allocation.productionSiteId}`}
-                                                    </Typography>
-                                                    {allocation.charge && (
-                                                        <Tooltip title="This allocation is charged for the month">
-                                                            <Box sx={{ 
-                                                                width: 12, 
-                                                                height: 12, 
-                                                                borderRadius: '50%', 
-                                                                bgcolor: 'success.main',
-                                                                border: '1px solid',
-                                                                borderColor: 'success.dark'
-                                                            }} />
-                                                        </Tooltip>
-                                                    )}
-                                                </Box>
-                                                {allocation.siteType && (
-                                                    <Typography variant="caption" color="textSecondary">{allocation.siteType}</Typography>
+                                                <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                                                    {allocation.consumptionSite || `Site ${allocation.consumptionSiteId || 'N/A'}`}
+                                                </Typography>
+                                            </Box>
+                                        </TableCell>
+                                        <TableCell>
+                                            <Box display="flex" alignItems="center" gap={1}>
+                                                <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                                                    {allocation.productionSite || `Site ${allocation.productionSiteId || 'N/A'}`}
+                                                </Typography>
+                                                {allocation.charge && (
+                                                    <Tooltip title="This allocation is charged for the month">
+                                                        <Box sx={{ 
+                                                            width: 12, 
+                                                            height: 12, 
+                                                            borderRadius: '50%', 
+                                                            bgcolor: 'success.main',
+                                                            border: '1px solid',
+                                                            borderColor: 'success.dark'
+                                                        }} />
+                                                    </Tooltip>
                                                 )}
                                             </Box>
                                         </TableCell>
-                                        {type === 'allocation' && (
-                                            <TableCell>
-                                                <Typography variant="body2">
-                                                    {allocation.consumptionSite || `Site ${allocation.consumptionSiteId}`}
-                                                </Typography>
-                                            </TableCell>
-                                        )}
                                         {getAllocationPeriods().map(period => {
-                                            // Get value from either allocated object or root level
                                             const val = allocation.allocated?.[period.id] ?? allocation[period.id] ?? 0;
                                             return (
                                                 <TableCell key={period.id} align="right" 
                                                     sx={{ 
                                                         color: period.isPeak ? 'warning.main' : 'inherit',
                                                         fontWeight: period.isPeak ? 'bold' : 'normal',
-                                                        minWidth: 60
+                                                        minWidth: 60,
+                                                        backgroundColor: type === 'allocation' ? 'rgba(63, 81, 181, 0.08)' : 
+                                                                    type === 'banking' ? 'rgba(76, 175, 80, 0.08)' : 
+                                                                    'rgba(255, 152, 0, 0.08)'
                                                     }}
                                                 >
                                                     {Math.round(Number(val))}
                                                 </TableCell>
                                             );
                                         })}
-                                        {type === 'allocation' && (
-                                            <TableCell align="center" sx={{ minWidth: 80 }}>
-                                                <Box 
-                                                    sx={{
-                                                        display: 'inline-flex',
-                                                        alignItems: 'center',
-                                                        justifyContent: 'center',
-                                                        width: 24,
-                                                        height: 24,
-                                                        borderRadius: '50%',
-                                                        bgcolor: (allocation.charge || allocation.allocated?.charge) ? 'success.main' : 'error.main',
-                                                        color: 'white',
-                                                        fontWeight: 'bold',
-                                                        fontSize: '0.75rem',
-                                                        border: '1px solid',
-                                                        borderColor: (allocation.charge || allocation.allocated?.charge) ? 'success.dark' : 'error.dark',
-                                                        cursor: 'default',
-                                                        mx: 'auto'
-                                                    }}
-                                                    title={(allocation.charge || allocation.allocated?.charge) ? 'This allocation is charged for the month' : 'Not charged for this month'}
-                                                >
-                                                    {(allocation.charge || allocation.allocated?.charge) ? '✓' : '✗'}
-                                                </Box>
-                                            </TableCell>
-                                        )}
-                                        <TableCell align="right" sx={{ fontWeight: 'bold', color: getAllocationTypeColor(type) }}>
+                                        <TableCell align="right" sx={{ 
+                                            fontWeight: 'bold', 
+                                            color: getAllocationTypeColor(type),
+                                            backgroundColor: type === 'allocation' ? 'rgba(63, 81, 181, 0.12)' : 
+                                                          type === 'banking' ? 'rgba(76, 175, 80, 0.12)' : 
+                                                          'rgba(255, 152, 0, 0.12)'
+                                        }}>
                                             {calculateTotal(allocation)}
                                         </TableCell>
                                         {type === 'allocation' && (

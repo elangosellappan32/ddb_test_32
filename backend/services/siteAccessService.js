@@ -744,6 +744,7 @@ const getSitesBatch = async (siteType, siteKeys) => {
 };
 
 module.exports = {
+    validateSiteType,
     updateUserSiteAccess,
     addExistingSiteAccess,
     removeSiteAccess,

@@ -14,6 +14,9 @@ const validateSiteType = (siteType) => {
     }
 };
 
+// Export the function for use in other modules
+export { validateSiteType };
+
 /**
  * Utility functions for site access management
  */
