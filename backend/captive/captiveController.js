@@ -379,7 +379,12 @@ exports.bulkUpdateCaptives = async (req, res) => {
                 captiveDAL.updateCaptive(
                     update.generatorCompanyId,
                     update.shareholderCompanyId,
-                    { allocationPercentage: update.allocationPercentage }
+                    {
+                        allocationPercentage: update.allocationPercentage,
+                        allocationStatus: update.allocationStatus || 'active',
+                        generatorCompanyName: update.generatorCompanyName,
+                        shareholderCompanyName: update.shareholderCompanyName
+                    }
                 )
             )
         );

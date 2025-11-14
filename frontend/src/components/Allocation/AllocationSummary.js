@@ -3,19 +3,17 @@ import { Box, Grid, Card, CardContent, Typography, Avatar } from '@mui/material'
 import { SwapHoriz as AllocationIcon, AccountBalance as BankingIcon, ErrorOutline as LapseIcon, CheckCircle as ProductionIcon, Assignment as ConsumptionIcon } from '@mui/icons-material';
 import { calculateTotal } from '../../utils/allocationUtils';
 
-const AllocationSummary = ({ productionData = [], consumptionData = [], allocations = [], bankingAllocations = [], oldBankingAllocations = [], lapseAllocations = [] }) => {
+const AllocationSummary = ({ productionData = [], consumptionData = [], allocations = [], bankingAllocations = [], lapseAllocations = [] }) => {
   const totalProduction = productionData.reduce((sum, item) => sum + calculateTotal(item), 0);
   const totalConsumption = consumptionData.reduce((sum, item) => sum + calculateTotal(item), 0);
-  const totalDirectBanking = oldBankingAllocations.reduce((sum, item) => sum + calculateTotal(item), 0);
-  const totalIndirectBanking = bankingAllocations.reduce((sum, item) => sum + calculateTotal(item.allocated), 0);
+  const totalBanking = bankingAllocations.reduce((sum, item) => sum + calculateTotal(item.allocated), 0);
   const totalAllocated = allocations.reduce((sum, item) => sum + calculateTotal(item.allocated), 0);
   const totalLapse = lapseAllocations.reduce((sum, item) => sum + calculateTotal(item.allocated), 0);
 
   const summaryItems = [
     { title: 'Production', value: totalProduction, icon: ProductionIcon, color: 'primary.main' },
     { title: 'Consumption', value: totalConsumption, icon: ConsumptionIcon, color: 'text.secondary' },
-    { title: 'Direct Banking', value: totalDirectBanking, icon: BankingIcon, color: 'success.main' },
-    { title: 'Indirect Banking', value: totalIndirectBanking, icon: BankingIcon, color: 'success.dark' },
+    { title: 'Banking', value: totalBanking, icon: BankingIcon, color: 'success.main' },
     { title: 'Allocated', value: totalAllocated, icon: AllocationIcon, color: 'secondary.main' },
     { title: 'Lapse', value: totalLapse, icon: LapseIcon, color: 'warning.main' }
   ];

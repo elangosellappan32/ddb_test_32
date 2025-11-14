@@ -177,6 +177,42 @@ const deleteCaptive = async (generatorCompanyId, shareholderCompanyId) => {
     }
 };
 
+// Batch upsert captive entries (create if not exists, otherwise update)
+const batchUpsertCaptives = async (entries) => {
+    try {
+        const results = [];
+
+        for (const entry of entries) {
+            const existing = await getCaptiveByCompanies(entry.generatorCompanyId, entry.shareholderCompanyId);
+
+            if (!existing) {
+                const created = await createCaptive({
+                    generatorCompanyId: entry.generatorCompanyId,
+                    shareholderCompanyId: entry.shareholderCompanyId,
+                    generatorCompanyName: entry.generatorCompanyName,
+                    shareholderCompanyName: entry.shareholderCompanyName,
+                    allocationPercentage: entry.allocationPercentage,
+                    allocationStatus: entry.allocationStatus || 'active'
+                });
+                results.push(created);
+            } else {
+                const updated = await updateCaptive(entry.generatorCompanyId, entry.shareholderCompanyId, {
+                    allocationPercentage: entry.allocationPercentage,
+                    allocationStatus: entry.allocationStatus || 'active',
+                    generatorCompanyName: entry.generatorCompanyName,
+                    shareholderCompanyName: entry.shareholderCompanyName
+                });
+                results.push(updated);
+            }
+        }
+
+        return results;
+    } catch (error) {
+        logger.error('Error in batchUpsertCaptives:', error);
+        throw error;
+    }
+};
+
 module.exports = {
     getAllCaptives,
     getCaptivesByGenerator,
@@ -184,5 +220,6 @@ module.exports = {
     getCaptiveByCompanies,
     createCaptive,
     updateCaptive,
-    deleteCaptive
+    deleteCaptive,
+    batchUpsertCaptives
 };

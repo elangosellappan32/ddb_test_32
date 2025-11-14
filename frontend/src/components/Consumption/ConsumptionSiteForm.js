@@ -22,6 +22,7 @@ import {
   BarChart as ChartIcon
 } from '@mui/icons-material';
 import { useSnackbar } from 'notistack';
+import companyApi from '../../services/companyApi';
 
 // Site type configuration with display text and icons
 const SITE_TYPES = [
@@ -46,7 +47,8 @@ const INITIAL_FORM_STATE = {
   annualConsumption: '',
   annualConsumption_L: '',
   timetolive: 0,
-  version: 1
+  version: 1,
+  companyId: ''
 };
 
 const ConsumptionSiteForm = ({ 
@@ -55,11 +57,19 @@ const ConsumptionSiteForm = ({
   onCancel, 
   loading = false, 
   permissions = {},
-  isEditing = false
+  isEditing = false,
+  companyId: propCompanyId,
+  user
 }) => {
   const { enqueueSnackbar } = useSnackbar();
   const [formData, setFormData] = useState(INITIAL_FORM_STATE);
   const [errors, setErrors] = useState({});
+  const [companies, setCompanies] = useState([]);
+  const [companiesLoading, setCompaniesLoading] = useState(false);
+  const [companiesError, setCompaniesError] = useState('');
+  
+  // Get companyId from props or user context
+  const companyId = propCompanyId || user?.companyId || '1';
 
   // Normalize site type to ensure it's one of the valid types
   const normalizeType = (type) => {
@@ -71,6 +81,35 @@ const ConsumptionSiteForm = ({
   };
 
   useEffect(() => {
+    const loadCompanies = async () => {
+      try {
+        setCompaniesLoading(true);
+        setCompaniesError('');
+        const response = await companyApi.getAll();
+
+        // Backend getAllCompanies returns { success, data: companies }
+        const list = Array.isArray(response?.data)
+          ? response.data
+          : Array.isArray(response)
+          ? response
+          : [];
+
+        const normalized = list.map((c) => ({
+          companyId: c.companyId,
+          companyName: c.companyName || c.name || `Company ${c.companyId}`,
+        }));
+
+        setCompanies(normalized);
+      } catch (error) {
+        console.error('Failed to load companies for ConsumptionSiteForm:', error);
+        setCompaniesError('Failed to load companies');
+      } finally {
+        setCompaniesLoading(false);
+      }
+    };
+
+    loadCompanies();
+
     if (initialData) {
       // Create a clean submission object with only the fields we need
       const cleanData = {
@@ -85,14 +124,14 @@ const ConsumptionSiteForm = ({
         createdat: initialData.createdat || new Date().toISOString(),
         updatedat: initialData.updatedat || new Date().toISOString(),
         // Include IDs if they exist
-        companyId: initialData.companyId,
+        companyId: initialData.companyId || companyId,
         consumptionSiteId: initialData.consumptionSiteId
       };
       setFormData(cleanData);
     } else {
-      setFormData(INITIAL_FORM_STATE);
+      setFormData({ ...INITIAL_FORM_STATE, companyId });
     }
-  }, [initialData]);
+  }, [initialData, companyId]);
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -205,6 +244,37 @@ const ConsumptionSiteForm = ({
   return (
     <Box component="form" onSubmit={handleSubmit} noValidate>
       <Grid container spacing={3}>
+        <Grid item xs={12} sm={6}>
+          <FormControl fullWidth margin="normal">
+            <InputLabel>Company</InputLabel>
+            <Select
+              name="companyId"
+              value={formData.companyId || ''}
+              label="Company"
+              onChange={handleChange}
+              disabled={companiesLoading}
+            >
+              <MenuItem value="">
+                <em>Select a company</em>
+              </MenuItem>
+              {companies.map((company) => (
+                <MenuItem key={company.companyId} value={company.companyId}>
+                  {company.companyName} ({company.companyId})
+                </MenuItem>
+              ))}
+            </Select>
+            {companiesLoading && (
+              <FormHelperText>Loading companies...</FormHelperText>
+            )}
+            {companiesError && !companiesLoading && (
+              <FormHelperText error>{companiesError}</FormHelperText>
+            )}
+            {!companiesLoading && !companiesError && !formData.companyId && (
+              <FormHelperText>Select the company for this consumption site</FormHelperText>
+            )}
+          </FormControl>
+        </Grid>
+
         <Grid item xs={12}>
           <TextField
             fullWidth
@@ -385,7 +455,9 @@ ConsumptionSiteForm.propTypes = {
   onCancel: PropTypes.func.isRequired,
   loading: PropTypes.bool,
   permissions: PropTypes.object,
-  isEditing: PropTypes.bool
+  isEditing: PropTypes.bool,
+  companyId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+  user: PropTypes.object
 };
 
 export default ConsumptionSiteForm;

@@ -18,6 +18,7 @@ import {
   Assessment as AnnualProductionIcon,
   Warning as WarningIcon
 } from '@mui/icons-material';
+import companyApi from '../../services/companyApi';
 
 // Constants
 const SITE_TYPES = ['Wind', 'Solar'];
@@ -36,19 +37,51 @@ const INITIAL_FORM_STATE = {
   banking: 0,
   annualProduction_L: '',
   revenuePerUnit: '',
-  dateOfCommission: null
+  dateOfCommission: null,
+  companyId: ''
 };
 
-const ProductionSiteForm = ({ initialData, onSubmit, onCancel, loading, site }) => {
+const ProductionSiteForm = ({ initialData, onSubmit, onCancel, loading, site, companyId: propCompanyId, user }) => {
   const navigate = useNavigate();
   const [formData, setFormData] = useState(INITIAL_FORM_STATE);
   const [errors, setErrors] = useState({});
   const [touched, setTouched] = useState({});
   const [isValid, setIsValid] = useState(false);
   const [formError, setFormError] = useState('');
+  const [companies, setCompanies] = useState([]);
+  const [companiesLoading, setCompaniesLoading] = useState(false);
+  const [companiesError, setCompaniesError] = useState('');
+  
+  // Get companyId from props or user context
+  const companyId = propCompanyId || user?.companyId || '1';
 
   // Load site data when editing
   useEffect(() => {
+    const loadCompanies = async () => {
+      try {
+        setCompaniesLoading(true);
+        setCompaniesError('');
+        const response = await companyApi.getAll();
+
+        // Support both wrapped and direct array responses
+        const list = Array.isArray(response?.data) ? response.data : Array.isArray(response) ? response : [];
+
+        const normalized = list.map((c) => ({
+          companyId: c.companyId,
+          companyName: c.companyName || c.name || `Company ${c.companyId}`,
+        }));
+
+        setCompanies(normalized);
+      } catch (error) {
+        console.error('Failed to load companies for ProductionSiteForm:', error);
+        setCompaniesError('Failed to load companies');
+      } finally {
+        setCompaniesLoading(false);
+      }
+    };
+
+    loadCompanies();
+
     if (site) {
       try {
         // Normalize type
@@ -111,6 +144,7 @@ const ProductionSiteForm = ({ initialData, onSubmit, onCancel, loading, site }) 
           status: validStatus,
           banking: validStatus && INACTIVE_STATUSES.includes(validStatus) ? 0 : (site.banking ? 1 : 0),
           dateOfCommission: parsedDateOfCommission,
+          companyId: site.companyId || companyId,
         };
 
         setFormData(newFormData);
@@ -119,14 +153,14 @@ const ProductionSiteForm = ({ initialData, onSubmit, onCancel, loading, site }) 
         setFormError('Failed to load site data.');
       }
     } else {
-      // For new sites - preset status as Active
-      setFormData({ ...INITIAL_FORM_STATE, status: 'Active' });
+      // For new sites - preset status as Active and set companyId (if available)
+      setFormData({ ...INITIAL_FORM_STATE, status: 'Active', companyId });
     }
 
     setTouched({});
     setErrors({});
     setFormError('');
-  }, [site]);
+  }, [site, companyId]);
 
   // Validate form
   const validateForm = useCallback((data = formData) => {
@@ -270,6 +304,37 @@ const ProductionSiteForm = ({ initialData, onSubmit, onCancel, loading, site }) 
               <Alert severity="info" sx={{ mb: 3 }}>{`This site is ${formData.status}`}</Alert>
             )}
             <Grid container spacing={3}>
+              <Grid item xs={12} sm={6}>
+                <FormControl fullWidth>
+                  <InputLabel>Company</InputLabel>
+                  <Select
+                    name="companyId"
+                    value={formData.companyId || ''}
+                    label="Company"
+                    onChange={handleChange}
+                    disabled={companiesLoading}
+                  >
+                    <MenuItem value="">
+                      <em>Select a company</em>
+                    </MenuItem>
+                    {companies.map((company) => (
+                      <MenuItem key={company.companyId} value={company.companyId}>
+                        {company.companyName} ({company.companyId})
+                      </MenuItem>
+                    ))}
+                  </Select>
+                  {companiesLoading && (
+                    <FormHelperText>Loading companies...</FormHelperText>
+                  )}
+                  {companiesError && !companiesLoading && (
+                    <FormHelperText error>{companiesError}</FormHelperText>
+                  )}
+                  {!companiesLoading && !companiesError && !formData.companyId && (
+                    <FormHelperText>Select the company for this production site</FormHelperText>
+                  )}
+                </FormControl>
+              </Grid>
+
               <Grid item xs={12}>
                 <TextField
                   fullWidth name="name" label="Site Name"
@@ -432,7 +497,9 @@ ProductionSiteForm.propTypes = {
   onSubmit: PropTypes.func.isRequired,
   onCancel: PropTypes.func.isRequired,
   loading: PropTypes.bool,
-  site: PropTypes.object
+  site: PropTypes.object,
+  companyId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+  user: PropTypes.object
 };
 
 export default ProductionSiteForm;

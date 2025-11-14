@@ -9,7 +9,8 @@ const ConsumptionSiteDialog = ({
   onSubmit, 
   initialData = null, 
   loading = false,
-  permissions = {}
+  permissions = {},
+  user
 }) => {
   const isEditing = !!initialData;
 
@@ -45,6 +46,8 @@ const ConsumptionSiteDialog = ({
             loading={loading}
             permissions={permissions}
             isEditing={isEditing}
+            companyId={user?.companyId}
+            user={user}
           />
         </Box>
       </DialogContent>
@@ -58,7 +61,8 @@ ConsumptionSiteDialog.propTypes = {
   onSubmit: PropTypes.func.isRequired,
   initialData: PropTypes.object,
   loading: PropTypes.bool,
-  permissions: PropTypes.object
+  permissions: PropTypes.object,
+  user: PropTypes.object
 };
 
 export default ConsumptionSiteDialog;

@@ -25,6 +25,7 @@ const Report = lazy(() => import("./components/Reports/Report"));
 const Invoice = lazy(() => import("./components/invoice/InvoicePage"));
 const GraphicalReport = lazy(() => import("./components/GraphicalReport/GraphicalReport"));
 const ConsumptionAllocation = lazy(() => import("./components/ConsumptionAllocation/ConsumptionAllocation"));
+const CompanyPage = lazy(() => import("./components/Company/CompanyPage"));
 // Loading component for suspense fallback
 const LoadingFallback = () => (
   <Box display="flex" justifyContent="center" alignItems="center" minHeight="100vh">
@@ -58,6 +59,11 @@ const AppRoutes = () => {
           <Route path="/consumption" element={
             <PrivateRoute requiredResource="consumption" requiredAction="READ">
               <Consumption />
+            </PrivateRoute>
+          } />
+          <Route path="/companies" element={
+            <PrivateRoute requiredResource="company" requiredAction="READ">
+              <CompanyPage />
             </PrivateRoute>
           } />
           <Route path="/consumption/:companyId/:consumptionSiteId" element={

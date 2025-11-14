@@ -1,6 +1,145 @@
 const companyDAL = require('./companyDAL');
 const logger = require('../utils/logger');
 
+// Create a new company
+exports.createCompany = async (req, res) => {
+    try {
+        const companyData = req.body || {};
+
+        // Basic required-field validation
+        if (!companyData.companyName || !companyData.type || !companyData.address) {
+            return res.status(400).json({
+                success: false,
+                message: 'companyName, type and address are required'
+            });
+        }
+
+        // Optional simple validation
+        if (!['generator', 'shareholder'].includes(companyData.type)) {
+            return res.status(400).json({
+                success: false,
+                message: 'type must be either "generator" or "shareholder"'
+            });
+        }
+
+        if (companyData.emailId && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(companyData.emailId)) {
+            return res.status(400).json({
+                success: false,
+                message: 'emailId is not a valid email address'
+            });
+        }
+
+        logger.info('Creating company with data:', companyData);
+
+        const created = await companyDAL.createCompany(companyData);
+
+        return res.status(201).json({
+            success: true,
+            data: created
+        });
+    } catch (error) {
+        logger.error('Controller error in createCompany:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error creating company',
+            error: error.message
+        });
+    }
+};
+
+// Update an existing company
+exports.updateCompany = async (req, res) => {
+  try {
+    const { companyId } = req.params;
+    const updates = req.body || {};
+
+    if (!companyId) {
+      return res.status(400).json({
+        success: false,
+        message: 'companyId is required in the path'
+      });
+    }
+
+    // Reject empty update payload
+    if (!updates || Object.keys(updates).length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'At least one field must be provided to update'
+      });
+    }
+
+    // Disallow attempting to change key fields from the API layer
+    if (updates.companyId || updates.companyName) {
+      return res.status(400).json({
+        success: false,
+        message: 'companyId and companyName cannot be updated'
+      });
+    }
+
+    if (updates.type && !['generator', 'shareholder'].includes(updates.type)) {
+      return res.status(400).json({
+        success: false,
+        message: 'type must be either "generator" or "shareholder"'
+      });
+    }
+
+    if (updates.emailId && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(updates.emailId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'emailId is not a valid email address'
+      });
+    }
+
+    const updated = await companyDAL.updateCompany(companyId, updates);
+
+    if (!updated) {
+      return res.status(404).json({
+        success: false,
+        message: 'Company not found'
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: updated
+    });
+  } catch (error) {
+    logger.error('Controller error in updateCompany:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Error updating company',
+      error: error.message
+    });
+  }
+};
+
+// Delete company by ID
+exports.deleteCompany = async (req, res) => {
+  try {
+    const { companyId } = req.params;
+
+    const deleted = await companyDAL.deleteCompany(companyId);
+
+    if (!deleted) {
+      return res.status(404).json({
+        success: false,
+        message: 'Company not found'
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Company deleted successfully'
+    });
+  } catch (error) {
+    logger.error('Controller error in deleteCompany:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error deleting company',
+      error: error.message
+    });
+  }
+};
 // Get all companies
 exports.getAllCompanies = async (req, res) => {
     try {

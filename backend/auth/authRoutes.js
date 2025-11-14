@@ -48,51 +48,56 @@ router.post('/login', async (req, res) => {
             });
         }
 
-        // Determine company ID from metadata
-        let companyId = user.metadata?.companyId;
-        if (!companyId && user.metadata?.accessibleSites?.productionSites?.L?.length > 0) {
-            // Extract company ID from the first production site ID (format: companyId_siteId)
-            const firstSiteId = user.metadata.accessibleSites.productionSites.L[0].S;
-            companyId = parseInt(firstSiteId.split('_')[0], 10);
+        // Get company ID from accessibleSites or extract from site ID
+        let companyId = user.metadata?.accessibleSites?.companyId ||
+                      (user.metadata?.accessibleSites?.productionSites?.L?.[0]?.S?.split('_')?.[0]) ||
+                      user.companyId;
+
+        // Convert to number if it's a string
+        companyId = companyId ? parseInt(companyId, 10) : null;
+
+        // Get all accessible company IDs if available
+        let accessibleCompanyIds = [];
+        if (user.metadata?.accessibleSites?.companyIds?.length) {
+            accessibleCompanyIds = user.metadata.accessibleSites.companyIds;
+        } else if (companyId) {
+            accessibleCompanyIds = [companyId];
         }
 
+        // Fallback to department-based company ID if still not found
         if (!companyId && user.metadata?.department) {
-            // Fallback: Extract from department if possible
             if (user.metadata.department.toLowerCase().includes('smr')) {
                 companyId = 5; // SMR Energy's company ID
+                accessibleCompanyIds = [5];
             } else if (user.metadata.department.toLowerCase().includes('strio')) {
                 companyId = 1; // STRIO's company ID
+                accessibleCompanyIds = [1];
             }
         }
-
-        // Ensure we have a valid companyId
+        
+        // Final fallback: default to company 1 for testing
         if (!companyId) {
-            logger.warn(`No companyId found for user: ${username}`);
-            return res.status(400).json({
-                success: false,
-                message: 'User is not associated with any company. Please contact administrator.'
-            });
+            logger.warn(`No companyId found for user ${username}, defaulting to company 1`);
+            companyId = 1;
+            accessibleCompanyIds = [1];
         }
+
+        logger.info(`Login successful - user: ${username}, companyId: ${companyId}`);
 
         // Create JWT token with role permissions, accessible sites, and company ID
-        const tokenPayload = {
-            username,
-            roleId: role.roleId,
-            roleName: role.roleName,
-            permissions: role.permissions,
-            accessibleSites: user.metadata?.accessibleSites || {
-                productionSites: { L: [] },
-                consumptionSites: { L: [] }
-            },
-            companyId: companyId,
-            metadata: {
-                department: user.metadata?.department || 'General',
-                accessLevel: role.metadata?.accessLevel || 'Basic'
-            }
-        };
-
         const token = jwt.sign(
-            tokenPayload,
+            {
+                username,
+                roleId: role.roleId,
+                roleName: role.roleName,
+                permissions: role.permissions,
+                accessibleSites: user.metadata?.accessibleSites || {
+                    productionSites: { L: [] },
+                    consumptionSites: { L: [] }
+                },
+                companyId: companyId || null,
+                companyIds: accessibleCompanyIds.length ? accessibleCompanyIds : (companyId ? [companyId] : [])
+            },
             process.env.JWT_SECRET || 'your-secret-key',
             { expiresIn: '24h' }
         );
@@ -100,38 +105,30 @@ router.post('/login', async (req, res) => {
         // Update last login time
         await authDal.updateLastLogin(username);
 
-        logger.info(`Successful login for user: ${username} (Company: ${companyId})`);
-        
-        // Prepare user data for response
-        const userResponse = {
-            username,
-            email: user.email,
-            roleId: role.roleId,
-            roleName: role.roleName,
-            permissions: role.permissions,
-            companyId: companyId,
-            metadata: {
-                department: user.metadata?.department || 'General',
-                accessLevel: role.metadata?.accessLevel || 'Basic',
-                companyId: companyId,
-                accessibleSites: user.metadata?.accessibleSites || {
-                    productionSites: { L: [] },
-                    consumptionSites: { L: [] }
-                }
-            }
-        };
-
-        // Log the response for debugging
-        logger.debug('Login response:', {
-            username,
-            companyId: userResponse.companyId,
-            hasAccessibleSites: !!userResponse.metadata.accessibleSites
-        });
-
-        res.json({
+        logger.info(`Successful login for user: ${username}`);        res.json({
             success: true,
             token,
-            user: userResponse
+            user: {
+                username,
+                email: user.email,
+                roleId: role.roleId,
+                roleName: role.roleName,
+                permissions: role.permissions,
+                companyId, // Primary company ID
+                companyIds: accessibleCompanyIds, // All accessible company IDs
+                metadata: {
+                    ...user.metadata, // Spread existing metadata
+                    department: user.metadata?.department || 'General',
+                    accessLevel: role.metadata?.accessLevel || 'Basic',
+                    accessibleSites: {
+                        companyId, // Include companyId in accessibleSites for backward compatibility
+                        ...user.metadata?.accessibleSites, // Spread existing accessibleSites
+                        productionSites: user.metadata?.accessibleSites?.productionSites || { L: [] },
+                        consumptionSites: user.metadata?.accessibleSites?.consumptionSites || { L: [] },
+                        companyIds: accessibleCompanyIds // Include companyIds for easy access
+                    }
+                }
+            }
         });    } catch (error) {
         logger.error('Login error:', error);
         let statusCode = 500;

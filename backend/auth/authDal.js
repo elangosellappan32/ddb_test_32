@@ -37,76 +37,16 @@ class AuthDAL {
             await this.validateTables();
             const command = new GetCommand({
                 TableName: this.userTable,
-                Key: { username },
-                // Use ProjectionExpression with ExpressionAttributeNames for reserved keywords
-                ProjectionExpression: '#un, #pwd, #role, email, metadata, companyId, accessibleSites, userId, #status, createdAt, updatedAt',
-                ExpressionAttributeNames: {
-                    '#status': 'status',
-                    '#un': 'username',
-                    '#pwd': 'password',
-                    '#role': 'role'
-                }
+                Key: { username }
             });
 
             const result = await this.docClient.send(command);
             if (!result.Item) {
-                logger.warn(`User not found: ${username}`);
                 return null;
             }
 
-            const user = result.Item;
-            logger.debug(`Retrieved user data for ${username}:`, {
-                hasMetadata: !!user.metadata,
-                hasCompanyId: !!user.companyId,
-                hasAccessibleSites: !!user.accessibleSites
-            });
-
-            // Ensure metadata exists
-            if (!user.metadata) {
-                user.metadata = {};
-            }
-
-            // Extract companyId from available sources with priority:
-            // 1. Root level companyId
-            // 2. metadata.companyId
-            // 3. First production site in accessibleSites
-            // 4. First consumption site in accessibleSites
-            if (!user.companyId) {
-                // Check metadata first
-                if (user.metadata.companyId) {
-                    user.companyId = user.metadata.companyId;
-                    logger.debug(`Using companyId from metadata: ${user.companyId}`);
-                } 
-                // Then check accessibleSites
-                else if (user.accessibleSites) {
-                    // Check production sites first
-                    if (user.accessibleSites.productionSites?.L?.length > 0) {
-                        const firstSite = user.accessibleSites.productionSites.L[0]?.S;
-                        if (firstSite && firstSite.includes('_')) {
-                            user.companyId = firstSite.split('_')[0];
-                            logger.debug(`Extracted companyId from productionSites: ${user.companyId}`);
-                        }
-                    }
-                    
-                    // If still no companyId, check consumption sites
-                    if (!user.companyId && user.accessibleSites.consumptionSites?.L?.length > 0) {
-                        const firstSite = user.accessibleSites.consumptionSites.L[0]?.S;
-                        if (firstSite && firstSite.includes('_')) {
-                            user.companyId = firstSite.split('_')[0];
-                            logger.debug(`Extracted companyId from consumptionSites: ${user.companyId}`);
-                        }
-                    }
-                }
-                
-                // If we found a companyId, ensure it's stored in metadata for future use
-                if (user.companyId && !user.metadata.companyId) {
-                    user.metadata.companyId = user.companyId;
-                    // Optionally update the user record to persist this
-                    await this.updateUserMetadata(username, user.metadata);
-                }
-            }
-
             // Map the role field to roleId for consistency
+            const user = result.Item;
             if (user.role && !user.roleId) {
                 // Convert role to roleId based on our schema
                 user.roleId = user.role === 'admin' ? 'ROLE-1' : 
@@ -439,6 +379,50 @@ class AuthDAL {
         }
     }
 
+    /**
+     * Extract company ID from user metadata
+     * Handles multiple formats: direct companyId, metadata structure, and DynamoDB L/S format
+     */
+    extractCompanyIdFromUser(user) {
+        if (!user) return null;
+
+        // Check direct companyId field (if it exists)
+        if (user.companyId) {
+            return user.companyId;
+        }
+
+        // Check metadata.companyId
+        if (user.metadata?.companyId) {
+            return user.metadata.companyId;
+        }
+
+        // Check metadata.accessibleSites.company (DynamoDB format)
+        if (user.metadata?.accessibleSites?.company?.L?.length > 0) {
+            const companyId = user.metadata.accessibleSites.company.L[0]?.S;
+            if (companyId) {
+                return parseInt(companyId, 10);
+            }
+        }
+
+        // Check metadata.accessibleSites.companyIds
+        if (user.metadata?.accessibleSites?.companyIds?.length > 0) {
+            return user.metadata.accessibleSites.companyIds[0];
+        }
+
+        // Check production sites (format: companyId_siteId)
+        if (user.metadata?.accessibleSites?.productionSites?.L?.length > 0) {
+            const firstSiteId = user.metadata.accessibleSites.productionSites.L[0]?.S;
+            if (firstSiteId) {
+                const companyId = parseInt(firstSiteId.split('_')[0], 10);
+                if (!isNaN(companyId)) {
+                    return companyId;
+                }
+            }
+        }
+
+        logger.warn(`[AuthDAL] Could not extract companyId from user: ${user.username}`);
+        return null;
+    }
 
 }
 

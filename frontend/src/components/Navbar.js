@@ -30,7 +30,8 @@ import {
   AssignmentTurnedIn as AssignmentTurnedInIcon,
   BarChart as BarChartIcon,
   Receipt as ReceiptIcon,
-  SyncAlt as SyncAltIcon
+  SyncAlt as SyncAltIcon,
+  Apartment as CompanyIcon
 } from '@mui/icons-material';
 import { useAuth } from '../context/AuthContext';
 import { useNavigation } from '../context/NavigationContext';
@@ -62,6 +63,12 @@ const Navbar = () => {
       label: 'Dashboard', 
       path: '/',
       resource: 'dashboard'
+    },
+    {
+      icon: <CompanyIcon />,
+      label: 'Companies',
+      path: '/companies',
+      resource: 'company'
     },
     { 
       icon: <FactoryIcon />, 

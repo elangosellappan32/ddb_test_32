@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useContext } from 'react';
+import { useAuth } from '../../context/AuthContext';
 import {
   Dialog,
   DialogTitle,
@@ -19,15 +20,25 @@ import {
   TextField,
   IconButton,
   Tooltip,
-  Grid
+  Grid,
+  MenuItem,
+  Select,
+  FormControl,
+  InputLabel
 } from '@mui/material';
-import { Save as SaveIcon, Close as CloseIcon, Edit as EditIcon } from '@mui/icons-material';
+import { Save as SaveIcon, Close as CloseIcon, Edit as EditIcon, Refresh as RefreshIcon } from '@mui/icons-material';
 import { useSnackbar } from 'notistack';
 import api from '../../services/api';
 
 const LOCAL_STORAGE_KEY = 'savedAllocationPercentages';
 
-const AllocationPercentageDialog = ({ open, onClose, onSave, companyId }) => {
+const AllocationPercentageDialog = ({ open, onClose, onSave }) => {
+  const { user, hasSiteAccess } = useAuth();
+  
+  // State for company selection
+  const [selectedCompanyId, setSelectedCompanyId] = useState('');
+  const [companies, setCompanies] = useState([]);
+  const [accessibleCompanies, setAccessibleCompanies] = useState([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState('');
   const [allocations, setAllocations] = useState([]);
@@ -50,6 +61,66 @@ const AllocationPercentageDialog = ({ open, onClose, onSave, companyId }) => {
     }
   }, []);
 
+  // Fetch companies where user has production site access
+  const fetchCompanies = useCallback(async () => {
+    try {
+      console.log('Current user:', user);
+      
+      // Get user's accessible production sites
+      const productionSites = user?.metadata?.accessibleSites?.productionSites?.L || [];
+      console.log('Raw production sites:', productionSites);
+      
+      // Extract unique company IDs from accessible production sites
+      const companyIds = [...new Set(
+        productionSites
+          .map(site => {
+            // Handle different site ID formats
+            const siteId = site.S || site?.M?.S?.S || site;
+            console.log('Processing site:', site, 'Extracted ID:', siteId);
+            const companyId = siteId ? siteId.split('_')[0] : null;
+            // Convert to number if it's a numeric string to match API response
+            return companyId ? (isNaN(companyId) ? companyId : Number(companyId)) : null;
+          })
+          .filter(Boolean) // Remove any null/undefined values
+      )];
+
+      console.log('Extracted company IDs:', companyIds);
+
+      if (companyIds.length === 0) {
+        console.warn('No company IDs found in production sites');
+        setAccessibleCompanies([]);
+        enqueueSnackbar('No production sites accessible', { variant: 'info' });
+        return;
+      }
+
+      // Fetch details of accessible companies
+      const companiesResponse = await api.get('/company');
+      console.log('Companies API response:', companiesResponse.data);
+      
+      if (companiesResponse.data && Array.isArray(companiesResponse.data.data)) {
+        // Filter companies based on the extracted company IDs
+        const accessibleCompanies = companiesResponse.data.data.filter(
+          company => companyIds.includes(company.companyId)
+        );
+
+        console.log('Filtered accessible companies:', accessibleCompanies);
+        setCompanies(accessibleCompanies);
+        setAccessibleCompanies(accessibleCompanies);
+        
+        // Auto-select first accessible company if none selected
+        if (accessibleCompanies.length > 0 && !selectedCompanyId) {
+          setSelectedCompanyId(accessibleCompanies[0].companyId);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching accessible companies:', error);
+      enqueueSnackbar(
+        error.response?.data?.message || 'Failed to load accessible companies', 
+        { variant: 'error' }
+      );
+    }
+  }, [selectedCompanyId, enqueueSnackbar, user]);
+
   // Save allocations to localStorage
   const saveAllocationsToLocal = (allocations) => {
     try {
@@ -60,6 +131,8 @@ const AllocationPercentageDialog = ({ open, onClose, onSave, companyId }) => {
   };
 
   const loadData = useCallback(async () => {
+    if (!selectedCompanyId) return;
+    
     try {
       setIsProcessing(true);
       setError('');
@@ -67,8 +140,8 @@ const AllocationPercentageDialog = ({ open, onClose, onSave, companyId }) => {
       // Load saved allocations from local storage
       const savedAllocations = loadSavedAllocations();
       
-      // Fetch allocation data from the backend
-      const response = await api.get(`/captive/allocations/${companyId}`);
+      // Fetch allocation data from the backend with the selected company ID
+      const response = await api.get(`/captive/allocations/${selectedCompanyId}`);
       const allocationData = response.data.data;
       
       if (!allocationData || !allocationData.allocations) {
@@ -171,11 +244,14 @@ const AllocationPercentageDialog = ({ open, onClose, onSave, companyId }) => {
     } finally {
       setIsProcessing(false);
     }
-  }, [companyId, enqueueSnackbar]);
+  }, [selectedCompanyId, enqueueSnackbar]);
 
   useEffect(() => {
     if (open) {
-      loadData();
+      fetchCompanies();
+      if (selectedCompanyId) {
+        loadData();
+      }
     } else {
       setAllocations([]);
       setGenerators([]);
@@ -184,7 +260,7 @@ const AllocationPercentageDialog = ({ open, onClose, onSave, companyId }) => {
       setEditingCell(null);
       setLocalAllocations({});
     }
-  }, [open, loadData]);
+  }, [open, selectedCompanyId, fetchCompanies, loadData]);
 
   const handleEditClick = (generatorId, shareholderId, currentValue) => {
     const key = `${generatorId}-${shareholderId}`;
@@ -318,24 +394,52 @@ const AllocationPercentageDialog = ({ open, onClose, onSave, companyId }) => {
     return !!lockedAllocations[key];
   };
 
+  const handleCompanyChange = (event) => {
+    setSelectedCompanyId(event.target.value);
+  };
+
   return (
     <Dialog open={open} onClose={onClose} maxWidth="lg" fullWidth>
       <DialogTitle>
         <Box display="flex" justifyContent="space-between" alignItems="center">
-          <Box>
-            <Typography variant="h6">Allocation Management</Typography>
-            <Typography variant="caption" color="textSecondary">
-              Changes are saved locally in your browser
-            </Typography>
+          <Box display="flex" alignItems="center" gap={2}>
+            <Typography variant="h6">Allocation Percentages</Typography>
+            <FormControl variant="outlined" size="small" sx={{ minWidth: 200, ml: 2 }}>
+              <InputLabel id="company-select-label">Select Company</InputLabel>
+              <Select
+                labelId="company-select-label"
+                value={selectedCompanyId}
+                onChange={handleCompanyChange}
+                label="Select Company"
+                disabled={accessibleCompanies.length === 0}
+              >
+                {accessibleCompanies.length > 0 ? (
+                  accessibleCompanies.map((company) => (
+                    <MenuItem key={company.companyId} value={company.companyId}>
+                      {company.companyName || `Company ${company.companyId}`}
+                    </MenuItem>
+                  ))
+                ) : (
+                  <MenuItem disabled>No companies available</MenuItem>
+                )}
+              </Select>
+            </FormControl>
+            <Tooltip title="Refresh Data">
+              <IconButton onClick={loadData} size="small" disabled={isProcessing}>
+                <RefreshIcon />
+              </IconButton>
+            </Tooltip>
           </Box>
-          <IconButton onClick={onClose} disabled={isProcessing}>
+          <IconButton onClick={onClose} size="small">
             <CloseIcon />
           </IconButton>
         </Box>
       </DialogTitle>
 
-      <DialogContent dividers>
-        {error ? (
+      <DialogContent>
+        {!selectedCompanyId ? (
+          <Alert severity="info">Please select a company to view allocations</Alert>
+        ) : error ? (
           <Alert severity="error" sx={{ mb: 2 }}>
             {error}
           </Alert>

@@ -8,25 +8,17 @@ class AuthController {
     }
 
     generateTokens(userData) {
-        // Extract companyId from user data or metadata
-        const companyId = userData.companyId || 
-                         userData.metadata?.companyId || 
-                         (userData.accessibleSites?.productionSites?.L?.[0]?.S?.split('_')[0]) ||
-                         null;
-
-        const tokenPayload = {
-            userId: userData.userId || userData.username,
-            username: userData.username,
-            role: userData.role,
-            permissions: userData.permissions,
-            emailId: userData.email,
-            companyId: companyId, // Include companyId in the token
-            metadata: userData.metadata || {},
-            tokenType: 'access'
-        };
-
         const accessToken = jwt.sign(
-            tokenPayload,
+            {
+                userId: userData.userId || userData.username, // Use userId if available, fallback to username
+                username: userData.username,
+                role: userData.role,
+                permissions: userData.permissions,
+                emailId: userData.email,
+                companyId: userData.companyId, // Include company ID in the token
+                metadata: userData.metadata, // Include full metadata for additional company information
+                tokenType: 'access'
+            },
             process.env.JWT_SECRET || 'your-secret-key',
             { expiresIn: '1h' }
         );
@@ -34,21 +26,13 @@ class AuthController {
         const refreshToken = jwt.sign(
             {
                 username: userData.username,
-                companyId: companyId, // Include companyId in refresh token as well
                 tokenType: 'refresh'
             },
             process.env.JWT_REFRESH_SECRET || 'your-refresh-secret-key',
             { expiresIn: '7d' }
         );
 
-        return { 
-            accessToken, 
-            refreshToken,
-            user: {
-                ...userData,
-                companyId // Include companyId in the user object
-            }
-        };
+        return { accessToken, refreshToken };
     }
 
     async login(username, password) {

@@ -176,6 +176,8 @@ const ProductionSiteDialog = ({
               loading={loading || externalLoading || updatingAccess}
               site={initialData?.productionSiteId ? initialData : null}
               readOnly={!permissions?.update && !permissions?.create}
+              companyId={user?.companyId}
+              user={user}
             />
           )}
         </Box>
