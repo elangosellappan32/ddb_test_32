@@ -1,69 +1,133 @@
-// Allocation Calculator
-// Allocates solar first, then wind, then banking units (for windmills with banking enabled)
-// Follows all period, banking, and lapse rules
+// Energy Allocation Service
+// Handles allocation of energy from production to consumption sites
+// with support for peak/off-peak periods, banking, and lapse tracking
 
+// Constants
 const PEAK_PERIODS = ['c2', 'c3'];
 const NON_PEAK_PERIODS = ['c1', 'c4', 'c5'];
 const ALL_PERIODS = [...NON_PEAK_PERIODS, ...PEAK_PERIODS];
 
 /**
- * Advanced Allocation Calculator
- * Allocates units from ProductionUnitsTable and BankingUnitsTable to ConsumptionUnitsTable based on percentage and period rules.
- * - Peak units (c2, c3) can be used for non-peak (c1, c4, c5), but not vice versa.
- * - Non-peak units cannot be shared to other non-peak or peak periods (e.g., c1→c3/c4 not allowed, c1→c1 allowed).
- * - Solar cannot bank; only windmills with banking enabled can bank unused units; others lapse.
- * - Allocation is driven by consumption unit percentage.
- * - Allocation is done: Solar (non-banking) → Wind (non-banking) → Banking wind → Banking units.
- * - No units are double-counted. All data is suitable for Allocation Details Table.
- *
- * @param {Object[]} productionUnits
- * @param {Object[]} consumptionUnits
- * @param {Object[]} bankingUnits
- * @returns {Object} { allocations, bankingAllocations, lapseAllocations }
+ * Checks if allocation from source period to target period is allowed
+ * @param {string} sourcePeriod - The source period (c1-c5)
+ * @param {string} targetPeriod - The target period (c1-c5)
+ * @returns {boolean} - True if allocation is allowed
  */
-function calculateAllocations({ productionUnits, consumptionUnits, bankingUnits }) {
-  const PEAK_PERIODS = ['c2', 'c3'];
-  const NON_PEAK_PERIODS = ['c1', 'c4', 'c5'];
-  const ALL_PERIODS = [...NON_PEAK_PERIODS, ...PEAK_PERIODS];
+function isAllocationAllowed(sourcePeriod, targetPeriod) {
+  // Peak units can be used for any period
+  if (PEAK_PERIODS.includes(sourcePeriod)) return true;
+  // Non-peak units can only be used for the same period
+  return sourcePeriod === targetPeriod;
+}
 
-  // Deep copy units with remaining
-  const prodUnits = (productionUnits || []).map(u => ({
-    productionSiteId: u.productionSiteId || u.id,
-    productionSite: u.productionSite || u.siteName,
-    siteName: u.siteName,
-    month: u.month,
-    type: (u.type || '').toUpperCase(),
-    // Determine banking support from 'banking' flag
-    bankingEnabled: Number(u.banking) === 1,
-    remaining: { c1: +u.c1 || 0, c2: +u.c2 || 0, c3: +u.c3 || 0, c4: +u.c4 || 0, c5: +u.c5 || 0 }
+/**
+ * Deep clones an object with unit values
+ * @param {Object} obj - Object with c1-c5 properties
+ * @returns {Object} Deep cloned object
+ */
+function cloneUnits(obj) {
+  return JSON.parse(JSON.stringify({
+    c1: +obj.c1 || 0,
+    c2: +obj.c2 || 0,
+    c3: +obj.c3 || 0,
+    c4: +obj.c4 || 0,
+    c5: +obj.c5 || 0
   }));
-  const consUnits = (consumptionUnits || []).map(u => ({
-    consumptionSiteId: u.consumptionSiteId || u.id,
-    consumptionSite: u.consumptionSite || u.siteName,
-    siteName: u.siteName,
-    month: u.month,
-    remaining: { c1: +u.c1 || 0, c2: +u.c2 || 0, c3: +u.c3 || 0, c4: +u.c4 || 0, c5: +u.c5 || 0 }
-  }));
-  const bankUnits = (bankingUnits || []).map(u => ({
-    productionSiteId: u.productionSiteId || u.id,
-    productionSite: u.productionSite || u.siteName,
-    siteName: u.siteName,
-    month: u.month,
-    remaining: { c1: +u.c1 || 0, c2: +u.c2 || 0, c3: +u.c3 || 0, c4: +u.c4 || 0, c5: +u.c5 || 0 }
+}
+
+/**
+ * Advanced Energy Allocation Calculator
+ * 
+ * Allocates energy from production to consumption sites following these rules:
+ * 1. Peak units (c2, c3) can be used for any period, non-peak only for matching periods
+ * 2. Allocation order: Solar → Wind (non-banking) → Wind (banking) → Banked units
+ * 3. Only wind farms with banking enabled can bank unused units
+ * 4. Solar and non-banking wind farms have their unused units lapsed
+ * 
+ * @param {Object} params - Input parameters
+ * @param {Array} params.productionUnits - Array of production units
+ * @param {Array} params.consumptionUnits - Array of consumption units
+ * @param {Array} params.bankingUnits - Array of banked units from previous periods
+ * @returns {Object} Allocation results including allocations, banking, and lapsed units
+ */
+function calculateAllocations({ productionUnits = [], consumptionUnits = [], bankingUnits = [] }) {
+  console.log('[calculateAllocations] Starting allocation process');
+  
+  // Ensure all production units have proper initialization
+  productionUnits = productionUnits.map(unit => ({
+    ...unit,
+    type: (unit.type || 'solar').toUpperCase(),
+    unitBankingEnabled: unit.unitBankingEnabled ?? (unit.type?.toUpperCase() === 'WIND' && Number(unit.banking) === 1),
+    productionSiteId: unit.productionSiteId || unit.id,
+    productionSite: unit.productionSite || unit.siteName,
+    siteName: unit.siteName || `Production-${unit.id}`,
+    month: unit.month
   }));
 
-  // Classify production sources
+  // Log initial state
+  console.log(`[calculateAllocations] Processing ${productionUnits.length} production units, ${consumptionUnits.length} consumption units, ${bankingUnits.length} banking units`);
+  
+  // Prepare data structures
+  const allocations = [];
+  const newBankingAllocations = [];
+  const lapsedAllocations = [];
+
+  // Process input units
+  const processProductionUnit = (unit) => {
+    const processed = {
+      ...unit,
+      productionSiteId: unit.productionSiteId || unit.id,
+      productionSite: unit.productionSite || unit.siteName,
+      siteName: unit.siteName,
+      type: (unit.type || '').toUpperCase(),
+      bankingEnabled: unit.unitBankingEnabled ?? (unit.type?.toUpperCase() === 'WIND' && Number(unit.banking) === 1),
+      remaining: cloneUnits(unit)
+    };
+    
+    console.log(`[processProductionUnit] Processed unit ${processed.productionSiteId} (${processed.type}):`, 
+      `banking=${processed.bankingEnabled}`, 
+      `remaining=`, processed.remaining);
+      
+    return processed;
+  };
+
+  const processConsumptionUnit = (unit) => ({
+    ...unit,
+    consumptionSiteId: unit.consumptionSiteId || unit.id,
+    consumptionSite: unit.consumptionSite || unit.siteName,
+    remaining: cloneUnits(unit)
+  });
+
+  // Process all units with enhanced logging
+  console.log('[calculateAllocations] Processing production units');
+  const prodUnits = productionUnits.map(processProductionUnit);
+  
+  console.log('[calculateAllocations] Processing consumption units');
+  const consUnits = consumptionUnits.map(unit => {
+    const processed = processConsumptionUnit(unit);
+    console.log(`[processConsumptionUnit] Processed consumption unit ${processed.consumptionSiteId}:`, 
+      `remaining=`, processed.remaining);
+    return processed;
+  });
+  
+  console.log('[calculateAllocations] Processing banked units');
+  const bankUnits = bankingUnits.map(u => {
+    const processed = {
+      ...processProductionUnit(u),
+      isBanked: true
+    };
+    console.log(`[processBankedUnit] Processed banked unit ${processed.productionSiteId}:`, 
+      `remaining=`, processed.remaining);
+    return processed;
+  });
+
+  // Categorize production units
   const solarUnits = prodUnits.filter(u => u.type === 'SOLAR');
   const windUnits = prodUnits.filter(u => u.type === 'WIND' && !u.bankingEnabled);
   const bankingWindUnits = prodUnits.filter(u => u.type === 'WIND' && u.bankingEnabled);
 
-  const allocations = [];
-  const bankingAllocations = [];
-  const lapseAllocations = [];
-
-  // Sort consumption sites by allocation priority (first selected site first)
+  // Sort consumption sites by priority (first selected site first, then by month and name)
   const sortedConsUnits = [...consUnits].sort((a, b) => {
-    // If both have month, compare months first
     if (a.month && b.month) {
       const monthA = parseInt(a.month.substring(0, 2));
       const monthB = parseInt(b.month.substring(0, 2));
@@ -72,130 +136,223 @@ function calculateAllocations({ productionUnits, consumptionUnits, bankingUnits 
       if (yearA !== yearB) return yearA - yearB;
       if (monthA !== monthB) return monthA - monthB;
     }
-    // Otherwise, sort by site name (first selected site first)
-    return a.siteName.localeCompare(b.siteName);
+    return (a.siteName || '').localeCompare(b.siteName || '');
   });
 
-  // Allocate to consumption demands with priority
-  [solarUnits, windUnits, bankingWindUnits, bankUnits].forEach(group => {
-    group.forEach(prod => {
-      // First allocate to the first selected site
-      const firstSite = sortedConsUnits[0];
-      if (firstSite && (!prod.month || prod.month === firstSite.month)) {
-        const allocation = {
-          productionSiteId: prod.productionSiteId,
-          productionSite: prod.productionSite,
-          siteType: prod.type,
-          siteName: prod.siteName,
-          consumptionSiteId: firstSite.consumptionSiteId,
-          consumptionSite: firstSite.consumptionSite,
-          month: firstSite.month,
-          allocated: {}
-        };
-        let anyAlloc = false;
-        ALL_PERIODS.forEach(period => {
-          let alloc = 0;
-          const demand = firstSite.remaining[period];
-          if (demand > 0) {
-            if (NON_PEAK_PERIODS.includes(period)) {
-              const same = Math.min(prod.remaining[period], demand);
-              alloc += same;
-              prod.remaining[period] -= same;
-              firstSite.remaining[period] -= same;
-              if (firstSite.remaining[period] > 0) {
-                PEAK_PERIODS.forEach(peak => {
-                  if (firstSite.remaining[period] <= 0) return;
-                  const palloc = Math.min(prod.remaining[peak], firstSite.remaining[period]);
-                  alloc += palloc;
-                  prod.remaining[peak] -= palloc;
-                  firstSite.remaining[period] -= palloc;
-                });
-              }
-            } else {
-              const same = Math.min(prod.remaining[period], demand);
-              alloc += same;
-              prod.remaining[period] -= same;
-              firstSite.remaining[period] -= same;
-            }
+  /**
+   * Allocates units from a production source to consumption sites
+   * @param {Object} source - Production source (solar, wind, or banked units)
+   * @param {string} sourceType - Type of source ('solar', 'wind', 'banked')
+   * @param {boolean} isBanking - Whether to bank unused units (for wind with banking)
+   */
+  const allocateFromSource = (source, sourceType, isBanking = false) => {
+    const allocation = {
+      productionSiteId: source.productionSiteId,
+      productionSite: source.productionSite,
+      siteType: source.type,
+      siteName: source.siteName,
+      month: source.month,
+      allocated: { c1: 0, c2: 0, c3: 0, c4: 0, c5: 0 }
+    };
+
+    // Track remaining capacity per period
+    const remaining = cloneUnits(source.remaining);
+    let hasAllocation = false;
+
+    // Try to allocate to each consumption site
+    for (const cons of sortedConsUnits) {
+      if (!cons.month || (source.month && cons.month !== source.month)) continue;
+
+      // Create allocation record for this consumption site
+      const siteAllocation = {
+        ...allocation,
+        consumptionSiteId: cons.consumptionSiteId,
+        consumptionSite: cons.consumptionSite,
+        allocated: { c1: 0, c2: 0, c3: 0, c4: 0, c5: 0 }
+      };
+
+      // Try to allocate for each period
+      for (const period of ALL_PERIODS) {
+        if (cons.remaining[period] <= 0) continue;
+
+        // Find available units in source that can be allocated to this period
+        for (const srcPeriod of ALL_PERIODS) {
+          if (remaining[srcPeriod] <= 0) continue;
+          if (!isAllocationAllowed(srcPeriod, period)) continue;
+
+          const allocAmount = Math.min(
+            remaining[srcPeriod],
+            cons.remaining[period]
+          );
+
+          if (allocAmount > 0) {
+            remaining[srcPeriod] -= allocAmount;
+            cons.remaining[period] -= allocAmount;
+            siteAllocation.allocated[period] += allocAmount;
+            hasAllocation = true;
           }
-          allocation.allocated[period] = alloc;
-          if (alloc > 0) anyAlloc = true;
-        });
-        if (anyAlloc) allocations.push(allocation);
+        }
       }
 
-      // Then allocate remaining units to other sites
-      sortedConsUnits.slice(1).forEach(cons => {
-        if (prod.month && cons.month && prod.month !== cons.month) return;
-        const allocation = {
-          productionSiteId: prod.productionSiteId,
-          productionSite: prod.productionSite,
-          siteType: prod.type,
-          siteName: prod.siteName,
-          consumptionSiteId: cons.consumptionSiteId,
-          consumptionSite: cons.consumptionSite,
-          month: cons.month,
-          allocated: {}
-        };
-        let anyAlloc = false;
-        ALL_PERIODS.forEach(period => {
-          let alloc = 0;
-          const demand = cons.remaining[period];
-          if (demand > 0) {
-            if (NON_PEAK_PERIODS.includes(period)) {
-              const same = Math.min(prod.remaining[period], demand);
-              alloc += same;
-              prod.remaining[period] -= same;
-              cons.remaining[period] -= same;
-              if (cons.remaining[period] > 0) {
-                PEAK_PERIODS.forEach(peak => {
-                  if (cons.remaining[period] <= 0) return;
-                  const palloc = Math.min(prod.remaining[peak], cons.remaining[period]);
-                  alloc += palloc;
-                  prod.remaining[peak] -= palloc;
-                  cons.remaining[period] -= palloc;
-                });
-              }
-            } else {
-              const same = Math.min(prod.remaining[period], demand);
-              alloc += same;
-              prod.remaining[period] -= same;
-              cons.remaining[period] -= same;
-            }
-          }
-          allocation.allocated[period] = alloc;
-          if (alloc > 0) anyAlloc = true;
+      // Add allocation if any units were allocated to this site
+      if (Object.values(siteAllocation.allocated).some(v => v > 0)) {
+        allocations.push(siteAllocation);
+      }
+    }
+
+    // Handle unused units (bank or lapse)
+    const unused = Object.entries(remaining).reduce((sum, [_, val]) => sum + val, 0);
+    if (unused > 0) {
+      if (isBanking) {
+        // Bank unused units
+        newBankingAllocations.push({
+          productionSiteId: source.productionSiteId,
+          productionSite: source.productionSite,
+          siteName: source.siteName,
+          month: source.month,
+          banked: remaining
         });
-        if (anyAlloc) allocations.push(allocation);
+      } else {
+        // Add to lapsed units
+        lapsedAllocations.push({
+          productionSiteId: source.productionSiteId,
+          productionSite: source.productionSite,
+          siteName: source.siteName,
+          month: source.month,
+          lapsed: remaining
+        });
+      }
+    }
+
+    return hasAllocation;
+  };
+
+  // Execute allocation in priority order
+  console.log('[calculateAllocations] Starting main allocation phase');
+  const allocationOrder = [
+    { sources: solarUnits, type: 'solar', bank: false },
+    { sources: windUnits, type: 'wind', bank: false },
+    { sources: bankingWindUnits, type: 'wind', bank: true },
+    { sources: bankUnits, type: 'banked', bank: false }
+  ];
+
+  for (const { sources, type, bank } of allocationOrder) {
+    console.log(`[calculateAllocations] Processing ${type} sources (banking: ${bank})`);
+    for (const source of sources) {
+      console.log(`[calculateAllocations] Allocating from ${source.type} source ${source.productionSiteId || 'banked'}`);
+      allocateFromSource(source, type, bank);
+    }
+  }
+
+  // Final allocation pass to handle any remaining consumption
+  const finalAllocationPass = () => {
+    console.log('[finalAllocationPass] Starting final allocation pass for remaining consumption');
+    
+    let totalRemainingConsumption = 0;
+    let totalRemainingProduction = 0;
+    
+    // Calculate total remaining consumption and production
+    sortedConsUnits.forEach(cons => {
+      ALL_PERIODS.forEach(period => {
+        totalRemainingConsumption += cons.remaining[period] || 0;
       });
     });
-  });
+    
+    // Get all remaining production from all sources
+    const allRemainingProduction = [
+      ...solarUnits,
+      ...windUnits,
+      ...bankingWindUnits
+    ].reduce((total, source) => {
+      ALL_PERIODS.forEach(period => {
+        total += source.remaining[period] || 0;
+      });
+      return total;
+    }, 0);
+    
+    console.log(`[finalAllocationPass] Remaining consumption: ${totalRemainingConsumption}, Remaining production: ${allRemainingProduction}`);
+    
+    // If there's remaining consumption and production, try to allocate it
+    if (totalRemainingConsumption > 0 && allRemainingProduction > 0) {
+      console.log('[finalAllocationPass] Attempting to allocate remaining production to remaining consumption');
+      
+      for (const cons of sortedConsUnits) {
+        for (const period of ALL_PERIODS) {
+          if (cons.remaining[period] <= 0) continue;
+          
+          // Try all sources
+          const sources = [...solarUnits, ...windUnits, ...bankingWindUnits];
+          for (const source of sources) {
+            for (const srcPeriod of ALL_PERIODS) {
+              if (source.remaining[srcPeriod] <= 0) continue;
+              
+              const allocAmount = Math.min(
+                source.remaining[srcPeriod],
+                cons.remaining[period]
+              );
+              
+              if (allocAmount > 0) {
+                source.remaining[srcPeriod] -= allocAmount;
+                cons.remaining[period] -= allocAmount;
+                
+                // Create or update allocation
+                const existingAlloc = allocations.find(a => 
+                  a.productionSiteId === source.productionSiteId &&
+                  a.consumptionSiteId === cons.consumptionSiteId
+                );
+                
+                if (existingAlloc) {
+                  existingAlloc.allocated[period] = (existingAlloc.allocated[period] || 0) + allocAmount;
+                } else {
+                  allocations.push({
+                    productionSiteId: source.productionSiteId,
+                    productionSite: source.productionSite,
+                    siteType: source.type,
+                    siteName: source.siteName,
+                    month: source.month,
+                    consumptionSiteId: cons.consumptionSiteId,
+                    consumptionSite: cons.consumptionSite,
+                    allocated: { [period]: allocAmount }
+                  });
+                }
+                
+                console.log(`[finalAllocationPass] Allocated ${allocAmount} from ${source.productionSiteId} (${srcPeriod}) to ${cons.consumptionSiteId} (${period})`);
+              }
+            }
+          }
+        }
+      }
+    }
+  };
+  
+  // Run the final allocation pass
+  finalAllocationPass();
 
-  // Handle leftover: banking then lapse
-  [...bankingWindUnits, ...bankUnits].forEach(prod => {
-    const total = ALL_PERIODS.reduce((s, p) => s + prod.remaining[p], 0);
-    if (total > 0) bankingAllocations.push({
-      productionSiteId: prod.productionSiteId,
-      productionSite: prod.productionSite,
-      siteType: prod.type,
-      siteName: prod.siteName,
-      month: prod.month,
-      allocated: { ...prod.remaining }
-    });
-  });
-  [...solarUnits, ...windUnits].forEach(prod => {
-    const total = ALL_PERIODS.reduce((s, p) => s + prod.remaining[p], 0);
-    if (total > 0) lapseAllocations.push({
-      productionSiteId: prod.productionSiteId,
-      productionSite: prod.productionSite,
-      siteType: prod.type,
-      siteName: prod.siteName,
-      month: prod.month,
-      allocated: { ...prod.remaining }
-    });
-  });
+  // Calculate final remaining consumption and production
+  const remainingConsumption = sortedConsUnits.reduce((total, cons) => {
+    return total + Object.values(cons.remaining || {}).reduce((sum, val) => sum + val, 0);
+  }, 0);
+  
+  const remainingProduction = [...solarUnits, ...windUnits, ...bankingWindUnits].reduce((total, source) => {
+    return total + Object.values(source.remaining || {}).reduce((sum, val) => sum + val, 0);
+  }, 0);
 
-  return { allocations, bankingAllocations, lapseAllocations };
+  // Log final summary
+  console.log('=== FINAL ALLOCATION SUMMARY ===');
+  console.log('Total allocations:', allocations.length);
+  console.log('Total banking allocations:', newBankingAllocations.length);
+  console.log('Total lapsed allocations:', lapsedAllocations.length);
+  console.log('Remaining consumption:', remainingConsumption);
+  console.log('Remaining production:', remainingProduction);
+  console.log('===============================');
+
+  return {
+    allocations,
+    bankingAllocations: newBankingAllocations,
+    lapseAllocations: lapsedAllocations,
+    remainingConsumption,
+    remainingProduction
+  };
 }
 
 module.exports = {

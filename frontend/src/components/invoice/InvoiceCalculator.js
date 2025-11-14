@@ -244,30 +244,47 @@ const useInvoiceCalculator = (billMonth, selectedSite, siteType, consumptionSite
       const importValue = Number(unitData.import || 0);
       const bankingUnits = Number(siteBankingData?.totalBanking || 0);
       const totalExport = Math.max(0, exportValue - importValue);
+      // Filter allocation records for the selected production site and month
       const allocationArray = Array.isArray(allocationData) ? allocationData :
         Array.isArray(allocationData?.data) ? allocationData.data : [];
-      const allocatedUnits = allocationArray.reduce((sum, a) =>
-        sum + Object.values(a.allocated || {}).reduce((s, v) => s + (Number(v) || 0), 0), 0);
+      
+      // Filter allocations for the current production site and month
+      const siteAllocations = allocationArray.filter(a => 
+        String(a.productionSiteId) === String(selectedSite) && 
+        a.sk === formattedMonth
+      );
+      
+      // Calculate total allocated units for this production site
+      const allocatedUnits = siteAllocations.reduce((sum, allocation) => {
+        const allocatedToSite = Object.values(allocation.allocated || {}).reduce(
+          (total, value) => total + (Number(value) || 0), 0
+        );
+        return sum + allocatedToSite;
+      }, 0);
       // Calculations
       const tdLossPercent = 0.0658;
       const revenuePerKWH = 3.0;
       const tnebChargesPerKWH = 0.5;
-      // Helper: allocation value for given site
+      // Helper: allocation value for given consumption site
       const getSiteAllocation = (site) => {
-        const siteAllocation = allocationArray.find(a =>
-          String(a.consumptionSiteId) === String(site.id) && a.sk === formattedMonth
+        // Find all allocations for this consumption site and month
+        const siteAllocations = allocationArray.filter(a => 
+          String(a.consumptionSiteId) === String(site.id) && 
+          String(a.productionSiteId) === String(selectedSite) &&
+          a.sk === formattedMonth
         );
-        let allocatedValue = 0;
-        if (siteAllocation) {
-          if (siteAllocation.allocated && siteAllocation.allocated[site.id]) {
-            allocatedValue = Number(siteAllocation.allocated[site.id]);
-          } else if (siteAllocation.allocated && siteAllocation.allocated[site.consumptionSiteId]) {
-            allocatedValue = Number(siteAllocation.allocated[site.consumptionSiteId]);
-          } else if (siteAllocation.allocation) {
-            allocatedValue = Number(siteAllocation.allocation);
+        
+        // Sum up all allocations for this consumption site from the selected production site
+        return siteAllocations.reduce((total, allocation) => {
+          if (allocation.allocated) {
+            // Try to get the allocation for this specific site
+            const value = allocation.allocated[site.id] || 
+                         allocation.allocated[site.consumptionSiteId] || 
+                         allocation.allocation || 0;
+            return total + (Number(value) || 0);
           }
-        }
-        return allocatedValue;
+          return total + (Number(allocation.allocation) || 0);
+        }, 0);
       };
       const tdLoss = Math.round(allocatedUnits * tdLossPercent);
       const netExportAfterLoss = Math.round(allocatedUnits * (1 - tdLossPercent));

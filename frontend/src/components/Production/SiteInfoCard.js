@@ -1,6 +1,6 @@
 import React from 'react';
 import { Box, Typography, Paper, Grid } from '@mui/material';
-import { Factory, LocationOn as LocationIcon, Power as PowerIcon, AccountBalance as BankIcon, Receipt as HtscIcon, AttachMoney as MoneyIcon } from '@mui/icons-material';
+import { Factory, LocationOn as LocationIcon, Power as PowerIcon, AccountBalance as BankIcon, Receipt as HtscIcon, AttachMoney as MoneyIcon, Event as EventIcon } from '@mui/icons-material';
 
 const SiteInfoCard = ({ site }) => {
   if (!site) return null;
@@ -19,7 +19,17 @@ const SiteInfoCard = ({ site }) => {
     type: site.type || 'Unknown',
     htscNo: site.htscNo || 'N/A',
     banking: Number(site.banking) === 1 ? 'Available' : 'Not Available',
-    revenuePerUnit: site.revenuePerUnit != null ? formatNumber(site.revenuePerUnit) : '0.00'
+    revenuePerUnit: site.revenuePerUnit != null ? formatNumber(site.revenuePerUnit) : '0.00',
+    dateOfCommission: (() => {
+      try {
+        if (!site.dateOfCommission) return 'N/A';
+        const d = new Date(site.dateOfCommission);
+        if (isNaN(d.getTime())) return 'N/A';
+        return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+      } catch {
+        return 'N/A';
+      }
+    })()
   };
 
   const renderInfoItem = (Icon, label, value, color = 'primary.main') => (
@@ -39,6 +49,7 @@ const SiteInfoCard = ({ site }) => {
           {renderInfoItem(LocationIcon, 'Location', siteInfo.location, 'error.main')}
           {renderInfoItem(PowerIcon, 'Type', siteInfo.type, 'warning.main')}
           {renderInfoItem(HtscIcon, 'HTSC No', siteInfo.htscNo)}
+          {renderInfoItem(EventIcon, 'Date of Commission', siteInfo.dateOfCommission, 'info.main')}
         </Grid>
         <Grid item xs={12} md={6}>
           {renderInfoItem(PowerIcon, 'Capacity', `${siteInfo.capacity} MW`, 'success.main')}

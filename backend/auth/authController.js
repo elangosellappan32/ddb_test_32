@@ -15,6 +15,8 @@ class AuthController {
                 role: userData.role,
                 permissions: userData.permissions,
                 emailId: userData.email,
+                companyId: userData.companyId, // Include company ID in the token
+                metadata: userData.metadata, // Include full metadata for additional company information
                 tokenType: 'access'
             },
             process.env.JWT_SECRET || 'your-secret-key',

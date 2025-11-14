@@ -26,6 +26,7 @@ const siteAccessRoutes = require('./routes/siteAccessRoutes');
 const formRoutes = require('./routes/formRoutes');
 const graphicalReportRoutes = require('./graphicalReport/graphicalReportRoutes');
 const invoiceRoutes = require('./invoice/invoiceRoutes');
+const { authenticateToken, checkPermission } = require('./middleware/authorization');
 const app = express();
 const PORT = process.env.PORT || 3333;
 
@@ -69,24 +70,27 @@ app.use(express.urlencoded({ extended: true }));
 app.use(requestLogger);
 
 // API Routes
+// Public routes (no auth required)
 app.use('/api/auth', authRoutes);
-app.use('/api/user', userRoutes);
-app.use('/api/production-site', productionSiteRoutes);
-app.use('/api/production-unit', productionUnitRoutes);
-app.use('/api/production-charge', productionChargeRoutes);
-app.use('/api/consumption-site', consumptionSiteRoutes);
-app.use('/api/consumption-unit', consumptionUnitRoutes);
-app.use('/api/allocation', allocationRoutes);
 app.use('/api/health', healthRoutes);
-app.use('/api/roles', roleRoutes);
-app.use('/api/banking', bankingRoutes);
-app.use('/api/lapse', lapseRoutes);
-app.use('/api/captive', captiveRoutes);
-app.use('/api/company', companyRoutes);
-app.use('/api/site-access', siteAccessRoutes);
-app.use('/api/form', formRoutes);
-app.use('/api/graphical-report', graphicalReportRoutes);
-app.use('/api/invoice', invoiceRoutes);
+
+// Protected routes (require authentication)
+app.use('/api/user', authenticateToken, userRoutes);
+app.use('/api/production-site', authenticateToken, checkPermission('production', 'READ'), productionSiteRoutes);
+app.use('/api/production-unit', authenticateToken, checkPermission('production-units', 'READ'), productionUnitRoutes);
+app.use('/api/production-charge', authenticateToken, checkPermission('production-charges', 'READ'), productionChargeRoutes);
+app.use('/api/consumption-site', authenticateToken, checkPermission('consumption', 'READ'), consumptionSiteRoutes);
+app.use('/api/consumption-unit', authenticateToken, checkPermission('consumption-units', 'READ'), consumptionUnitRoutes);
+app.use('/api/allocation', authenticateToken, checkPermission('allocation', 'READ'), allocationRoutes);
+app.use('/api/roles', authenticateToken, roleRoutes);
+app.use('/api/banking', authenticateToken, checkPermission('banking', 'READ'), bankingRoutes);
+app.use('/api/lapse', authenticateToken, checkPermission('lapse', 'READ'), lapseRoutes);
+app.use('/api/captive', authenticateToken, checkPermission('captive', 'READ'), captiveRoutes);
+app.use('/api/company', authenticateToken, checkPermission('company', 'READ'), companyRoutes);
+app.use('/api/site-access', authenticateToken, siteAccessRoutes);
+app.use('/api/form', authenticateToken, formRoutes);
+app.use('/api/graphical-report', authenticateToken, graphicalReportRoutes);
+app.use('/api/invoice', authenticateToken, invoiceRoutes);
 
 // Error handling
 app.use(errorHandler);

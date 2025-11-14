@@ -379,6 +379,50 @@ class AuthDAL {
         }
     }
 
+    /**
+     * Extract company ID from user metadata
+     * Handles multiple formats: direct companyId, metadata structure, and DynamoDB L/S format
+     */
+    extractCompanyIdFromUser(user) {
+        if (!user) return null;
+
+        // Check direct companyId field (if it exists)
+        if (user.companyId) {
+            return user.companyId;
+        }
+
+        // Check metadata.companyId
+        if (user.metadata?.companyId) {
+            return user.metadata.companyId;
+        }
+
+        // Check metadata.accessibleSites.company (DynamoDB format)
+        if (user.metadata?.accessibleSites?.company?.L?.length > 0) {
+            const companyId = user.metadata.accessibleSites.company.L[0]?.S;
+            if (companyId) {
+                return parseInt(companyId, 10);
+            }
+        }
+
+        // Check metadata.accessibleSites.companyIds
+        if (user.metadata?.accessibleSites?.companyIds?.length > 0) {
+            return user.metadata.accessibleSites.companyIds[0];
+        }
+
+        // Check production sites (format: companyId_siteId)
+        if (user.metadata?.accessibleSites?.productionSites?.L?.length > 0) {
+            const firstSiteId = user.metadata.accessibleSites.productionSites.L[0]?.S;
+            if (firstSiteId) {
+                const companyId = parseInt(firstSiteId.split('_')[0], 10);
+                if (!isNaN(companyId)) {
+                    return companyId;
+                }
+            }
+        }
+
+        logger.warn(`[AuthDAL] Could not extract companyId from user: ${user.username}`);
+        return null;
+    }
 
 }
 

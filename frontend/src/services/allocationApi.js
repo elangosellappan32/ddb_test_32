@@ -55,19 +55,21 @@ class AllocationApi {
 
     async fetchAll(month, companyId, options = {}) {
         try {
-            const queryParams = [];
-            if (companyId) queryParams.push(`companyId=${companyId}`);
-            if (options.charge !== undefined) queryParams.push(`charge=${options.charge ? 1 : 0}`);
+            if (!companyId) {
+                throw new Error('Company ID is required to fetch allocations');
+            }
             
-            const endpoint = `${API_CONFIG.ENDPOINTS.ALLOCATION.BASE}/month/${month}${
-                queryParams.length ? '?' + queryParams.join('&') : ''
-            }`;
+            const queryParams = [
+                `companyId=${encodeURIComponent(companyId)}`,
+                ...(options.charge !== undefined ? [`charge=${options.charge ? 1 : 0}`] : [])
+            ];
+            
+            const endpoint = `${API_CONFIG.ENDPOINTS.ALLOCATION.BASE}/month/${month}?${queryParams.join('&')}`;
             
             const response = await api.get(endpoint);
             
             const filterByCompany = (items) => {
-                if (!companyId) return items || [];
-                return (items || []).filter(item => item.companyId === companyId);
+                return (items || []).filter(item => String(item.companyId) === String(companyId));
             };
             
             const transformCharge = (items) => {
@@ -93,7 +95,10 @@ class AllocationApi {
 
     async fetchAllAllocations(companyId) {
         try {
-            const endpoint = `${API_CONFIG.ENDPOINTS.ALLOCATION.BASE}${companyId ? `?companyId=${companyId}` : ''}`;
+            if (!companyId) {
+                throw new Error('Company ID is required to fetch all allocations');
+            }
+            const endpoint = `${API_CONFIG.ENDPOINTS.ALLOCATION.BASE}?companyId=${encodeURIComponent(companyId)}`;
             const response = await api.get(endpoint);
             const allocations = response.data?.data || [];
             return companyId 
@@ -104,13 +109,22 @@ class AllocationApi {
         }
     }
 
-    /**
-     * Fetch allocations for a specific production site
-     * @param {string} productionSiteId - The ID of the production site
-     * @param {string} month - The month in MMYYYY format
-     * @param {string} companyId - Optional company ID to filter by
-     * @returns {Promise<Array>} Array of allocation records
-     */
+    async fetchByType(type, month, companyId) {
+        try {
+            if (!companyId) {
+                throw new Error('Company ID is required to fetch allocations by type');
+            }
+            const endpoint = `${API_CONFIG.ENDPOINTS.ALLOCATION.BASE}/type/${type}/month/${month}?companyId=${encodeURIComponent(companyId)}`;
+            const response = await api.get(endpoint);
+            const allocations = response.data?.data || [];
+            return companyId 
+                ? allocations.filter(item => item.companyId === companyId)
+                : allocations;
+        } catch (error) {
+            throw this.handleError(error);
+        }
+    }
+
     async fetchByProductionSite(productionSiteId, month, companyId) {
         try {
             // First get all allocations for the month and company
@@ -131,56 +145,43 @@ class AllocationApi {
         }
     }
 
-    async fetchByType(type, month, companyId, options = {}) {
-        try {
-            const typeMap = {
-                'allocations': API_CONFIG.ENDPOINTS.ALLOCATION.BASE,
-                'banking': API_CONFIG.ENDPOINTS.BANKING.BASE,
-                'lapse': API_CONFIG.ENDPOINTS.LAPSE.BASE
-            };
-            
-            const endpoint = typeMap[type];
-            if (!endpoint) {
-                throw new Error(`Invalid allocation type: ${type}`);
-            }
-            
-            const queryParams = [];
-            if (month) queryParams.push(`month=${month}`);
-            if (companyId) queryParams.push(`companyId=${companyId}`);
-            if (options.charge !== undefined) queryParams.push(`charge=${options.charge ? 1 : 0}`);
-            
-            const queryString = queryParams.length > 0 ? `?${queryParams.join('&')}` : '';
-            const url = `${endpoint}${queryString}`;
-            
-            const response = await api.get(url);
-            const data = response.data?.data || [];
-            
-            const filteredData = companyId 
-                ? data.filter(item => item.companyId === companyId)
-                : data;
-            
-            return filteredData.map(item => ({
-                ...item,
-                charge: item.charge === 1 || item.charge === true,
-                allocated: item.allocated ? {
-                    ...item.allocated,
-                    charge: item.allocated.charge === 1 || item.allocated.charge === true
-                } : undefined
-            }));
-        } catch (error) {
-            throw this.handleError(error);
-        }
-    }
-
     async createAllocation(data) {
         try {
             const formattedData = this.formatAllocationData(data, 'ALLOCATION');
-            const response = await api.post(API_CONFIG.ENDPOINTS.ALLOCATION.CREATE, formattedData);
-            return response.data;
+            
+            // Ensure we're sending the data in the format the backend expects
+            const payload = {
+                pk: formattedData.pk,
+                sk: formattedData.sk,
+                type: 'ALLOCATION',
+                c1: formattedData.c1 || 0,
+                c2: formattedData.c2 || 0,
+                c3: formattedData.c3 || 0,
+                c4: formattedData.c4 || 0,
+                c5: formattedData.c5 || 0,
+                charge: formattedData.charge || 0,
+                companyId: formattedData.companyId,
+                productionSiteId: formattedData.productionSiteId,
+                consumptionSiteId: formattedData.consumptionSiteId,
+                siteName: formattedData.siteName
+            };
+            
+            console.log('Sending allocation payload:', JSON.stringify(payload, null, 2));
+            
+            // Send as a single object, the backend will handle it as an array
+            const response = await api.post(API_CONFIG.ENDPOINTS.ALLOCATION.BASE, [payload]);
+            
+            // Return the first item if response is an array, otherwise return the response as is
+            return Array.isArray(response.data) ? response.data[0] : response.data;
         } catch (error) {
             const msg = error.response?.data?.message || '';
             if (!(error.response?.status === 400 && msg.includes('already exists'))) {
                 console.error('Error creating allocation:', error);
+                console.error('Error details:', {
+                    status: error.response?.status,
+                    data: error.response?.data,
+                    config: error.config
+                });
             }
             throw this.handleError(error);
         }
@@ -245,6 +246,9 @@ class AllocationApi {
 
     async update(pk, sk, data, type = 'ALLOCATION') {
         try {
+            if (!data.companyId) {
+                throw new Error('Company ID is required to update an allocation');
+            }
             const formattedData = this.formatAllocationData(data, type);
             let updateEndpoint;
             
@@ -256,7 +260,7 @@ class AllocationApi {
                     updateEndpoint = API_CONFIG.ENDPOINTS.LAPSE.UPDATE(pk, sk);
                     break;
                 default:
-                    updateEndpoint = API_CONFIG.ENDPOINTS.ALLOCATION.UPDATE(pk, sk);
+                    updateEndpoint = `${API_CONFIG.ENDPOINTS.ALLOCATION.UPDATE(pk, sk)}?companyId=${encodeURIComponent(data.companyId)}`;
             }
 
             const response = await api.put(updateEndpoint, formattedData);

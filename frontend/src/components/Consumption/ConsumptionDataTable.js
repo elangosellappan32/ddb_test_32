@@ -1,4 +1,5 @@
 import React, { useMemo, useCallback, useState, useEffect } from 'react';
+import { useSnackbar } from 'notistack';
 import {
   Table,
   TableBody,
@@ -16,43 +17,50 @@ import {
   DialogContent,
   DialogActions,
   Button,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
+  TextField,
+  InputAdornment,
+  CircularProgress,
   Alert
 } from '@mui/material';
-import { Add as AddIcon } from '@mui/icons-material';
+import { Add as AddIcon, Search as SearchIcon, Clear as ClearIcon } from '@mui/icons-material';
 import {
   Edit as EditIcon,
   Delete as DeleteIcon,
-  Info as InfoIcon,
-  ContentCopy as CopyIcon
+  Info as InfoIcon
 } from '@mui/icons-material';
 import { format } from 'date-fns';
 
-const currentYear = new Date().getFullYear();
-const years = Array.from({ length: 5 }, (_, i) => currentYear - 2 + i);
-
-// Get financial year range for a given year (April 1 to March 31)
-const getFinancialYearRange = (year) => {
-  const startDate = new Date(year, 3, 1); // April 1st of the selected year
-  const endDate = new Date(year + 1, 2, 31); // March 31st of the next year
-  return { startDate, endDate };
-};
+const months = [
+  { value: 0, label: 'January' },
+  { value: 1, label: 'February' },
+  { value: 2, label: 'March' },
+  { value: 3, label: 'April' },
+  { value: 4, label: 'May' },
+  { value: 5, label: 'June' },
+  { value: 6, label: 'July' },
+  { value: 7, label: 'August' },
+  { value: 8, label: 'September' },
+  { value: 9, label: 'October' },
+  { value: 10, label: 'November' },
+  { value: 11, label: 'December' }
+];
 
 const ConsumptionDataTable = ({ 
   data, 
   onEdit, 
   onDelete,
-  onCopy, 
   onAdd,
   permissions,
-  loading 
+  loading,
+  error
 }) => {
-  const [selectedYear, setSelectedYear] = useState(currentYear);
+  const { enqueueSnackbar } = useSnackbar();
+  const [filters, setFilters] = useState({
+    searchTerm: '',
+    isFiltered: false
+  });
   const [filteredData, setFilteredData] = useState([]);
-  const [deleteDialog, setDeleteDialog] = React.useState({
+  const [deleteDialog, setDeleteDialog] = useState({
     open: false,
     selectedItem: null
   });
@@ -61,7 +69,7 @@ const ConsumptionDataTable = ({
     return Number(value || 0).toFixed(2);
   };
 
-  // Filter data based on selected financial year
+  // Filter data based on search
   useEffect(() => {
     if (!data || !Array.isArray(data)) {
       console.log('No data or invalid data format');
@@ -69,28 +77,49 @@ const ConsumptionDataTable = ({
       return;
     }
 
-    console.log('Raw consumption data:', data);
-    const { startDate, endDate } = getFinancialYearRange(selectedYear);
-    console.log(`Filtering consumption for FY ${selectedYear}-${selectedYear + 1} (${startDate.toISOString()} to ${endDate.toISOString()})`);
+    const { searchTerm, isFiltered } = filters;
     
+    // If no search term, show no data
+    if (!isFiltered || !searchTerm) {
+      setFilteredData([]);
+      return;
+    }
+    
+    // Parse search term (format: 'Month YYYY' or 'Mon YYYY')
+    const searchMatch = searchTerm.match(/^(\w+)\s+(\d{4})$/i);
+    if (!searchMatch) {
+      setFilteredData([]);
+      return;
+    }
+    
+    const [, monthStr, yearStr] = searchMatch;
+    const searchMonth = months.find(m => 
+      m.label.toLowerCase() === monthStr.toLowerCase() || 
+      m.label.toLowerCase().startsWith(monthStr.toLowerCase())
+    );
+    
+    if (!searchMonth) {
+      setFilteredData([]);
+      return;
+    }
+    
+    const year = parseInt(yearStr);
+    const month = searchMonth.value;
+    
+    // Filter data for the selected month and year
     const filtered = data.filter(item => {
-      // Use sk field if available, otherwise use date field
       const dateStr = item.sk || item.date;
       if (!dateStr) return false;
       
       // Parse date in MMYYYY format
-      const month = parseInt(dateStr.substring(0, 2)) - 1; // 0-indexed month
-      const year = parseInt(dateStr.substring(2));
-      const itemDate = new Date(year, month, 1); // First day of the month
+      const itemMonth = parseInt(dateStr.substring(0, 2)) - 1; // 0-indexed month
+      const itemYear = parseInt(dateStr.substring(2));
       
-      const isInRange = itemDate >= startDate && itemDate <= endDate;
-      console.log(`Consumption date: ${dateStr} (${itemDate.toISOString()}) - In range: ${isInRange}`);
-      return isInRange;
+      return itemMonth === month && itemYear === year;
     });
-
-    console.log('Filtered consumption data count:', filtered.length);
+    
     setFilteredData(filtered);
-  }, [data, selectedYear]);
+  }, [data, filters]);
 
   const sortedData = useMemo(() => {
     if (!Array.isArray(filteredData)) return [];
@@ -169,15 +198,24 @@ const ConsumptionDataTable = ({
     setDeleteDialog({ open: false, selectedItem: null });
   }, []);
 
-  const handleYearChange = (event) => {
-    setSelectedYear(Number(event.target.value));
+  const handleFilterChange = (name, value) => {
+    setFilters(prev => ({
+      ...prev,
+      [name]: value,
+      isFiltered: name === 'searchTerm' && value.trim() !== ''
+    }));
+  };
+  
+  const clearSearch = () => {
+    handleFilterChange('searchTerm', '');
   };
 
   const renderHeader = () => (
     <Box sx={{ 
       display: 'flex', 
+      flexDirection: { xs: 'column', sm: 'row' },
       justifyContent: 'space-between', 
-      alignItems: 'center',
+      alignItems: { xs: 'stretch', sm: 'center' },
       p: 2,
       backgroundColor: 'white',
       borderBottom: '2px solid #000000',
@@ -186,21 +224,28 @@ const ConsumptionDataTable = ({
       <Typography variant="h6" component="div" sx={{ color: '#1976d2', fontWeight: 'bold' }}>
         Consumption Data
       </Typography>
-      <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-        <FormControl size="small" sx={{ minWidth: 200 }}>
-          <InputLabel>Financial Year</InputLabel>
-          <Select
-            value={selectedYear}
-            onChange={handleYearChange}
-            label="Financial Year"
-          >
-            {years.map((year) => (
-              <MenuItem key={year} value={year}>
-                {`FY ${year}-${(year + 1).toString().slice(-2)}`}
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
+      <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', width: { xs: '100%', sm: 'auto' } }}>
+        <TextField
+          size="small"
+          placeholder="Search (e.g., Jan 2023)"
+          value={filters.searchTerm}
+          onChange={(e) => handleFilterChange('searchTerm', e.target.value)}
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                <SearchIcon />
+              </InputAdornment>
+            ),
+            endAdornment: filters.searchTerm && (
+              <InputAdornment position="end">
+                <IconButton size="small" onClick={clearSearch}>
+                  <ClearIcon />
+                </IconButton>
+              </InputAdornment>
+            ),
+            sx: { minWidth: 250 }
+          }}
+        />
         {onAdd && (
           <Button
             variant="contained"
@@ -210,21 +255,37 @@ const ConsumptionDataTable = ({
             startIcon={<AddIcon />}
             disabled={loading}
           >
-            Add Unit
+            Add Consumption
           </Button>
         )}
       </Box>
     </Box>
   );
 
+  if (loading) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
+
+  if (error) {
+    return (
+      <Alert severity="error" sx={{ m: 2 }}>
+        {error.message || 'Error loading consumption data'}
+      </Alert>
+    );
+  }
+
   if (!sortedData.length) {
     return (
       <Box sx={{ p: 0 }}>
         {renderHeader()}
         <Alert severity="info" sx={{ mt: 2, mx: 2, mb: 2 }}>
-          {data && data.length > 0 
-            ? `No consumption data available for financial year ${selectedYear}-${(selectedYear + 1).toString().slice(-2)}`
-            : 'No consumption data available. Add your first consumption record.'}
+          {filters.isFiltered
+            ? 'No consumption data found matching your search.'
+            : 'No consumption data available. Use the search to find specific months or add a new record.'}
         </Alert>
       </Box>
     );
@@ -337,22 +398,7 @@ const ConsumptionDataTable = ({
                         </IconButton>
                       </Tooltip>
                     )}
-                    {permissions?.create && onCopy && (
-                      <Tooltip title="Copy to Next Month">
-                        <IconButton 
-                          size="small" 
-                          onClick={() => onCopy(row)}
-                          sx={{
-                            color: 'success.main',
-                            '&:hover': {
-                              backgroundColor: 'success.lighter',
-                            }
-                          }}
-                        >
-                          <CopyIcon fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
-                    )}
+                    
                   </Box>
                 </TableCell>
               </TableRow>

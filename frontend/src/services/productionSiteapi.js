@@ -33,6 +33,7 @@ const formatSiteData = (data) => {
       htscNo: data.htscNo ? Number(data.htscNo) : 0,
       banking: Number(data.banking || 0),
       status: ['active', 'inactive', 'maintenance'].includes(String(data.status || '').toLowerCase()) ? String(data.status).toLowerCase() : 'active',
+      dateOfCommission: data.dateOfCommission ? new Date(data.dateOfCommission).toISOString() : null,
       version: Number(data.version || 1),
       createdat: data.createdat || new Date().toISOString(),
       updatedat: data.updatedat || new Date().toISOString()
@@ -259,6 +260,7 @@ class ProductionSiteApi {
         annualProduction_L: parseFloat(data.annualProduction_L) || 0,
         revenuePerUnit: parseFloat(data.revenuePerUnit) || 0,
         htscNo: data.htscNo ? String(data.htscNo).trim() : '',
+        dateOfCommission: data.dateOfCommission ? new Date(data.dateOfCommission).toISOString() : null,
         injectionSubstation: data.injectionSubstation ? String(data.injectionSubstation).trim() : '',
         feederName: data.feederName ? String(data.feederName).trim() : '',
         createdat: new Date().toISOString(),
@@ -299,6 +301,7 @@ class ProductionSiteApi {
         companyId,
         productionSiteId,
         revenuePerUnit: parseFloat(data.revenuePerUnit) || 0,
+        dateOfCommission: data.dateOfCommission ? new Date(data.dateOfCommission).toISOString() : null,
         updatedat: new Date().toISOString()
       };
 

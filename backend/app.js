@@ -20,6 +20,7 @@ const roleRoutes = require('./routes/roleRoutes');
 const bankingRoutes = require('./banking/bankingRoutes');
 const lapseRoutes = require('./lapse/lapseRoutes');
 const captiveRoutes = require('./captive/captiveRoutes');
+const companyRoutes = require('./company/companyRoutes');
 const siteAccessRoutes = require('./routes/siteAccessRoutes');
 const reportRoutes = require('./routes/reportRoutes');
 const graphicalReportRoutes = require('./graphicalReport/graphicalReportRoutes');
@@ -119,7 +120,7 @@ app.use('/api/production-charge', authenticateToken,
     
 app.use('/api/consumption-unit', authenticateToken,
     checkPermission('consumption-units', 'READ'),
-    consumptionUnitRoutes);
+    removeAuthForDetail(consumptionUnitRoutes));
     
 app.use('/api/allocation', authenticateToken,
     checkPermission('allocation', 'READ'),
@@ -136,6 +137,10 @@ app.use('/api/lapse', authenticateToken,
 app.use('/api/captive', authenticateToken,
     checkPermission('captive', 'READ'),
     captiveRoutes);
+
+app.use('/api/company', authenticateToken,
+    checkPermission('production', 'READ'),
+    companyRoutes);
     
 // Report routes (require authentication)
 app.use('/api/reports', authenticateToken, checkPermission('view_reports'), reportRoutes);

@@ -31,7 +31,28 @@ class LapseService {
                 c5: Number(allocated?.c5 || 0) || 0
             };
 
-            // Create lapse record
+            // Check if lapse record already exists
+            try {
+                const existingLapses = await lapseDAL.getLapsesByPk(normalizedData.pk);
+                const existing = existingLapses.find(l => l.sk === normalizedData.sk);
+                
+                if (existing) {
+                    // Record exists, update it instead
+                    logger.info('[LapseService] Lapse record already exists, updating instead', {
+                        pk: normalizedData.pk,
+                        sk: normalizedData.sk
+                    });
+                    return await lapseDAL.updateLapse(normalizedData.pk, normalizedData.sk, normalizedData);
+                }
+            } catch (error) {
+                logger.debug('[LapseService] Error checking for existing lapse, proceeding with create', {
+                    pk: normalizedData.pk,
+                    sk: normalizedData.sk,
+                    error: error.message
+                });
+            }
+
+            // Create lapse record if it doesn't exist
             return await lapseDAL.createLapse(normalizedData);
         } catch (error) {
             logger.error('[LapseService] Create Error:', error);

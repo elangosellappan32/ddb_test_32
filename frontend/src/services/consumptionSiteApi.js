@@ -108,10 +108,15 @@ class ConsumptionSiteApi {
     try {
       // Return cached data if available and fresh
       if (!forceRefresh && 
+          siteCache.data.length > 0 && 
           siteCache.lastUpdated && 
-          (Date.now() - siteCache.lastUpdated < CACHE_TTL)) {
-        console.log('[ConsumptionSiteAPI] Returning cached data');
-        return siteCache.data;
+          (Date.now() - siteCache.lastUpdated) < CACHE_TTL) {
+        return {
+          success: true,
+          data: [...siteCache.data],
+          total: siteCache.data.length,
+          fromCache: true
+        };
       }
 
       // If a refresh is already in progress, wait for it
@@ -122,50 +127,34 @@ class ConsumptionSiteApi {
 
       // Set the updating flag
       siteCache.isUpdating = true;
-      console.log('[ConsumptionSiteAPI] Fetching fresh data...');
 
-      const response = await api.get('/consumption-site/all');
-      console.log('[ConsumptionSiteAPI] Raw API response:', response);
+      // Fetch fresh data from the API
+      const response = await api.get(API_CONFIG.ENDPOINTS.CONSUMPTION.SITE.GET_ALL);
       
-      if (!response) {
-        throw new Error('No response received from server');
+      // Format and validate the response data
+      const formattedData = [];
+      for (const item of response.data.data || []) {
+        const formatted = formatSiteData(item);
+        if (formatted) {
+          formattedData.push(formatted);
+        }
       }
 
-      // Handle different response formats
-      let sites = [];
-      if (Array.isArray(response.data?.data)) {
-        console.log('[ConsumptionSiteAPI] Using response.data.data as sites array');
-        sites = response.data.data;
-      } else if (Array.isArray(response.data)) {
-        console.log('[ConsumptionSiteAPI] Using response.data as sites array');
-        sites = response.data;
-      } else if (Array.isArray(response)) {
-        console.log('[ConsumptionSiteAPI] Using direct response as sites array');
-        sites = response;
-      } else if (response.data) {
-        console.log('[ConsumptionSiteAPI] Wrapping single site in array');
-        sites = [response.data];
-      }
-
-      console.log(`[ConsumptionSiteAPI] Found ${sites.length} sites`);
-
-      const formattedSites = sites
-        .map(site => formatSiteData(site))
-        .filter(site => site !== null);
-
-      // Update cache
-      siteCache.data = formattedSites;
+      // Update the cache
+      siteCache.data = formattedData;
       siteCache.lastUpdated = Date.now();
       siteCache.isUpdating = false;
 
-      console.log(`[ConsumptionSiteAPI] Successfully fetched ${formattedSites.length} sites`);
-      return formattedSites;
-
+      return {
+        success: true,
+        data: [...formattedData],
+        total: formattedData.length,
+        fromCache: false
+      };
     } catch (error) {
-      siteCache.isUpdating = false;
-      console.error('[ConsumptionSiteAPI] Fetch error:', error);
+      console.error('[ConsumptionSiteAPI] Error fetching sites:', error);
       
-      // Retry on network errors or server errors
+      // Retry on failure
       if (retries > 0) {
         console.log(`[ConsumptionSiteAPI] Retrying... (${retries} attempts left)`);
         await new Promise(resolve => setTimeout(resolve, delay));

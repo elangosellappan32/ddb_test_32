@@ -78,26 +78,51 @@ class AllocationDAL {
       this.validateItem(item);
       const now = new Date().toISOString();
 
+      // Extract IDs from PK (format: companyId_productionSiteId_consumptionSiteId)
+      const pkParts = (item.pk || '').split('_');
+      const companyId = pkParts[0];
+      const productionSiteId = pkParts[1];
+      const consumptionSiteId = pkParts[2];
+      
+      if (!productionSiteId) {
+        throw new Error('Invalid allocation: Missing production site ID in primary key');
+      }
+      
+      if (!companyId) {
+        throw new Error('Invalid allocation: Missing company ID in primary key');
+      }
+
+      // Ensure the item has the correct company ID
+      if (item.companyId && item.companyId !== companyId) {
+        console.warn(`Company ID mismatch: PK has ${companyId}, item has ${item.companyId}. Using PK value.`);
+      }
+      
+      // Ensure the item has the correct production site ID
+      if (item.productionSiteId && String(item.productionSiteId) !== productionSiteId) {
+        console.warn(`Production site ID mismatch: PK has ${productionSiteId}, item has ${item.productionSiteId}. Using PK value.`);
+      }
+      
+      // Update item with correct IDs
+      const updatedItem = {
+        ...item,
+        companyId,
+        productionSiteId,
+        consumptionSiteId,
+        updatedat: now
+      };
+
       // Get existing charge allocation for this production site and month if any
-      if (item.charge === 1) {
-        // Extract production site ID from PK (format: companyId_productionSiteId_consumptionSiteId)
-        const pkParts = (item.pk || '').split('_');
-        const productionSiteId = pkParts.length >= 2 ? pkParts[1] : null;
-        
-        if (!productionSiteId) {
-          throw new Error('Invalid allocation: Missing production site ID in primary key');
-        }
-        
-        const existingCharge = await this.getChargingAllocation(item.sk, productionSiteId);
-        if (existingCharge && existingCharge.pk !== item.pk) {
-          throw new Error(`Production site ${productionSiteId} already has a charge for month ${item.sk}`);
+      if (updatedItem.charge === 1) {
+        const existingCharge = await this.getChargingAllocation(updatedItem.sk, productionSiteId);
+        if (existingCharge && existingCharge.pk !== updatedItem.pk) {
+          throw new Error(`Production site ${productionSiteId} already has a charge for month ${updatedItem.sk}`);
         }
       }
 
       // Check if allocation exists and handle version
-      const existing = await this.getAllocation(item.pk, item.sk);
+      const existing = await this.getAllocation(updatedItem.pk, updatedItem.sk);
       let allocation = {
-        ...item,
+        ...updatedItem,
         updatedAt: now,
         version: existing ? (existing.version || 0) + 1 : 1
       };

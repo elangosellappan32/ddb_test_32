@@ -29,7 +29,9 @@ import {
   AccountCircle as ProfileIcon,
   AssignmentTurnedIn as AssignmentTurnedInIcon,
   BarChart as BarChartIcon,
-  Receipt as ReceiptIcon
+  Receipt as ReceiptIcon,
+  SyncAlt as SyncAltIcon,
+  Apartment as CompanyIcon
 } from '@mui/icons-material';
 import { useAuth } from '../context/AuthContext';
 import { useNavigation } from '../context/NavigationContext';
@@ -62,6 +64,12 @@ const Navbar = () => {
       path: '/',
       resource: 'dashboard'
     },
+    {
+      icon: <CompanyIcon />,
+      label: 'Companies',
+      path: '/companies',
+      resource: 'company'
+    },
     { 
       icon: <FactoryIcon />, 
       label: 'Production', 
@@ -73,6 +81,12 @@ const Navbar = () => {
       label: 'Consumption', 
       path: '/consumption',
       resource: 'consumption'
+    },
+    {
+      icon: <SyncAltIcon />,
+      label: 'Consumption Allocation',
+      path: '/consumption-allocation',
+      resource: 'allocation'
     },
     {
       icon: <AssignmentTurnedInIcon />,
@@ -237,24 +251,32 @@ const Navbar = () => {
 
 
   const UserSection = () => (
-    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, ml: 1 }}>
       <Box 
         sx={{ 
           display: { xs: 'none', md: 'flex' }, 
-          alignItems: 'center', 
-          gap: 2 
+          alignItems: 'center',
+          gap: 1
         }}
       >
         <Typography 
           variant="body2" 
-          sx={{ color: 'white', fontWeight: 'medium' }}
+          sx={{ 
+            color: 'white', 
+            fontWeight: 'medium',
+            fontSize: '0.875rem'
+          }}
         >
           {user?.username || 'User'}
         </Typography>
-        <Box sx={{ 
-          ...getRoleStyles(user?.role),
-          color: 'white' // Override text color for visibility
-        }}>
+        <Box 
+          sx={{ 
+            ...getRoleStyles(user?.role),
+            color: 'white',
+            fontSize: '0.65rem',
+            padding: '2px 6px'
+          }}
+        >
           {user?.role?.toUpperCase() || 'USER'}
         </Box>
       </Box>
@@ -289,15 +311,41 @@ const Navbar = () => {
       open={mobileOpen}
       onClose={handleMobileMenuToggle}
       ModalProps={{ keepMounted: true }}
-      sx={{ '& .MuiDrawer-paper': { boxSizing: 'border-box', width: 240 } }}
+      sx={{ 
+        '& .MuiDrawer-paper': { 
+          boxSizing: 'border-box', 
+          width: 240,
+          backgroundColor: '#1a237e',
+          color: 'white'
+        } 
+      }}
     >
-      <Box sx={{ display: 'flex', justifyContent: 'flex-end', p: 1 }}>
-        <IconButton onClick={handleMobileMenuToggle}>
-          <ChevronLeftIcon sx={{ color: 'white' }} />
+      <Box sx={{ 
+        display: 'flex', 
+        justifyContent: 'space-between', 
+        alignItems: 'center',
+        p: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.1)'
+      }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, ml: 1 }}>
+          <img 
+            src={logo} 
+            alt="STRIO Logo" 
+            style={{ height: 28, width: 'auto' }} 
+          />
+          <Typography variant="subtitle1" sx={{ fontWeight: 'bold', color: 'white' }}>
+            STRIO
+          </Typography>
+        </Box>
+        <IconButton 
+          onClick={handleMobileMenuToggle}
+          sx={{ color: 'white' }}
+        >
+          <ChevronLeftIcon />
         </IconButton>
       </Box>
-      <Divider />
-      <List>
+      <Divider sx={{ bgcolor: 'rgba(255,255,255,0.1)' }} />
+      <List sx={{ py: 1 }}>
         {navItems.map((item) => (
           <ListItem 
             key={item.path}
@@ -305,21 +353,46 @@ const Navbar = () => {
             onClick={() => handleNavigation(item.path)}
             selected={location.pathname === item.path}
             sx={{
-              color: location.pathname === item.path ? 'white' : 'inherit',
-              bgcolor: location.pathname === item.path ? 'rgba(255,255,255,0.2)' : 'transparent',
-              '&:hover': { bgcolor: 'rgba(255,255,255,0.1)' }
+              py: 1.5,
+              px: 2,
+              color: 'white',
+              bgcolor: location.pathname === item.path ? 'rgba(255,255,255,0.15)' : 'transparent',
+              '&:hover': { 
+                bgcolor: 'rgba(255,255,255,0.1)',
+                '& .MuiListItemIcon-root': {
+                  transform: 'scale(1.1)'
+                }
+              },
+              '&.Mui-selected': {
+                bgcolor: 'rgba(255,255,255,0.2)',
+                '&:hover': {
+                  bgcolor: 'rgba(255,255,255,0.25)'
+                }
+              }
             }}
           >
-            <ListItemIcon sx={{ color: 'white' }}>
+            <ListItemIcon sx={{ 
+              color: 'white',
+              minWidth: 40,
+              transition: 'transform 0.2s',
+              '& .MuiSvgIcon-root': {
+                fontSize: '1.4rem'
+              }
+            }}>
               {item.icon}
             </ListItemIcon>
-            <ListItemText primary={item.label} sx={{ color: 'white' }} />
+            <ListItemText 
+              primary={item.label} 
+              primaryTypographyProps={{
+                fontSize: '0.95rem',
+                fontWeight: 500
+              }}
+            />
           </ListItem>
         ))}
       </List>
     </Drawer>
   );
-
 
   return (
     <Box 
@@ -329,7 +402,7 @@ const Navbar = () => {
         left: 0,
         right: 0,
         zIndex: 1200,
-        backgroundColor: '#1a237e', // Standard dark blue navbar background
+        backgroundColor: '#1a237e',
         boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
       }}
     >
@@ -338,70 +411,74 @@ const Navbar = () => {
           display: 'flex', 
           justifyContent: 'space-between', 
           alignItems: 'center', 
-          px: 3,
-          py: 1,
-          height: 64
+          px: 2,
+          py: 0.5,
+          height: 56
         }}
       >
-        {isMobile && (
-          <IconButton 
-            color="inherit" 
-            aria-label="open drawer"
-            edge="start"
-            onClick={handleMobileMenuToggle}
-            sx={{ mr: 2 }}
-          >
-            <MenuIcon sx={{ color: 'white' }} />
-          </IconButton>
-        )}
-
-
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+          {isMobile && (
+            <IconButton 
+              color="inherit" 
+              aria-label="open drawer"
+              edge="start"
+              onClick={handleMobileMenuToggle}
+              sx={{ mr: 1 }}
+            >
+              <MenuIcon sx={{ color: 'white' }} />
+            </IconButton>
+          )}
           <img 
             src={logo} 
             alt="STRIO Logo" 
-            style={{ height: 40, width: 'auto' }} 
+            style={{ height: 36, width: 'auto' }} 
           />
           <Typography variant="h6" sx={{ fontWeight: 'bold', color: 'white' }}>
             STRIO
           </Typography>
         </Box>
 
-
         <Box 
           sx={{ 
             display: { xs: 'none', md: 'flex' }, 
             alignItems: 'center', 
-            gap: 15  
+            gap: 10,   // Very large gap of 10 (80px) between icons
+            mx: 6,     // Maximum margin for edge spacing
+            '& > *': {  // Target all direct children
+              margin: '0 16px'  // Maximum margin between icons
+            }
           }}
         >
           {navItems.map((item) => (
-            <Tooltip key={item.path} title={item.label}>
+            <Tooltip key={item.path} title={item.label} arrow>
               <IconButton
                 aria-label={`Go to ${item.label}`}
                 onClick={() => handleNavigation(item.path)}
                 sx={{ 
-                  color: 'white',  // Set icon color to white 
+                  color: 'white',
                   backgroundColor: location.pathname === item.path 
                     ? 'rgba(255,255,255,0.2)' 
                     : 'transparent',
-                  '&:hover': { backgroundColor: 'rgba(255,255,255,0.1)' },
-                  p: 2,   
-                  fontSize: '1.5rem',
-                  '& .MuiSvgIcon-root': { color: 'white' }  // Overriding icon color inside button
+                  '&:hover': { 
+                    backgroundColor: 'rgba(255,255,255,0.15)',
+                    transform: 'scale(1.05)'
+                  },
+                  p: 0.6,  // Minimal padding to maximize gap space
+                  transition: 'all 0.2s ease-in-out',
+                  '& .MuiSvgIcon-root': { 
+                    fontSize: '1.4rem',
+                    color: 'white'
+                  }
                 }}
               >
-                {React.cloneElement(item.icon, { fontSize: 'inherit' })}
+                {item.icon}
               </IconButton>
             </Tooltip>
           ))}
         </Box>
 
-
         <UserSection />
         <UserMenu />
-
-
         {isMobile && <MobileDrawer />}
       </Box>
     </Box>

@@ -1,12 +1,16 @@
 const AllocationDAL = require('./allocationDAL');
 const bankingDAL = require('../banking/bankingDAL');
 const lapseService = require('../services/lapseService');
+const AuthDAL = require('../auth/authDal');
 const logger = require('../utils/logger');
 const { ALL_PERIODS } = require('../constants/periods');
 const ValidationError = require('../utils/errors').ValidationError;
 const productionSiteDAL = require('../productionSite/productionSiteDAL');
+const docClient = require('../utils/db');
+const { ScanCommand } = require('@aws-sdk/lib-dynamodb');
 
 const allocationDAL = new AllocationDAL();
+const authDAL = new AuthDAL();
 
 // Transform allocation/banking/lapse record to group c1-c5 under allocated
 function transformAllocationRecord(record) {
@@ -25,138 +29,347 @@ const createAllocation = async (req, res, next) => {
             return res.status(400).json({ success: false, message: 'No allocations provided' });
         }
 
+        // Get company ID from authenticated user with multiple fallbacks
+        let userCompanyId = req.user?.companyId;
+        
+        // Fallback 1: Try to get from metadata
+        if (!userCompanyId) {
+            userCompanyId = req.user?.metadata?.companyId;
+        }
+        
+        // Fallback 2: Try to get from metadata.accessibleSites
+        if (!userCompanyId && req.user?.metadata?.accessibleSites?.companyId) {
+            userCompanyId = req.user.metadata.accessibleSites.companyId;
+        }
+        
+        // Fallback 3: Try to get from companyIds array (first one)
+        if (!userCompanyId && Array.isArray(req.user?.companyIds) && req.user.companyIds.length > 0) {
+            userCompanyId = req.user.companyIds[0];
+        }
+        
+        // Log company ID extraction for debugging
+        logger.info('Company ID extraction for user:', {
+            userId: req.user?.userId,
+            directCompanyId: req.user?.companyId,
+            directCompanyIdType: typeof req.user?.companyId,
+            metadataCompanyId: req.user?.metadata?.companyId,
+            metadataCompanyIdType: typeof req.user?.metadata?.companyId,
+            accessibleSitesCompanyId: req.user?.metadata?.accessibleSites?.companyId,
+            accessibleSitesCompanyIdType: typeof req.user?.metadata?.accessibleSites?.companyId,
+            companyIds: req.user?.companyIds,
+            extractedCompanyId: userCompanyId,
+            extractedCompanyIdType: typeof userCompanyId,
+            userKeys: req.user ? Object.keys(req.user) : [],
+            allocationCount: allocations.length
+        });
+        
+        if (!userCompanyId) {
+            logger.error('No company ID found in user session - detailed info:', { 
+                userId: req.user?.userId,
+                userName: req.user?.username,
+                userRole: req.user?.role,
+                userObject: JSON.stringify(req.user, null, 2),
+                requestPath: req.path,
+                requestMethod: req.method
+            });
+            return res.status(403).json({ 
+                success: false, 
+                message: 'User company information not found',
+                debug: {
+                    userId: req.user?.userId,
+                    directCompanyId: req.user?.companyId,
+                    availableKeys: req.user ? Object.keys(req.user) : []
+                }
+            });
+        }
+        
+        // Ensure companyId is converted to string for consistency
+        userCompanyId = String(userCompanyId);
+        logger.info('Company ID set to:', { userCompanyId, type: typeof userCompanyId });
+
         const results = [];
+        let effectiveCompanyId; // Declare here so it's accessible in all catch blocks
+        let productionSiteId;
+        let consumptionSiteId;
+        let month;
         
         // Process each allocation sequentially to properly handle lapse and banking units
         for (const alloc of allocations) {
-            if (!alloc.pk || !alloc.sk) {
-                throw new ValidationError('Invalid allocation: missing pk or sk');
-            }
-
-            const [companyId, productionSiteId, consumptionSiteId] = alloc.pk.split('_');
-            const month = alloc.sk;
-            
-            // Check if site exists
-            const site = await productionSiteDAL.getItem(companyId, productionSiteId);
-            if (!site) {
-                throw new ValidationError(`Production site not found: ${productionSiteId}`);
-            }
-            
-            const bankingEnabled = Number(site.banking || 0) === 1;
-            const type = alloc.type?.toUpperCase() || 'ALLOCATION';
-
-            // Get existing records
-            const existingAlloc = await allocationDAL.getItem({ pk: alloc.pk, sk: alloc.sk });
-            let bankingRecord = null;
-            let existingLapse = null;
-
-            // Fetch banking record if banking is enabled
-            if (bankingEnabled) {
-                try {
-                    bankingRecord = await bankingDAL.getBanking(`${companyId}_${productionSiteId}`, month);
-                } catch {
-                    // Banking record doesn't exist yet
+            try {
+                if (!alloc.pk || !alloc.sk) {
+                    throw new ValidationError('Invalid allocation: missing pk or sk');
                 }
-            }
 
-            // Fetch existing lapse record
-            const lapseRecords = await lapseService.getLapsesByProductionSite(productionSiteId, month, month, companyId);
-            if (lapseRecords?.length) {
-                existingLapse = lapseRecords[0];
-            }
-
-            // Create or update the allocation
-            const merged = existingAlloc
-                ? { ...existingAlloc, ...alloc, updatedat: new Date().toISOString() }
-                : { ...alloc, createdat: new Date().toISOString(), updatedat: new Date().toISOString() };
-            
-            // Only update if there are actual changes
-            const hasChanges = ALL_PERIODS.some(period => {
-                const oldVal = Number(existingAlloc?.[period] || 0);
-                const newVal = Number(alloc[period] || 0);
-                return oldVal !== newVal;
-            });
-
-            let result;
-            if (hasChanges) {
-                result = await allocationDAL.putItem(merged);
-            } else {
-                // Return the existing record as is if no changes
-                result = existingAlloc || merged;
-                result.unchanged = true; // Flag to indicate no changes were made
-            }
-            results.push(result);
-
-            // Handle each period's changes
-            for (const period of ALL_PERIODS) {
-                const oldVal = Number(existingAlloc?.[period] || 0);
-                const newVal = Number(alloc[period] || 0);
-                const delta = newVal - oldVal;
+                const [pkCompanyId, pSiteId, cSiteId] = alloc.pk.split('_');
+                productionSiteId = pSiteId;
+                consumptionSiteId = cSiteId;
+                month = alloc.sk;
                 
-                if (delta === 0) continue;
+                // Log the allocation being processed
+                logger.info(`Processing allocation`, {
+                    pk: alloc.pk,
+                    sk: alloc.sk,
+                    pkCompanyId,
+                    productionSiteId,
+                    consumptionSiteId,
+                    month,
+                    userCompanyId,
+                    userId: req.user?.userId,
+                    allocationMetadata: alloc._allocationMetadata,
+                    changedPeriods: alloc._changedPeriods
+                });
+                
+                if (!productionSiteId) {
+                    throw new ValidationError('Missing production site ID in allocation PK');
+                }
+                
+                // Use the company ID from the PK, which was set by the frontend based on production site ownership
+                effectiveCompanyId = pkCompanyId;
+                console.log(`Looking up production site ${productionSiteId} for company ${effectiveCompanyId}`);
+                
+                // Try to find the production site using the exact ID from the PK
+                let site = null;
+                try {
+                    // First try with the effective company ID
+                    site = await productionSiteDAL.getItem(effectiveCompanyId, productionSiteId);
+                    
+                    if (!site) {
+                        console.log('Site not found with company ID, trying with productionSiteId only');
+                        // Try alternative lookup by productionSiteId only if not found
+                        const { Items: sites } = await docClient.send(new ScanCommand({
+                            TableName: 'ProductionSiteTable',
+                            FilterExpression: 'productionSiteId = :productionSiteId',
+                            ExpressionAttributeValues: {
+                                ':productionSiteId': productionSiteId
+                            },
+                            Limit: 1
+                        }));
+                        
+                        site = sites && sites.length > 0 ? sites[0] : null;
+                    }
+                } catch (error) {
+                    console.error('Error fetching production site:', error);
+                    throw new Error(`Error looking up production site: ${error.message}`);
+                }
+                
+                // If site not found, provide helpful error message
+                if (!site) {
+                    const { Items: allSites = [] } = await docClient.send(new ScanCommand({
+                        TableName: 'ProductionSiteTable',
+                        Limit: 20 // Limit to prevent too much data
+                    }));
+                    
+                    const availableSites = allSites.map(s => ({
+                        name: s.siteName || s.name || 'Unnamed',
+                        id: s.productionSiteId || s.id,
+                        companyId: s.companyId,
+                        pk: s.pk
+                    }));
+                    
+                    throw new ValidationError(
+                        `Production site not found. Requested: ${productionSiteId} (Company: ${effectiveCompanyId}). ` +
+                        `Available production sites (${availableSites.length}): ${availableSites.map(s => 
+                            `${s.name} (ID: ${s.id}, Company: ${s.companyId})`
+                        ).join('; ')}`
+                    );
+                }
+                
+                // Process the allocation with the found site
+                const bankingEnabled = Number(site.banking || 0) === 1;
+                const type = alloc.type?.toUpperCase() || 'ALLOCATION';
 
+                // Get existing records
+                const existingAlloc = await allocationDAL.getItem({ pk: alloc.pk, sk: alloc.sk });
+                let bankingRecord = null;
+                let existingLapse = null;
+
+                // Fetch banking record if banking is enabled
                 if (bankingEnabled) {
-                    // Handle banking site logic
-                    if (!bankingRecord) {
-                        // Create new banking record if it doesn't exist
-                        bankingRecord = {
-                            pk: `${companyId}_${productionSiteId}`,
-                            sk: month,
-                            companyId,
+                    try {
+                        bankingRecord = await bankingDAL.getBanking(`${effectiveCompanyId}_${productionSiteId}`, month);
+                    } catch (error) {
+                        logger.info('No existing banking record found, will create if needed', {
+                            companyId: effectiveCompanyId,
                             productionSiteId,
-                            month,
-                            siteName: alloc.siteName || `${companyId}_${productionSiteId}`,
-                            type: 'BANKING',
-                            status: 'active',
-                            createdat: new Date().toISOString(),
-                            updatedat: new Date().toISOString()
-                        };
-                        
-                        // Initialize all periods to 0
-                        ALL_PERIODS.forEach(p => {
-                            bankingRecord[p] = 0;
+                            month
                         });
-                        
-                        // Save the new banking record
+                    }
+                }
+
+                // Fetch existing lapse record
+                const lapseRecords = await lapseService.getLapsesByProductionSite(productionSiteId, month, month, effectiveCompanyId);
+                if (lapseRecords?.length) {
+                    existingLapse = lapseRecords[0];
+                }
+
+                // Create or update the allocation
+                const merged = existingAlloc
+                    ? { ...existingAlloc, ...alloc, updatedat: new Date().toISOString() }
+                    : { ...alloc, createdat: new Date().toISOString(), updatedat: new Date().toISOString() };
+                
+                // Track which periods were actually changed (not just sent as 0)
+                const changedPeriods = [];
+                let hasChanges = false;
+                
+                for (const period of ALL_PERIODS) {
+                    const oldVal = Number(existingAlloc?.[period] || 0);
+                    const newVal = Number(alloc[period] || 0);
+                    
+                    if (oldVal !== newVal) {
+                        hasChanges = true;
+                        changedPeriods.push(period);
+                        logger.debug(`[AllocationController] Period ${period} changed: ${oldVal} -> ${newVal}`);
+                    }
+                }
+
+                let result;
+                if (hasChanges) {
+                    result = await allocationDAL.putItem(merged);
+                    logger.info(`[AllocationController] Updated allocation`, {
+                        pk: alloc.pk,
+                        sk: alloc.sk,
+                        changedPeriods,
+                        changeCount: changedPeriods.length
+                    });
+                } else {
+                    // Return the existing record as is if no changes
+                    result = existingAlloc || merged;
+                    result.unchanged = true; // Flag to indicate no changes were made
+                    logger.debug(`[AllocationController] No changes for allocation`, {
+                        pk: alloc.pk,
+                        sk: alloc.sk
+                    });
+                }
+                results.push(result);
+
+                // Handle each period's changes - only process periods that actually changed
+                for (const period of changedPeriods) {
+                    const oldVal = Number(existingAlloc?.[period] || 0);
+                    const newVal = Number(alloc[period] || 0);
+                    const delta = newVal - oldVal;
+                    
+                    logger.debug(`[AllocationController] Processing period ${period}`, {
+                        oldVal,
+                        newVal,
+                        delta,
+                        bankingEnabled
+                    });
+
+                    if (bankingEnabled) {
+                        // Handle banking site logic
+                        if (!bankingRecord) {
+                            // Ensure the allocation PK uses the effective company ID
+                            const pkParts = alloc.pk.split('_');
+                            if (pkParts[0] !== effectiveCompanyId) {
+                                pkParts[0] = effectiveCompanyId;
+                                alloc.pk = pkParts.join('_');
+                                logger.info(`Updated allocation PK to use effective company ID`, {
+                                    oldPk: alloc.pk,
+                                    newPk: alloc.pk,
+                                    effectiveCompanyId
+                                });
+                            }
+                            // Create new banking record if it doesn't exist
+                            bankingRecord = {
+                                pk: `${effectiveCompanyId}_${productionSiteId}`,
+                                sk: month,
+                                companyId: effectiveCompanyId,
+                                productionSiteId,
+                                month,
+                                siteName: site.siteName || `${effectiveCompanyId}_${productionSiteId}`,
+                                type: 'BANKING',
+                                status: 'active',
+                                createdat: new Date().toISOString(),
+                                updatedat: new Date().toISOString()
+                            };
+                            
+                            // Initialize all periods to 0
+                            ALL_PERIODS.forEach(p => {
+                                bankingRecord[p] = 0;
+                            });
+                            
+                            // Save the new banking record
+                            try {
+                                await bankingDAL.putItem(bankingRecord);
+                                logger.info(`Created new banking record`, {
+                                    pk: bankingRecord.pk,
+                                    sk: bankingRecord.sk,
+                                    companyId: effectiveCompanyId,
+                                    productionSiteId
+                                });
+                            } catch (error) {
+                                logger.error('Error creating banking record', {
+                                    error: error.message,
+                                    companyId: effectiveCompanyId,
+                                    productionSiteId,
+                                    month
+                                });
+                                throw error;
+                            }
+                        }
+
+                        // Update banking record with delta
+                        const currentBanking = Number(bankingRecord[period] || 0);
+                        bankingRecord[period] = currentBanking + delta;
+                        bankingRecord.updatedat = new Date().toISOString();
+
+                        // Save updated banking record
                         try {
                             await bankingDAL.putItem(bankingRecord);
-                            logger.info(`Created new banking record for ${bankingRecord.pk} ${bankingRecord.sk}`);
+                            logger.debug(`Updated banking record`, {
+                                pk: bankingRecord.pk,
+                                sk: bankingRecord.sk,
+                                period,
+                                delta,
+                                newValue: bankingRecord[period]
+                            });
                         } catch (error) {
-                            logger.error('Failed to create banking record:', error);
+                            logger.error('Error updating banking record', {
+                                error: error.message,
+                                companyId: effectiveCompanyId,
+                                productionSiteId,
+                                month,
+                                period
+                            });
                             throw error;
                         }
-                    }
-
-                    // Update banking record
-                    bankingRecord[period] = (Number(bankingRecord[period]) || 0) + delta;
-                    bankingRecord.updatedat = new Date().toISOString();
-                    await bankingDAL.putItem(bankingRecord);
-                } else {
-                    // Handle non-banking (lapse) logic
-                    const lapsePk = `${companyId}_${productionSiteId}`;
-                    const lapseUpdates = existingLapse?.allocated || {};
-                    
-                    // Only update the periods that are being changed
-                    if (delta > 0) {
-                        lapseUpdates[period] = (Number(lapseUpdates[period]) || 0) + delta;
-                    }
-
-                    if (existingLapse) {
-                        await lapseService.update(lapsePk, month, { 
-                            allocated: lapseUpdates,
-                            updatedat: new Date().toISOString()
-                        });
                     } else {
-                        await lapseService.create({
-                            companyId,
-                            productionSiteId,
-                            month,
-                            allocated: lapseUpdates,
-                            createdat: new Date().toISOString(),
-                            updatedat: new Date().toISOString()
-                        });
+                        // Handle non-banking (lapse) logic
+                        const lapsePk = `${effectiveCompanyId}_${productionSiteId}`;
+                        const lapseUpdates = existingLapse?.allocated || {};
+                        
+                        // Only update the periods that are being changed
+                        if (delta > 0) {
+                            lapseUpdates[period] = (Number(lapseUpdates[period]) || 0) + delta;
+                            
+                            if (!existingLapse) {
+                                // Create new lapse record if it doesn't exist
+                                await lapseService.create({
+                                    companyId: effectiveCompanyId,
+                                    productionSiteId,
+                                    month,
+                                    allocated: { [period]: delta },
+                                    siteName: site.siteName || `${effectiveCompanyId}_${productionSiteId}`
+                                });
+                            } else {
+                                // Update existing lapse record
+                                await lapseService.update(lapsePk, month, { 
+                                    allocated: lapseUpdates,
+                                    updatedat: new Date().toISOString()
+                                });
+                            }
+                        }
                     }
                 }
+            } catch (error) {
+                logger.error('Error processing allocation', {
+                    error: error.message,
+                    companyId: effectiveCompanyId,
+                    productionSiteId,
+                    month,
+                    stack: error.stack
+                });
+                throw error; // Re-throw to be caught by the outer catch
             }
         }
 
@@ -167,10 +380,12 @@ const createAllocation = async (req, res, next) => {
     }
 };
 
+// Calculate total allocation across all periods
 const calculateTotal = (allocation) => {
     return ALL_PERIODS.reduce((sum, key) => sum + (Number(allocation[key]) || 0), 0);
 };
 
+// Get allocations for a specific month
 const getAllocations = async (req, res, next) => {
     try {
         const { month } = req.params;
@@ -183,13 +398,13 @@ const getAllocations = async (req, res, next) => {
         const banking = allBanking.filter(item => item.sk === month);
         const lapseRecords = await lapseService.getLapsesByMonth(month);
         res.json({
-          success: true,
-          data: allocations.map(transformAllocationRecord),
-          banking: banking.map(transformAllocationRecord),
-          lapse: lapseRecords.map(transformAllocationRecord)
+            success: true,
+            data: allocations.map(transformAllocationRecord),
+            banking: banking.map(transformAllocationRecord),
+            lapse: lapseRecords.map(transformAllocationRecord)
         });
     } catch (error) {
-        logger.error('[AllocationController] GetAllocations Error:', error);
+        logger.error('Error getting allocations:', error);
         next(error);
     }
 };
@@ -197,362 +412,165 @@ const getAllocations = async (req, res, next) => {
 // Get all allocations (no month filter, for report page)
 const getAllAllocations = async (req, res, next) => {
     try {
-        // Fetch all allocations from the DB (no filter)
-        const allocations = await allocationDAL.scanAll();
-        res.json({
-            success: true,
-            data: allocations.map(transformAllocationRecord)
-        });
+        const allocations = await allocationDAL.getAllAllocations();
+        res.json({ success: true, data: allocations });
     } catch (error) {
-        logger.error('[AllocationController] getAllAllocations Error:', error);
+        logger.error('Error getting all allocations:', error);
         next(error);
     }
 };
 
+// Update an existing allocation
 const updateAllocation = async (req, res, next) => {
     try {
-        const { pk, sk } = req.params;
-        const allocations = req.validatedAllocations || [];
-        const alloc = allocations[0];
-        if (!alloc) {
-            return res.status(400).json({ success: false, message: 'No allocation provided' });
-        }
-
-        const [companyId, productionSiteId, consumptionSiteId] = pk.split('_');
-        const month = sk;
-
-        // Get site and check banking status
-        const site = await productionSiteDAL.getItem(companyId, productionSiteId);
-        if (!site) {
-            return res.status(404).json({ success: false, message: 'Production site not found' });
-        }
-        const bankingEnabled = Number(site.banking || 0) === 1;
-
-        // Get existing allocation and records
-        const existing = await allocationDAL.getItem({ pk, sk });
-        let bankingRecord = null;
-        let existingLapse = null;
-
-        // Initialize or get banking record if banking is enabled
-        if (bankingEnabled) {
-            try {
-                bankingRecord = await bankingDAL.getBanking(`${companyId}_${productionSiteId}`, month);
-            } catch {
-                // Create new banking record if it doesn't exist
-                bankingRecord = {
-                    pk: `${companyId}_${productionSiteId}`,
-                    sk: month,
-                    companyId,
-                    productionSiteId,
-                    month,
-                    createdat: new Date().toISOString(),
-                    updatedat: new Date().toISOString()
-                };
-                // Initialize all periods to 0
-                ALL_PERIODS.forEach(p => { bankingRecord[p] = 0; });
-            }
-        }
-
-        // Get or initialize lapse record
-        const lapseRecords = await lapseService.getLapsesByProductionSite(productionSiteId, month, month, companyId);
-        existingLapse = lapseRecords?.[0] || null;
-        const currentLapse = existingLapse?.allocated || {};
-
-        // Create or update the allocation, preserving existing values for unchanged fields
-        const merged = existing
-            ? { 
-                ...existing, 
-                ...Object.fromEntries(
-                    Object.entries(alloc).filter(([_, v]) => v !== undefined && v !== null)
-                ),
-                updatedat: new Date().toISOString() 
-            }
-            : { 
-                ...alloc, 
-                createdat: new Date().toISOString(), 
-                updatedat: new Date().toISOString() 
-            };
+        const { id } = req.params;
+        const updates = req.body;
         
-        const result = await allocationDAL.putItem(merged);
-
-        // Handle each period's changes
-        for (const period of ALL_PERIODS) {
-            const oldVal = Number(existing?.[period] || 0);
-            const newVal = Number(alloc[period] || 0);
-            const delta = newVal - oldVal;
-            
-            if (delta === 0) continue; // Skip if no change
-
-            if (bankingEnabled) {
-                // Update banking record with the delta
-                if (delta > 0) {
-                    // Consumption increased: Add to banking
-                    bankingRecord[period] = (Number(bankingRecord[period]) || 0) + delta;
-                    bankingRecord.updatedat = new Date().toISOString();
-                    await bankingDAL.putItem(bankingRecord);
-                } else {
-                    // Consumption decreased: Reduce banking
-                    const freed = -delta;
-                    const bankOld = Number(bankingRecord?.[period] || 0);
-                    bankingRecord[period] = Math.max(0, bankOld - freed);
-                    bankingRecord.updatedat = new Date().toISOString();
-                    await bankingDAL.putItem(bankingRecord);
-                }
-            } else {
-                // Non-banking site: Update lapse record
-                const lapsePk = `${companyId}_${productionSiteId}`;
-                const updatedLapse = { ...currentLapse };
-                
-                // Update only the changed period
-                updatedLapse[period] = Math.max(0, (Number(updatedLapse[period]) || 0) + delta);
-                
-                if (existingLapse) {
-                    await lapseService.update(lapsePk, month, {
-                        allocated: updatedLapse,
-                        updatedat: new Date().toISOString()
-                    });
-                } else {
-                    await lapseService.create({
-                        companyId,
-                        productionSiteId,
-                        month,
-                        allocated: updatedLapse,
-                        createdat: new Date().toISOString(),
-                        updatedat: new Date().toISOString()
-                    });
-                }
-            }
+        if (!id) {
+            throw new ValidationError('Allocation ID is required');
         }
-
-        return res.json({ success: true, data: result });
+        
+        const updated = await allocationDAL.updateItem(id, updates);
+        res.json({ success: true, data: updated });
     } catch (error) {
-        logger.error('[AllocationController] Update Error:', error);
+        logger.error('Error updating allocation:', error);
         next(error);
     }
 };
 
-const deleteAllocation = async (pk, sk) => {
+// Delete an allocation
+const deleteAllocation = async (req, res, next) => {
     try {
-        await allocationDAL.deleteAllocation(pk, sk);
+        const { id } = req.params;
+        
+        if (!id) {
+            throw new ValidationError('Allocation ID is required');
+        }
+        
+        await allocationDAL.deleteItem(id);
+        res.json({ success: true, message: 'Allocation deleted successfully' });
     } catch (error) {
-        logger.error('[AllocationController] Delete Error:', error);
-        throw error;
+        logger.error('Error deleting allocation:', error);
+        next(error);
     }
 };
 
 // Transform FormVB data by grouping c1-c5 and additional fields
-function transformFormVBData(data) {
-    const baseData = {
-        title: 'FORMAT V-B',
-        financialYear: data.financialYear || '',
-        siteMetrics: []
+const transformFormVBData = (data) => {
+    if (!data) return null;
+    
+    const { c1, c2, c3, c4, c5, ...rest } = data;
+    return {
+        ...rest,
+        allocated: { c1, c2, c3, c4, c5 }
     };
-
-    if (!data.consumptionSites || !Array.isArray(data.consumptionSites)) {
-        return baseData;
-    }
-
-    baseData.siteMetrics = data.consumptionSites.map(site => {
-        const siteGeneration = Number(site.generation || 0);
-        const siteAuxiliary = Number(site.auxiliaryConsumption || site.auxiliary || 0);
-        const siteNetGeneration = siteGeneration - siteAuxiliary;
-        const verificationCriteria = siteNetGeneration * 0.51;
-        
-        // Get site name from the most reliable source first
-        const siteName = site.name || site.siteName || 'Unnamed Site';
-        
-        // Get equity shares from the most reliable source
-        const equityShares = site.equityShares || 
-                            (site.shares ? (site.shares.certificates || 0) : 0);
-        
-        // Get allocation percentage from the most reliable source
-        let allocationPercentage = 0;
-        if (site.allocationPercentage) {
-            allocationPercentage = Number(site.allocationPercentage);
-        } else if (site.shares?.ownership) {
-            allocationPercentage = Number(site.shares.ownership.replace('%', '')) || 0;
-        }
-        
-        return {
-            siteName: siteName,
-            equityShares: equityShares,
-            allocationPercentage: allocationPercentage,
-            annualGeneration: siteGeneration,
-            auxiliaryConsumption: siteAuxiliary,
-            verificationCriteria: verificationCriteria,
-            permittedConsumption: {
-                withZero: verificationCriteria,
-                minus10: verificationCriteria * 0.9,
-                plus10: verificationCriteria * 1.1
-            },
-            actualConsumption: Number(site.actualConsumption || site.actual || 0),
-            normsCompliance: site.normsCompliance !== undefined ? 
-                           site.normsCompliance : 
-                           (site.norms === 'Yes')
-        };
-    });
-
-    return baseData;
-}
+};
 
 // FormVB related functions
 const getFormVBData = async (req, res, next) => {
     try {
-        const { financialYear } = req.params;
-        if (!financialYear) {
-            return res.status(400).json({
-                success: false,
-                message: 'Financial year is required'
-            });
+        const { month } = req.params;
+        if (!month) {
+            throw new ValidationError('Month parameter is required');
         }
-
-        const allocations = await allocationDAL.getAllAllocatedUnits();
-        const consumptionSites = await consumptionSiteDAL.getAllConsumptionSites();
         
-        const formVBData = transformFormVBData({
-            financialYear,
-            consumptionSites: consumptionSites.map(site => {
-                const siteAllocations = allocations.filter(a => a.consumptionSiteId === site.consumptionSiteId);
-                return {
-                    ...site,
-                    generation: siteAllocations.reduce((sum, a) => sum + calculateTotal(a), 0),
-                    auxiliary: site.auxiliaryConsumption || 0
-                };
-            })
-        });
-
+        // Get allocations for the month
+        const allocations = await allocationDAL.getAllocations(month);
+        
+        // Transform the data
+        const transformed = allocations.map(transformFormVBData);
+        
         res.json({
             success: true,
-            data: formVBData
+            data: transformed
         });
     } catch (error) {
-        logger.error('[AllocationController] GetFormVBData Error:', error);
+        logger.error('Error getting FormVB data:', error);
         next(error);
     }
 };
 
+// Update FormVB site data
 const updateFormVBSite = async (req, res, next) => {
     try {
-        const { companyId, siteId } = req.params;
+        const { id } = req.params;
         const updates = req.body;
-
-        // Validate and normalize update data
-        const validatedUpdates = {
-            equityShares: Number(updates.equityShares || 0),
-            allocationPercentage: Number(updates.allocationPercentage || 0),
-            annualGeneration: Number(updates.annualGeneration || 0),
-            auxiliaryConsumption: Number(updates.auxiliaryConsumption || 0),
-            actualConsumption: Number(updates.actualConsumption || 0)
-        };
-
-        // Calculate derived fields
-        const verificationCriteria = (validatedUpdates.annualGeneration - validatedUpdates.auxiliaryConsumption) * 0.51;
-        validatedUpdates.verificationCriteria = verificationCriteria;
-
-        // Update permittedConsumption values
-        validatedUpdates.permittedConsumption = {
-            base: validatedUpdates.annualGeneration,
-            minus10: validatedUpdates.annualGeneration * 0.9,
-            plus10: validatedUpdates.annualGeneration * 1.1
-        };
-
-        // Check norms compliance
-        validatedUpdates.normsCompliance = validatedUpdates.actualConsumption >= verificationCriteria;
-
-        // Update consumption site
-        await consumptionSiteDAL.updateConsumptionSite(companyId, siteId, {
-            equityShares: validatedUpdates.equityShares,
-            allocationPercentage: validatedUpdates.allocationPercentage,
-            auxiliaryConsumption: validatedUpdates.auxiliaryConsumption,
-            version: (updates.version || 0) + 1,
-            updatedat: new Date().toISOString()
-        });
-
-        // Update allocation records
-        const existingAllocations = await allocationDAL.getAllocationsByConsumptionSite(companyId, siteId);
-        if (existingAllocations?.length > 0) {
-            await Promise.all(existingAllocations.map(allocation => {
-                const totalAllocation = calculateTotal(allocation);
-                const scaleFactor = validatedUpdates.annualGeneration / totalAllocation;
-                
-                const updatedAllocation = {
-                    ...allocation,
-                    c1: Number(allocation.c1 || 0) * scaleFactor,
-                    c2: Number(allocation.c2 || 0) * scaleFactor,
-                    c3: Number(allocation.c3 || 0) * scaleFactor,
-                    c4: Number(allocation.c4 || 0) * scaleFactor,
-                    c5: Number(allocation.c5 || 0) * scaleFactor,
-                    version: (allocation.version || 0) + 1,
-                    updatedat: new Date().toISOString()
-                };
-                
-                return allocationDAL.putItem(updatedAllocation);
-            }));
+        
+        if (!id) {
+            throw new ValidationError('Site ID is required');
         }
-
+        
+        // Update the site data
+        const updated = await allocationDAL.updateItem(id, updates);
+        
         res.json({
             success: true,
-            data: validatedUpdates
+            data: updated
         });
     } catch (error) {
-        logger.error('[AllocationController] UpdateFormVBSite Error:', error);
+        logger.error('Error updating FormVB site:', error);
         next(error);
     }
 };
 
+// Get charging allocation
 const getChargingAllocation = async (req, res, next) => {
     try {
         const { month } = req.params;
         if (!month) {
             throw new ValidationError('Month parameter is required');
         }
-        const allocations = await allocationDAL.getAllocations(month);
-        // Filter and return only charging-related allocations
-        const chargingAllocations = allocations.filter(alloc => alloc.isCharging === true);
+        
+        // Get charging allocations for the month
+        const allocations = await allocationDAL.getChargingAllocations(month);
+        
         res.json({
             success: true,
-            data: chargingAllocations.map(transformAllocationRecord)
+            data: allocations
         });
     } catch (error) {
-        logger.error('[AllocationController] GetChargingAllocation Error:', error);
+        logger.error('Error getting charging allocations:', error);
         next(error);
     }
 };
 
+// Get filtered allocations
 const getFilteredAllocations = async (req, res, next) => {
     try {
-        const { month } = req.params;
-        const { charge = false } = req.query;
+        const { startDate, endDate, siteType, status } = req.query;
         
-        if (!month) {
-            throw new ValidationError('Month parameter is required');
-        }
+        // Build filter object
+        const filters = {};
+        if (startDate) filters.startDate = startDate;
+        if (endDate) filters.endDate = endDate;
+        if (siteType) filters.siteType = siteType;
+        if (status) filters.status = status;
         
-        const allocations = await allocationDAL.getAllocations(month);
-        // Filter based on charge parameter
-        const filteredAllocations = charge === 'true' 
-            ? allocations.filter(alloc => alloc.isCharging === true)
-            : allocations.filter(alloc => !alloc.isCharging);
-            
+        // Get filtered allocations
+        const allocations = await allocationDAL.getFilteredAllocations(filters);
+        
         res.json({
             success: true,
-            data: filteredAllocations.map(transformAllocationRecord)
+            data: allocations
         });
     } catch (error) {
-        logger.error('[AllocationController] GetFilteredAllocations Error:', error);
+        logger.error('Error getting filtered allocations:', error);
         next(error);
     }
 };
 
+// Export all controller functions
 module.exports = {
     createAllocation,
     getAllocations,
-    calculateTotal,
+    getAllAllocations,
     updateAllocation,
     deleteAllocation,
-    getAllAllocations,
+    transformAllocationRecord,
+    transformFormVBData,
     getFormVBData,
     updateFormVBSite,
     getChargingAllocation,
-    getFilteredAllocations
+    getFilteredAllocations,
+    calculateTotal
 };

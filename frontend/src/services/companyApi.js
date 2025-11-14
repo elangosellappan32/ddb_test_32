@@ -77,6 +77,48 @@ class CompanyApi {
             throw error;
         }
     }
+
+    // Get generator companies only
+    async getGeneratorCompanies() {
+        try {
+            console.log('Fetching generator companies from:', `${API_CONFIG.BASE_URL}/company/generators`);
+            const response = await api.get(`${API_CONFIG.BASE_URL}/company/generators`);
+            return response.data;
+        } catch (error) {
+            console.error('Error fetching generator companies:', {
+                message: error.message,
+                response: error.response?.data,
+                status: error.response?.status,
+                config: {
+                    url: error.config?.url,
+                    method: error.config?.method,
+                    headers: error.config?.headers
+                }
+            });
+            throw error;
+        }
+    }
+
+    // Get shareholder companies only
+    async getShareholderCompanies() {
+        try {
+            console.log('Fetching shareholder companies from:', `${API_CONFIG.BASE_URL}/company/shareholders`);
+            const response = await api.get(`${API_CONFIG.BASE_URL}/company/shareholders`);
+            return response.data;
+        } catch (error) {
+            console.error('Error fetching shareholder companies:', {
+                message: error.message,
+                response: error.response?.data,
+                status: error.response?.status,
+                config: {
+                    url: error.config?.url,
+                    method: error.config?.method,
+                    headers: error.config?.headers
+                }
+            });
+            throw error;
+        }
+    }
 }
 
 const companyApi = new CompanyApi();

@@ -24,6 +24,48 @@ const validateRequiredFields = (data) => {
     return { isValid: true };
 };
 
+const validateDate = (dateInput, fieldName) => {
+    // Handle null/undefined/empty string
+    if (!dateInput) {
+        return { isValid: true, value: null };
+    }
+    
+    // If it's already a valid date object
+    if (dateInput instanceof Date && !isNaN(dateInput.getTime())) {
+        return { 
+            isValid: true, 
+            value: dateInput.toISOString() 
+        };
+    }
+    
+    // Handle string dates (ISO format or other common formats)
+    const date = new Date(dateInput);
+    if (isNaN(date.getTime())) {
+        return {
+            isValid: false,
+            error: `${fieldName} must be a valid date`,
+            code: 'INVALID_DATE'
+        };
+    }
+    
+    // Ensure the date is not in the future
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    if (date > today) {
+        return {
+            isValid: false,
+            error: `${fieldName} cannot be in the future`,
+            code: 'FUTURE_DATE'
+        };
+    }
+    
+    return { 
+        isValid: true, 
+        value: date.toISOString() 
+    };
+};
+
 const validateDecimal = (value, fieldName) => {
     try {
         if (value === undefined || value === null) {
@@ -90,6 +132,19 @@ const createProductionSite = async (req, res) => {
                 }
                 req.body[field] = validation.value.toString();
             }
+        }
+
+        // Validate dateOfCommission if provided
+        if (req.body.dateOfCommission !== undefined) {
+            const dateValidation = validateDate(req.body.dateOfCommission, 'Date of Commission');
+            if (!dateValidation.isValid) {
+                return res.status(400).json({
+                    success: false,
+                    message: dateValidation.error,
+                    code: dateValidation.code
+                });
+            }
+            req.body.dateOfCommission = dateValidation.value;
         }
 
         // Ensure we have the company ID
@@ -196,8 +251,21 @@ const updateProductionSite = async (req, res) => {
                         code: validation.code
                     });
                 }
-                updates[field] = validation.value.toString();
+                updates[field] = validation.value;
             }
+        }
+
+        // Validate dateOfCommission if provided
+        if (updates.dateOfCommission !== undefined) {
+            const dateValidation = validateDate(updates.dateOfCommission, 'Date of Commission');
+            if (!dateValidation.isValid) {
+                return res.status(400).json({
+                    success: false,
+                    message: dateValidation.error,
+                    code: dateValidation.code
+                });
+            }
+            updates.dateOfCommission = dateValidation.value;
         }
 
         const updatedItem = await productionSiteDAL.updateItem(
