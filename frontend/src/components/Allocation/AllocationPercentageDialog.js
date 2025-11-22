@@ -212,31 +212,25 @@ const AllocationPercentageDialog = ({ open, onClose, onSave }) => {
     }
   };
 
-  const handleUpdateAllocation = async (generatorId, shareholderId, value) => {
-  const key = `${generatorId}-${shareholderId}`;
-  
-  // Check if the allocation is locked
-  if (lockedAllocations[key]) {
-    enqueueSnackbar('This allocation is locked and cannot be modified', { variant: 'warning' });
-    return false;
-  }
-
-  const newPercentage = parseFloat(value);
-  if (isNaN(newPercentage) || newPercentage < 0 || newPercentage > 100) {
-    enqueueSnackbar('Please enter a valid percentage between 0 and 100', { variant: 'error' });
-    return false;
-  }
-
-  try {
-    setIsProcessing(true);
+  const handleUpdateAllocation = (generatorId, shareholderId, value) => {
+    const key = `${generatorId}-${shareholderId}`;
     
-    // Update server first
-    await captiveApi.updateAllocationPercentage(generatorId, shareholderId, newPercentage);
-    
+    // Check if the allocation is locked
+    if (lockedAllocations[key]) {
+      enqueueSnackbar('This allocation is locked and cannot be modified', { variant: 'warning' });
+      return false;
+    }
+
+    const newPercentage = parseFloat(value);
+    if (isNaN(newPercentage) || newPercentage < 0 || newPercentage > 100) {
+      enqueueSnackbar('Please enter a valid percentage between 0 and 100', { variant: 'error' });
+      return false;
+    }
+
     // Update local storage
     updateAllocationPercentage(generatorId, shareholderId, newPercentage);
     
-    // Update state
+    // Update state immediately
     setAllocations(prevAllocations => 
       prevAllocations.map(alloc => 
         alloc.generatorCompanyId === generatorId && 
@@ -246,49 +240,21 @@ const AllocationPercentageDialog = ({ open, onClose, onSave }) => {
       )
     );
     
+    // Update local allocations state
     setLocalAllocations(prev => ({
       ...prev,
       [key]: newPercentage
     }));
     
-    enqueueSnackbar('Allocation updated successfully', { variant: 'success' });
+    enqueueSnackbar('Allocation updated locally', { variant: 'success' });
     return true;
-  } catch (error) {
-    console.error('Error updating allocation:', error);
-    enqueueSnackbar(
-      error.response?.data?.message || 'Failed to update allocation', 
-      { variant: 'error' }
-    );
-    return false;
-  } finally {
-    setIsProcessing(false);
-  }
-};
+  };
 
-  const handleSaveAll = async () => {
-    try {
-      setIsProcessing(true);
-      
-      // Save current local allocations to localStorage (already done on each change)
-      const currentAllocations = loadAllocationPercentages();
-      
-      // Notify parent component with current local allocations
-      if (onSave) onSave(currentAllocations);
-      
-      // Close the dialog
-      onClose();
-      
-      enqueueSnackbar('All allocation changes saved locally', { variant: 'success' });
-      
-    } catch (error) {
-      console.error('Error saving allocations:', error);
-      enqueueSnackbar(
-        'Failed to save allocations locally', 
-        { variant: 'error' }
-      );
-    } finally {
-      setIsProcessing(false);
-    }
+  const handleSaveAll = () => {
+    // Just close the dialog since changes are already saved to localStorage
+    // when they were made
+    onClose();
+    enqueueSnackbar('Allocation changes saved', { variant: 'success' });
   };
 
   const getShareholderAllocation = (generatorId, shareholderId) => {

@@ -154,69 +154,17 @@ const createBankingTable = async () => {
             { AttributeName: 'pk', AttributeType: 'S' },
             { AttributeName: 'sk', AttributeType: 'S' }
         ],
-        ProvisionedThroughput: {
-            ReadCapacityUnits: 5,
-            WriteCapacityUnits: 5
-        }
+        BillingMode: 'PAY_PER_REQUEST'
     };
 
     try {
         await client.send(new CreateTableCommand(params));
-        console.log('Banking table created successfully');
+        console.log('Banking table created successfully with PAY_PER_REQUEST billing');
+        
+        // Insert sample data from JSON schema
+        await insertBankingData();
     } catch (error) {
         console.error('Error creating Banking table:', error);
-        throw error;
-    }
-};
-
-const createAllocationTable = async () => {
-    try {
-        // Check if table already exists
-        await client.send(new DescribeTableCommand({ TableName: TableNames.ALLOCATION }));
-        console.log('Allocation table already exists, skipping creation');
-        return;
-    } catch (error) {
-        if (error.name !== 'ResourceNotFoundException') {
-            throw error;
-        }
-    }
-
-    const params = {
-        TableName: TableNames.ALLOCATION,
-        KeySchema: [
-            { AttributeName: 'pk', KeyType: 'HASH' },
-            { AttributeName: 'sk', KeyType: 'RANGE' }
-        ],
-        AttributeDefinitions: [
-            { AttributeName: 'pk', AttributeType: 'S' },
-            { AttributeName: 'sk', AttributeType: 'S' }
-        ],
-        GlobalSecondaryIndexes: [
-            {
-                IndexName: 'sk-index',
-                KeySchema: [
-                    { AttributeName: 'sk', KeyType: 'HASH' }
-                ],
-                Projection: {
-                    ProjectionType: 'ALL'
-                },
-                ProvisionedThroughput: {
-                    ReadCapacityUnits: 5,
-                    WriteCapacityUnits: 5
-                }
-            }
-        ],
-        ProvisionedThroughput: {
-            ReadCapacityUnits: 5,
-            WriteCapacityUnits: 5
-        }
-    };
-
-    try {
-        await client.send(new CreateTableCommand(params));
-        console.log('Allocation table created successfully');
-    } catch (error) {
-        console.error('Error creating Allocation table:', error);
         throw error;
     }
 };
@@ -236,22 +184,22 @@ const createProductionSitesTable = async () => {
     const params = {
         TableName: TableNames.PRODUCTION_SITES,
         KeySchema: [
-            { AttributeName: 'pk', KeyType: 'HASH' },
-            { AttributeName: 'sk', KeyType: 'RANGE' }
+            { AttributeName: 'companyId', KeyType: 'HASH' },
+            { AttributeName: 'productionSiteId', KeyType: 'RANGE' }
         ],
         AttributeDefinitions: [
-            { AttributeName: 'pk', AttributeType: 'S' },
-            { AttributeName: 'sk', AttributeType: 'S' }
+            { AttributeName: 'companyId', AttributeType: 'N' },
+            { AttributeName: 'productionSiteId', AttributeType: 'N' }
         ],
-        ProvisionedThroughput: {
-            ReadCapacityUnits: 5,
-            WriteCapacityUnits: 5
-        }
+        BillingMode: 'PAY_PER_REQUEST'
     };
 
     try {
         await client.send(new CreateTableCommand(params));
-        console.log('Production Sites table created successfully');
+        console.log('Production Sites table created successfully with PAY_PER_REQUEST billing');
+        
+        // Insert sample data from JSON schema
+        await insertProductionSiteData();
     } catch (error) {
         console.error('Error creating Production Sites table:', error);
         throw error;
@@ -280,15 +228,15 @@ const createProductionUnitTable = async () => {
             { AttributeName: 'pk', AttributeType: 'S' },
             { AttributeName: 'sk', AttributeType: 'S' }
         ],
-        ProvisionedThroughput: {
-            ReadCapacityUnits: 5,
-            WriteCapacityUnits: 5
-        }
+        BillingMode: 'PAY_PER_REQUEST'
     };
 
     try {
         await client.send(new CreateTableCommand(params));
-        console.log('Production Unit table created successfully');
+        console.log('Production Unit table created successfully with PAY_PER_REQUEST billing');
+        
+        // Insert sample data from JSON schema
+        await insertProductionUnitData();
     } catch (error) {
         console.error('Error creating Production Unit table:', error);
         throw error;
@@ -317,15 +265,15 @@ const createProductionChargeTable = async () => {
             { AttributeName: 'pk', AttributeType: 'S' },
             { AttributeName: 'sk', AttributeType: 'S' }
         ],
-        ProvisionedThroughput: {
-            ReadCapacityUnits: 5,
-            WriteCapacityUnits: 5
-        }
+        BillingMode: 'PAY_PER_REQUEST'
     };
 
     try {
         await client.send(new CreateTableCommand(params));
-        console.log('Production Charge table created successfully');
+        console.log('Production Charge table created successfully with PAY_PER_REQUEST billing');
+        
+        // Insert sample data from JSON schema
+        await insertProductionChargeData();
     } catch (error) {
         console.error('Error creating Production Charge table:', error);
         throw error;
@@ -347,22 +295,22 @@ const createConsumptionSitesTable = async () => {
     const params = {
         TableName: TableNames.CONSUMPTION_SITES,
         KeySchema: [
-            { AttributeName: 'pk', KeyType: 'HASH' },
-            { AttributeName: 'sk', KeyType: 'RANGE' }
+            { AttributeName: 'companyId', KeyType: 'HASH' },
+            { AttributeName: 'consumptionSiteId', KeyType: 'RANGE' }
         ],
         AttributeDefinitions: [
-            { AttributeName: 'pk', AttributeType: 'S' },
-            { AttributeName: 'sk', AttributeType: 'S' }
+            { AttributeName: 'companyId', AttributeType: 'S' },
+            { AttributeName: 'consumptionSiteId', AttributeType: 'S' }
         ],
-        ProvisionedThroughput: {
-            ReadCapacityUnits: 5,
-            WriteCapacityUnits: 5
-        }
+        BillingMode: 'PAY_PER_REQUEST'
     };
 
     try {
         await client.send(new CreateTableCommand(params));
-        console.log('Consumption Sites table created successfully');
+        console.log('Consumption Sites table created successfully with PAY_PER_REQUEST billing');
+        
+        // Insert sample data from JSON schema
+        await insertConsumptionSiteData();
     } catch (error) {
         console.error('Error creating Consumption Sites table:', error);
         throw error;
@@ -391,15 +339,15 @@ const createConsumptionUnitTable = async () => {
             { AttributeName: 'pk', AttributeType: 'S' },
             { AttributeName: 'sk', AttributeType: 'S' }
         ],
-        ProvisionedThroughput: {
-            ReadCapacityUnits: 5,
-            WriteCapacityUnits: 5
-        }
+        BillingMode: 'PAY_PER_REQUEST'
     };
 
     try {
         await client.send(new CreateTableCommand(params));
-        console.log('Consumption Unit table created successfully');
+        console.log('Consumption Unit table created successfully with PAY_PER_REQUEST billing');
+        
+        // Insert sample data from JSON schema
+        await insertConsumptionUnitData();
     } catch (error) {
         console.error('Error creating Consumption Unit table:', error);
         throw error;
@@ -428,26 +376,160 @@ const createLapseTable = async () => {
             { AttributeName: 'pk', AttributeType: 'S' },
             { AttributeName: 'sk', AttributeType: 'S' }
         ],
-        ProvisionedThroughput: {
-            ReadCapacityUnits: 5,
-            WriteCapacityUnits: 5
-        }
+        BillingMode: 'PAY_PER_REQUEST'
     };
 
     try {
         await client.send(new CreateTableCommand(params));
-        console.log('Lapse table created successfully');
+        console.log('Lapse table created successfully with PAY_PER_REQUEST billing');
+        
+        // Insert sample data from JSON schema
+        await insertLapseData();
     } catch (error) {
         console.error('Error creating Lapse table:', error);
         throw error;
     }
 };
 
-const createCaptiveTable = async () => {
+const insertProductionSiteData = async () => {
+    const productionSites = [
+        {
+            companyId: 1,
+            productionSiteId: 1,
+            name: "Star_Radhapuram_600KW",
+            location: "Tirunelveli, Radhapuram ",
+            type: "Wind",
+            banking: 1,
+            capacity_MW: 0.6,
+            annualProduction_L: 9,
+            htscNo: 79204721131,
+            injectionVoltage_KV: 33,
+            status: "Active",
+            createdat: "2025-03-29T03:55:02.802Z",
+            updatedat: "2025-03-29T03:55:02.802Z",
+            version: 1,
+            timetolive: 0
+        },
+        {
+            companyId: 1,
+            productionSiteId: 2,
+            name: "DVN_Keelathur_1WM",
+            location: "Pudukkottai, Keelathur",
+            type: "Solar",
+            banking: 0,
+            capacity_MW: 1,
+            annualProduction_L: 18,
+            htscNo: 69534460069,
+            injectionVoltage_KV: 22,
+            status: "Active",
+            createdat: "2025-03-29T03:55:02.802Z",
+            updatedat: "2025-03-29T03:55:02.802Z",
+            version: 1,
+            timetolive: 0
+        },
+        {
+            companyId: 5,
+            productionSiteId: 3,
+            name: "DVN_Keelathur_1WM",
+            location: "Pudukkottai, Keelathur",
+            type: "SITE",
+            banking: 0,
+            capacity_MW: 23,
+            annualProduction_L: 3,
+            htscNo: 34444,
+            injectionVoltage_KV: 33433,
+            status: "Active",
+            createdat: "2025-03-29T03:55:02.802Z",
+            updatedat: "2025-03-29T03:55:02.802Z",
+            version: 1,
+            timetolive: 0
+        }
+    ];
+
+    for (const site of productionSites) {
+        try {
+            await docClient.send(new PutCommand({
+                TableName: TableNames.PRODUCTION_SITES,
+                Item: site
+            }));
+            console.log(`Added production site: ${site.name} (Company ${site.companyId}, Site ${site.productionSiteId})`);
+        } catch (error) {
+            console.error(`Error adding production site ${site.name}:`, error);
+        }
+    }
+};
+
+const insertProductionChargeData = async () => {
+    // ProductionChargeTable has empty TableData in JSON schema
+    console.log('ProductionChargeTable has no sample data in JSON schema');
+};
+
+const insertLapseData = async () => {
+    // LapseTable has empty TableData in JSON schema
+    console.log('LapseTable has no sample data in JSON schema');
+};
+
+const insertBankingData = async () => {
+    const bankingData = [
+        {
+            pk: "1_2",
+            sk: "072025",
+            c1: 150,
+            c2: 20,
+            c3: 340,
+            c4: 34,
+            c5: 33,
+            timetolive: 0,
+            version: 1,
+            updatedAt: "2025-08-06T13:02:44.583Z",
+            createdAt: "2025-09-27T01:58:45.363Z"
+        },
+        {
+            pk: "1_2",
+            sk: "082025",
+            c1: 100,
+            c2: 30,
+            c3: 0,
+            c4: 23,
+            c5: 344,
+            timetolive: 0,
+            version: 1,
+            updatedAt: "2025-08-24T02:22:48.125Z",
+            createdAt: "2024-07-16T05:14:35.165Z"
+        },
+        {
+            pk: "5_3",
+            sk: "072025",
+            c1: 222,
+            c2: 334,
+            c3: 0,
+            c4: 22,
+            c5: 444,
+            timetolive: 0,
+            version: 1,
+            updatedAt: "2025-08-24T02:22:48.125Z",
+            createdAt: "2024-07-16T05:14:35.165Z"
+        }
+    ];
+
+    for (const data of bankingData) {
+        try {
+            await docClient.send(new PutCommand({
+                TableName: TableNames.BANKING,
+                Item: data
+            }));
+            console.log(`Added banking data: ${data.pk} - ${data.sk}`);
+        } catch (error) {
+            console.error(`Error adding banking data ${data.pk}:`, error);
+        }
+    }
+};
+
+const createAllocationTable = async () => {
     try {
         // Check if table already exists
-        await client.send(new DescribeTableCommand({ TableName: TableNames.CAPTIVE }));
-        console.log('Captive table already exists, skipping creation');
+        await client.send(new DescribeTableCommand({ TableName: TableNames.ALLOCATION }));
+        console.log('Allocation table already exists, skipping creation');
         return;
     } catch (error) {
         if (error.name !== 'ResourceNotFoundException') {
@@ -456,27 +538,256 @@ const createCaptiveTable = async () => {
     }
 
     const params = {
-        TableName: TableNames.CAPTIVE,
+        TableName: TableNames.ALLOCATION,
         KeySchema: [
-            { AttributeName: 'generatorCompanyId', KeyType: 'HASH' },
-            { AttributeName: 'shareholderCompanyId', KeyType: 'RANGE' }
+            { AttributeName: 'pk', KeyType: 'HASH' },
+            { AttributeName: 'sk', KeyType: 'RANGE' }
         ],
         AttributeDefinitions: [
-            { AttributeName: 'generatorCompanyId', AttributeType: 'N' },
-            { AttributeName: 'shareholderCompanyId', AttributeType: 'N' }
+            { AttributeName: 'pk', AttributeType: 'S' },
+            { AttributeName: 'sk', AttributeType: 'S' }
         ],
-        ProvisionedThroughput: {
-            ReadCapacityUnits: 5,
-            WriteCapacityUnits: 5
-        }
+        BillingMode: 'PAY_PER_REQUEST'
     };
 
     try {
         await client.send(new CreateTableCommand(params));
-        console.log('Captive table created successfully with generatorCompanyId as PK and shareholderCompanyId as SK');
+        console.log('Allocation table created successfully with PAY_PER_REQUEST billing');
     } catch (error) {
-        console.error('Error creating Captive table:', error);
+        console.error('Error creating Allocation table:', error);
         throw error;
+    }
+};
+
+const insertConsumptionSiteData = async () => {
+    const consumptionSites = [
+        {
+            companyId: "2",
+            consumptionSiteId: "1",
+            name: "Polyspin Exports ltd",
+            location: "tirunelveli",
+            type: "industrial",
+            annualConsumption: 2.1,
+            "status ": "active",
+            version: 1,
+            timetolive: 0
+        },
+        {
+            companyId: "3",
+            consumptionSiteId: "2",
+            name: "Pel Textiles",
+            location: "coimbatore",
+            type: "textile manufactuting",
+            annualConsumption: 2.3,
+            "status ": "active",
+            version: 1,
+            timetolive: 0
+        },
+        {
+            companyId: "4",
+            consumptionSiteId: "3",
+            name: "M/S Ramar and Sons",
+            location: "madurai",
+            type: "industrial",
+            annualConsumption: 1.23,
+            "status ": "active",
+            version: 1,
+            timetolive: 0
+        }
+    ];
+
+    for (const site of consumptionSites) {
+        try {
+            await docClient.send(new PutCommand({
+                TableName: TableNames.CONSUMPTION_SITES,
+                Item: site
+            }));
+            console.log(`Added consumption site: ${site.name} (Company ${site.companyId}, Site ${site.consumptionSiteId})`);
+        } catch (error) {
+            console.error(`Error adding consumption site ${site.name}:`, error);
+        }
+    }
+};
+
+const insertConsumptionUnitData = async () => {
+    const consumptionUnits = [
+        {
+            pk: "1_1",
+            sk: "112024",
+            c1: 1,
+            c2: 2,
+            c3: 4,
+            c4: 6,
+            c5: 4,
+            version: 1,
+            timetolive: 0
+        },
+        {
+            pk: "1_2",
+            sk: "112024",
+            c1: 2,
+            c2: 3,
+            c3: 5,
+            c4: 4,
+            c5: 4,
+            version: 1,
+            timetolive: 0
+        },
+        {
+            pk: "1_3",
+            sk: "112024",
+            c1: 3,
+            c2: 4,
+            c3: 6,
+            c4: 4,
+            c5: 5,
+            version: 1,
+            timetolive: 0
+        }
+    ];
+
+    for (const unit of consumptionUnits) {
+        try {
+            await docClient.send(new PutCommand({
+                TableName: TableNames.CONSUMPTION_UNIT,
+                Item: unit
+            }));
+            console.log(`Added consumption unit: ${unit.pk} - ${unit.sk}`);
+        } catch (error) {
+            console.error(`Error adding consumption unit ${unit.pk}:`, error);
+        }
+    }
+};
+
+const insertProductionUnitData = async () => {
+    const productionUnits = [
+        {
+            pk: "\\>KXN0/TTl",
+            sk: "2025-03-12T04:28:58.976Z",
+            import_c1: 558555620966400,
+            import_c2: 6950780783296512,
+            import_c3: 1713612236259328,
+            import_c4: 5299806943576064,
+            import_c5: 4084687653830656,
+            timetolive: 485090792570880,
+            version: 5455578539229184,
+            createdat: "2024-10-29T07:06:31.803Z",
+            updatedat: "2025-06-09T16:01:14.326Z",
+            export_c1: 6140490764255232,
+            export_c2: 1143475405848576,
+            export_c3: 8035050882859008,
+            export_c4: 2881872759619584,
+            export_c5: 8709347414638592,
+            net_export_c1: 6889701623463936,
+            net_export_c2: 202303185354752,
+            net_export_c3: 1174536900837376,
+            net_export_c4: 1955245749960704,
+            net_export_c5: 6997905286103040
+        },
+        {
+            pk: "@%Mg,qKax-",
+            sk: "2024-11-16T03:14:08.876Z",
+            import_c1: 1414916300865536,
+            import_c2: 8027009103953920,
+            import_c3: 2666344321384448,
+            import_c4: 4036803449323520,
+            import_c5: 3175076904042496,
+            timetolive: 4136383107039232,
+            version: 4165131013455872,
+            createdat: "2025-12-25T11:19:57.791Z",
+            updatedat: "2025-07-28T13:58:38.029Z",
+            export_c1: 5783904386547712,
+            export_c2: 6665614351400960,
+            export_c3: 7556265194553344,
+            export_c4: 2786382223245312,
+            export_c5: 170745969770496,
+            net_export_c1: 5820684223643648,
+            net_export_c2: 7930549479931904,
+            net_export_c3: 4143596661899264,
+            net_export_c4: 6776662630858752,
+            net_export_c5: 4696560814260224
+        },
+        {
+            pk: "o/R?z)nS9y",
+            sk: "2026-01-05T19:13:46.162Z",
+            import_c1: 250252158304256,
+            import_c2: 6532284159098880,
+            import_c3: 8200145304813568,
+            import_c4: 3335250029576192,
+            import_c5: 4072332352028672,
+            timetolive: 2904828212674560,
+            version: 8591889531928576,
+            createdat: "2026-07-26T00:18:45.220Z",
+            updatedat: "2025-06-12T07:54:40.527Z",
+            export_c1: 8359640047812608,
+            export_c2: 1161527526686720,
+            export_c3: 3085603121922048,
+            export_c4: 4734862422441984,
+            export_c5: 4460288239730688,
+            net_export_c1: 2965747762462720,
+            net_export_c2: 2054829845250048,
+            net_export_c3: 3892201528492032,
+            net_export_c4: 4363458141224960,
+            net_export_c5: 1594797164855296
+        },
+        {
+            pk: "1,]B\"*EC(k",
+            sk: "2026-02-20T23:25:16.112Z",
+            import_c1: 5470601005236224,
+            import_c2: 4045765915705344,
+            import_c3: 4067546454032384,
+            import_c4: 8037032769093632,
+            import_c5: 7344015645081600,
+            timetolive: 8675956742946816,
+            version: 574203048755200,
+            createdat: "2025-09-01T04:19:01.353Z",
+            updatedat: "2025-11-28T20:26:24.523Z",
+            export_c1: 8520154709229568,
+            export_c2: 7176202571743232,
+            export_c3: 7823888981426176,
+            export_c4: 1621610215768064,
+            export_c5: 175784859795456,
+            net_export_c1: 8718666692558848,
+            net_export_c2: 7855242699866112,
+            net_export_c3: 8158933917106176,
+            net_export_c4: 6267982936276992,
+            net_export_c5: 3327667029934080
+        },
+        {
+            pk: "+<DIo)WV3c",
+            sk: "2025-09-11T13:44:09.773Z",
+            import_c1: 5776625597677568,
+            import_c2: 5218695284523008,
+            import_c3: 4277241015959552,
+            import_c4: 1349056395739136,
+            import_c5: 6664589668253696,
+            timetolive: 5889233176756224,
+            version: 953064691335168,
+            createdat: "2026-05-24T19:29:40.836Z",
+            updatedat: "2025-08-29T20:24:12.207Z",
+            export_c1: 4285789833789440,
+            export_c2: 8608390225854464,
+            export_c3: 6383441962598400,
+            export_c4: 7233624841650176,
+            export_c5: 7952156875292672,
+            net_export_c1: 3416171181244416,
+            net_export_c2: 2579748085563392,
+            net_export_c3: 6130910086823936,
+            net_export_c4: 4876955549696000,
+            net_export_c5: 4906038929129472
+        }
+    ];
+
+    for (const unit of productionUnits) {
+        try {
+            await docClient.send(new PutCommand({
+                TableName: TableNames.PRODUCTION_UNIT,
+                Item: unit
+            }));
+            console.log(`Added production unit: ${unit.pk} - ${unit.sk}`);
+        } catch (error) {
+            console.error(`Error adding production unit ${unit.pk}:`, error);
+        }
     }
 };
 

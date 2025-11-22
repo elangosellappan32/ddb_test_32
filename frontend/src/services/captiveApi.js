@@ -139,31 +139,50 @@ class CaptiveApi {
     }
 
     async updateAllocationPercentage(generatorId, shareholderId, allocationPercentage) {
-        try {
-            // Validate IDs
-            if (!Number.isInteger(Number(generatorId))) {
-                throw new Error('Generator ID must be a valid integer');
-            }
-            if (!Number.isInteger(Number(shareholderId))) {
-                throw new Error('Shareholder ID must be a valid integer');
-            }
-
-            // Validate percentage
-            const percentage = Number(allocationPercentage);
-            if (isNaN(percentage) || percentage < 0 || percentage > 100) {
-                throw new Error('Allocation percentage must be between 0 and 100');
-            }
-
-            console.log(`Updating allocation percentage for generator ${generatorId} and shareholder ${shareholderId} to ${percentage}%`);
-            const response = await api.put(`${this.BASE_URL}/${generatorId}/${shareholderId}`, {
-                allocationPercentage: percentage
-            });
-            return response.data?.data || response.data;
-        } catch (error) {
-            console.error('Error updating allocation percentage:', error);
-            throw error;
+    try {
+        // Validate IDs
+        if (!generatorId || !shareholderId) {
+            throw new Error('Generator ID and Shareholder ID are required');
         }
+
+        // Convert to numbers and validate
+        const genId = Number(generatorId);
+        const shareId = Number(shareholderId);
+        const percentage = Number(allocationPercentage);
+
+        if (isNaN(genId) || isNaN(shareId) || isNaN(percentage)) {
+            throw new Error('Invalid ID or percentage format');
+        }
+
+        if (percentage < 0 || percentage > 100) {
+            throw new Error('Allocation percentage must be between 0 and 100');
+        }
+
+        console.log(`Updating allocation percentage for generator ${genId} and shareholder ${shareId} to ${percentage}%`);
+        
+        const response = await api.put(`${this.BASE_URL}/${genId}/${shareId}`, {
+            allocationPercentage: percentage
+        }, {
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+
+        if (!response.data) {
+            throw new Error('No data received from server');
+        }
+
+        return response.data.data || response.data;
+    } catch (error) {
+        console.error('Error in updateAllocationPercentage:', {
+            generatorId,
+            shareholderId,
+            allocationPercentage,
+            error: error.response?.data || error.message
+        });
+        throw error;
     }
+}
 
     async deleteCaptiveEntry(generatorId, shareholderId) {
         try {
