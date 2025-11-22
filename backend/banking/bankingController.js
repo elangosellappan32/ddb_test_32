@@ -231,6 +231,7 @@ const getBankingByPk = async (req, res) => {
     try {
         logger.info(`[getBankingByPk] Request received with params:`, req.params);
         const { pk } = req.params;
+        const { month } = req.query;
         
         if (!pk) {
             logger.warn('[getBankingByPk] Missing pk parameter');
@@ -240,26 +241,52 @@ const getBankingByPk = async (req, res) => {
             });
         }
 
-        logger.info(`[getBankingByPk] Fetching records for pk: ${pk}`);
-        const records = await bankingDAL.getBankingByPk(pk);
-        
-        logger.info(`[getBankingByPk] Found ${records ? records.length : 0} records`);
-        
-        if (!records || records.length === 0) {
-            logger.warn(`[getBankingByPk] No records found for pk: ${pk}`);
-            return res.status(404).json({ 
-                success: false, 
-                error: 'No banking records found for the specified site' 
-            });
-        }
+        // If month is provided, filter by that month
+        if (month) {
+            logger.info(`[getBankingByPk] Fetching records for pk: ${pk}, month: ${month}`);
+            const allRecords = await bankingDAL.getBankingByPk(pk);
+            const filteredRecords = allRecords.filter(record => record.sk === month);
+            
+            logger.info(`[getBankingByPk] Found ${filteredRecords ? filteredRecords.length : 0} records for month ${month}`);
+            
+            if (!filteredRecords || filteredRecords.length === 0) {
+                logger.warn(`[getBankingByPk] No records found for pk: ${pk}, month: ${month}`);
+                return res.json({ 
+                    success: true,
+                    data: []
+                });
+            }
 
-        const response = {
-            success: true,
-            data: records.map(transformBankingRecordForResponse)
-        };
-        
-        logger.info(`[getBankingByPk] Sending response with ${response.data.length} records`);
-        res.json(response);
+            const response = {
+                success: true,
+                data: filteredRecords.map(transformBankingRecordForResponse)
+            };
+            
+            logger.info(`[getBankingByPk] Sending response with ${response.data.length} records`);
+            res.json(response);
+        } else {
+            // No month filter, get all records for the PK
+            logger.info(`[getBankingByPk] Fetching all records for pk: ${pk}`);
+            const records = await bankingDAL.getBankingByPk(pk);
+            
+            logger.info(`[getBankingByPk] Found ${records ? records.length : 0} records`);
+            
+            if (!records || records.length === 0) {
+                logger.warn(`[getBankingByPk] No records found for pk: ${pk}`);
+                return res.status(404).json({ 
+                    success: false, 
+                    error: 'No banking records found for the specified site' 
+                });
+            }
+
+            const response = {
+                success: true,
+                data: records.map(transformBankingRecordForResponse)
+            };
+            
+            logger.info(`[getBankingByPk] Sending response with ${response.data.length} records`);
+            res.json(response);
+        }
         
     } catch (error) {
         logger.error('Error in getBankingByPk:', error);

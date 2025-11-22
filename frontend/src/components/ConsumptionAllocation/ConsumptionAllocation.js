@@ -19,6 +19,9 @@ import allocationApi from '../../services/allocationApi';
 import consumptionSiteApi from '../../services/consumptionSiteApi';
 import productionSiteApi from '../../services/productionSiteApi';
 import consumptionUnitApi from '../../services/consumptionUnitApi';
+import bankingApi from '../../services/bankingApi';
+import lapseApi from '../../services/lapseApi';
+import productionChargeApi from '../../services/productionChargeApi';
 
 const monthOptions = Array.from({ length: 12 }, (_, i) => ({ value: i + 1, label: new Date(2000, i, 1).toLocaleString('en-US', { month: 'long' }) }));
 const currentYear = new Date().getFullYear();
@@ -88,6 +91,23 @@ const ConsumptionAllocation = () => {
   const [prodSiteMap, setProdSiteMap] = useState({});
   const [selectedConsumptionSiteId, setSelectedConsumptionSiteId] = useState('all');
   const [consUnitsBySite, setConsUnitsBySite] = useState({}); // { [consId]: { c1,c2,c3,c4,c5,total } }
+  const [bankingData, setBankingData] = useState({}); // { [prodSiteId]: { c1,c2,c3,c4,c5,total } }
+  const [lapseData, setLapseData] = useState({}); // { [prodSiteId]: { c1,c2,c3,c4,c5,total } }
+  const [oaChargesData, setOaChargesData] = useState({}); // { [prodSiteId]: { c001, c002, ..., c011 } }
+
+  // OA Adjustment Charges charge codes configuration - memoized to prevent dependency issues
+  const oaChargeCodesConfig = useMemo(() => [
+    { code: 'C001', description: 'AMR Meter Reading Charges' },
+    { code: 'C002', description: 'O&M Charges' },
+    { code: 'C003', description: 'Transmission Charges' },
+    { code: 'C004', description: 'System Operation Charges' },
+    { code: 'C005', description: 'RKvah Penalty' },
+    { code: 'C006', description: 'Import Energy Charges' },
+    { code: 'C007', description: 'Scheduling Charges' },
+    { code: 'C008', description: 'Other Charges' },
+    { code: 'C010', description: 'DSM Charges' },
+    { code: 'C011', description: 'WHLC' }
+  ], []);
 
   const monthKey = useMemo(() => formatMonthKey(selectedMonth, selectedYear), [selectedMonth, selectedYear]);
 
@@ -221,15 +241,303 @@ const ConsumptionAllocation = () => {
     } finally {
       setLoading(false);
     }
-  }, [user?.companyId, monthKey, enqueueSnackbar]);
+  }, [user?.companyId, user?.metadata?.companyId, monthKey, enqueueSnackbar]);
 
   useEffect(() => {
     fetchSites();
   }, [fetchSites]);
 
+  const fetchBankingData = useCallback(async () => {
+    if (!user?.companyId && !user?.metadata?.companyId) {
+      console.error('No company ID found for fetching banking data');
+      return;
+    }
+    
+    const companyId = String(user?.companyId || user?.metadata?.companyId || '');
+    console.log('Fetching banking data for company:', companyId, 'monthKey:', monthKey);
+    
+    try {
+      let response;
+      try {
+        // First try to fetch using fetchByPeriod
+        console.log('Trying to fetch banking data using fetchByPeriod...');
+        response = await bankingApi.fetchByPeriod(monthKey, companyId);
+        console.log('Banking API response (fetchByPeriod):', response);
+        
+        // If no data, try the allocation API as fallback
+        if (!response.data || response.data.length === 0) {
+          console.log('No data from fetchByPeriod, trying allocation API...');
+          const allocationResponse = await allocationApi.fetchAll(monthKey, companyId);
+          console.log('Allocation API response:', allocationResponse);
+          
+          // If we have banking data in the allocation response, use it
+          if (allocationResponse.banking && allocationResponse.banking.length > 0) {
+            response = { data: allocationResponse.banking };
+          } else {
+            response = { data: [] };
+          }
+        }
+      } catch (apiError) {
+        console.error('Error fetching banking data, falling back to basic fetch:', apiError);
+        // Fallback to basic fetch if specific endpoints fail
+        response = { data: [] };
+      }
+      
+      const bankingBySite = {};
+      
+      // Process banking data from API response
+      (response.data || []).forEach(item => {
+        try {
+          // Extract site ID from different possible fields
+          const siteId = item.productionSiteId || 
+                        item.pk?.split('_')[1] || 
+                        item.pk?.replace('_BANK', '') ||
+                        item.id;
+          
+          if (!siteId) {
+            console.warn('Skipping banking data item with no valid site ID:', item);
+            return;
+          }
+          
+          // Handle both direct properties and nested 'allocated' object
+          const allocated = item.allocated || {};
+          const c1 = Number(allocated.c1 || item.c1 || 0);
+          const c2 = Number(allocated.c2 || item.c2 || 0);
+          const c3 = Number(allocated.c3 || item.c3 || 0);
+          const c4 = Number(allocated.c4 || item.c4 || 0);
+          const c5 = Number(allocated.c5 || item.c5 || 0);
+          
+          // Calculate total, using totalAmount if available
+          const total = Number(item.totalAmount) || (c1 + c2 + c3 + c4 + c5);
+          
+          console.log(`Processing banking data for site ${siteId}:`, { 
+            item, 
+            extracted: { c1, c2, c3, c4, c5, total } 
+          });
+          
+          // Create or update the banking data for this site
+          bankingBySite[siteId] = {
+            ...item,
+            c1,
+            c2,
+            c3,
+            c4,
+            c5,
+            total,
+            c24: total, // For backward compatibility
+            productionSiteId: siteId,
+            // Get site name from various possible sources
+            siteName: item.siteName || item.name || 
+                     prodSiteMap[siteId]?.name || 
+                     `Production Site ${siteId}`,
+            name: item.siteName || item.name || 
+                 prodSiteMap[siteId]?.name || 
+                 `Production Site ${siteId}`,
+            htscNo: item.htscNo || prodSiteMap[siteId]?.htscNo || 'N/A',
+            siteType: item.siteType || 
+                     prodSiteMap[siteId]?.siteType || 
+                     prodSiteMap[siteId]?.type || 
+                     prodSiteMap[siteId]?.siteCategory || 'N/A'
+          };
+        } catch (error) {
+          console.error('Error processing banking data item:', { error, item });
+        }
+      });
+      
+      console.log('Processing complete. Banking data by site:', bankingBySite);
+      
+      // If no banking data found, log a warning
+      if (Object.keys(bankingBySite).length === 0) {
+        console.warn('No banking data found for the selected period');
+      }
+      
+      setBankingData(bankingBySite);
+    } catch (error) {
+      console.error('Error in fetchBankingData:', error);
+      // Set empty banking data on error
+      setBankingData({});
+      enqueueSnackbar('Failed to load banking data', { variant: 'error' });
+    }
+  }, [monthKey, user?.companyId, user?.metadata?.companyId, enqueueSnackbar, prodSiteMap]);
+
   useEffect(() => {
     fetchAllocations();
-  }, [fetchAllocations]);
+    fetchBankingData();
+  }, [fetchAllocations, fetchBankingData]);
+
+  const fetchLapseData = useCallback(async () => {
+    if (!user?.companyId && !user?.metadata?.companyId) {
+      console.error('No company ID found for fetching lapse data');
+      return;
+    }
+    
+    const companyId = String(user?.companyId || user?.metadata?.companyId || '');
+    console.log('Fetching lapse data for company:', companyId, 'monthKey:', monthKey);
+    
+    try {
+      const lapseBySite = {};
+      
+      // Get all production sites that we know about
+      const prodSiteIds = Object.keys(prodSiteMap);
+      
+      if (prodSiteIds.length === 0) {
+        console.warn('No production sites found to fetch lapse data for');
+        setLapseData({});
+        return;
+      }
+      
+      // Fetch lapse data for each production site
+      for (const prodSiteId of prodSiteIds) {
+        try {
+          const pk = `${companyId}_${prodSiteId}`;
+          console.log('Fetching lapse for pk:', pk, 'monthKey:', monthKey);
+          
+          // Fetch all lapse records for this production site
+          const lapseRecords = await lapseApi.fetchAllByPk(pk);
+          console.log(`Lapse records for ${pk}:`, lapseRecords);
+          
+          // Find the record matching the current month
+          const monthLapseRecord = lapseRecords.find(record => {
+            const recordMonthKey = record.sk || record.month;
+            return recordMonthKey === monthKey;
+          });
+          
+          if (monthLapseRecord) {
+            // Extract c1-c5 from either root level or nested 'allocated' object
+            const allocated = monthLapseRecord.allocated || {};
+            const c1 = Number(monthLapseRecord.c1 ?? allocated.c1 ?? 0) || 0;
+            const c2 = Number(monthLapseRecord.c2 ?? allocated.c2 ?? 0) || 0;
+            const c3 = Number(monthLapseRecord.c3 ?? allocated.c3 ?? 0) || 0;
+            const c4 = Number(monthLapseRecord.c4 ?? allocated.c4 ?? 0) || 0;
+            const c5 = Number(monthLapseRecord.c5 ?? allocated.c5 ?? 0) || 0;
+            const total = c1 + c2 + c3 + c4 + c5;
+            
+            console.log(`Processing lapse data for site ${prodSiteId}:`, { 
+              c1, c2, c3, c4, c5, total 
+            });
+            
+            lapseBySite[prodSiteId] = {
+              ...monthLapseRecord,
+              c1,
+              c2,
+              c3,
+              c4,
+              c5,
+              total,
+              c24: total, // For backward compatibility
+              productionSiteId: prodSiteId,
+              // Get site name from prodSiteMap (primary source) or fallback to record data
+              siteName: prodSiteMap[prodSiteId]?.name || 
+                       prodSiteMap[prodSiteId]?.siteName ||
+                       monthLapseRecord.siteName || 
+                       `Production Site ${prodSiteId}`,
+              name: prodSiteMap[prodSiteId]?.name || 
+                   prodSiteMap[prodSiteId]?.siteName ||
+                   monthLapseRecord.siteName || 
+                   `Production Site ${prodSiteId}`,
+              htscNo: monthLapseRecord.htscNo || prodSiteMap[prodSiteId]?.htscNo || 'N/A',
+              siteType: monthLapseRecord.siteType || 
+                       prodSiteMap[prodSiteId]?.siteType || 
+                       prodSiteMap[prodSiteId]?.type || 
+                       prodSiteMap[prodSiteId]?.siteCategory || 'N/A'
+            };
+          }
+        } catch (error) {
+          console.warn(`Could not fetch lapse data for site ${prodSiteId}:`, error);
+          // Continue with other sites
+        }
+      }
+      
+      console.log('Processing complete. Lapse data by site:', lapseBySite);
+      setLapseData(lapseBySite);
+    } catch (error) {
+      console.error('Error in fetchLapseData:', error);
+      setLapseData({});
+      enqueueSnackbar('Failed to load lapse data', { variant: 'error' });
+    }
+  }, [monthKey, user?.companyId, user?.metadata?.companyId, enqueueSnackbar, prodSiteMap]);
+
+  useEffect(() => {
+    fetchAllocations();
+    fetchBankingData();
+    fetchLapseData();
+  }, [fetchAllocations, fetchBankingData, fetchLapseData]);
+
+  // Fetch OA Adjustment Charges data
+  const fetchOAChargesData = useCallback(async () => {
+    if (!user?.companyId && !user?.metadata?.companyId) {
+      console.warn('No company ID found for fetching OA charges data');
+      return;
+    }
+    
+    const companyId = String(user?.companyId || user?.metadata?.companyId || '');
+    console.log('Fetching OA charges data for company:', companyId, 'monthKey:', monthKey);
+    
+    try {
+      const chargesBySite = {};
+      const prodSiteIds = Object.keys(prodSiteMap);
+      
+      if (prodSiteIds.length === 0) {
+        console.warn('No production sites found to fetch OA charges for');
+        setOaChargesData({});
+        return;
+      }
+      
+      // Fetch charges for each production site
+      for (const siteId of prodSiteIds) {
+        try {
+          console.log(`Fetching charges for site ${siteId}`);
+          const chargesResponse = await productionChargeApi.fetchAll(companyId, siteId);
+          
+          // Find the charge record matching the current month
+          const allCharges = chargesResponse.data || [];
+          const monthCharge = allCharges.find(charge => charge.sk === monthKey);
+          
+          if (monthCharge) {
+            console.log(`Found charge for site ${siteId}:`, monthCharge);
+            chargesBySite[siteId] = {
+              c001: Number(monthCharge.c001 || 0),
+              c002: Number(monthCharge.c002 || 0),
+              c003: Number(monthCharge.c003 || 0),
+              c004: Number(monthCharge.c004 || 0),
+              c005: Number(monthCharge.c005 || 0),
+              c006: Number(monthCharge.c006 || 0),
+              c007: Number(monthCharge.c007 || 0),
+              c008: Number(monthCharge.c008 || 0),
+              c010: Number(monthCharge.c010 || 0),
+              c011: Number(monthCharge.c011 || 0)
+            };
+          } else {
+            // Initialize with zeros if no charge record found
+            console.warn(`No charge record found for site ${siteId} for month ${monthKey}`);
+            chargesBySite[siteId] = {
+              c001: 0, c002: 0, c003: 0, c004: 0, c005: 0,
+              c006: 0, c007: 0, c008: 0, c010: 0, c011: 0
+            };
+          }
+        } catch (error) {
+          console.warn(`Could not fetch charges for site ${siteId}:`, error);
+          // Initialize with zeros on error
+          chargesBySite[siteId] = {
+            c001: 0, c002: 0, c003: 0, c004: 0, c005: 0,
+            c006: 0, c007: 0, c008: 0, c010: 0, c011: 0
+          };
+        }
+      }
+      
+      console.log('OA charges data loaded:', chargesBySite);
+      setOaChargesData(chargesBySite);
+    } catch (error) {
+      console.error('Error in fetchOAChargesData:', error);
+      setOaChargesData({});
+    }
+  }, [monthKey, user?.companyId, user?.metadata?.companyId, prodSiteMap]);
+
+  useEffect(() => {
+    if (Object.keys(prodSiteMap).length > 0) {
+      fetchOAChargesData();
+    }
+  }, [prodSiteMap, fetchOAChargesData]);
 
   // When sites are loaded or month changes, load consumption units for that month
   useEffect(() => {
@@ -246,6 +554,43 @@ const ConsumptionAllocation = () => {
     }
     return ids;
   }, [grouped, siteMap, selectedConsumptionSiteId]);
+  
+  // Function to get charges for a specific production site
+  const getChargesForSite = useCallback((siteId) => {
+    const siteCharges = oaChargesData[siteId] || {};
+    return oaChargeCodesConfig.map(config => ({
+      ...config,
+      amount: Number(siteCharges[config.code.toLowerCase()] || 0)
+    }));
+  }, [oaChargesData, oaChargeCodesConfig]);
+
+  // Function to calculate total charges for a site
+  const getTotalChargesForSite = useCallback((siteId) => {
+    const charges = getChargesForSite(siteId);
+    return charges.reduce((sum, charge) => sum + (charge.amount || 0), 0);
+  }, [getChargesForSite]);
+  const prodSitesWithBanking = useMemo(() => {
+    return Object.entries(bankingData).map(([siteId, bankData]) => ({
+      id: siteId,
+      ...bankData,
+      name: bankData.siteName || `Production Site ${siteId}`,
+      htscNo: bankData.htscNo || 'N/A',
+      siteType: bankData.siteType || prodSiteMap[siteId]?.siteType || 
+               prodSiteMap[siteId]?.type || prodSiteMap[siteId]?.siteCategory || 'N/A'
+    }));
+  }, [bankingData, prodSiteMap]);
+
+  // Collect all production sites with lapse data
+  const prodSitesWithLapse = useMemo(() => {
+    return Object.entries(lapseData).map(([siteId, lapseItem]) => ({
+      id: siteId,
+      ...lapseItem,
+      name: lapseItem.siteName || `Production Site ${siteId}`,
+      htscNo: lapseItem.htscNo || 'N/A',
+      siteType: lapseItem.siteType || prodSiteMap[siteId]?.siteType || 
+               prodSiteMap[siteId]?.type || prodSiteMap[siteId]?.siteCategory || 'N/A'
+    }));
+  }, [lapseData, prodSiteMap]);
 
   const consumptionSiteOptions = useMemo(() => {
     // Build options from the loaded siteMap so user can filter even if there are no allocations yet
@@ -259,21 +604,29 @@ const ConsumptionAllocation = () => {
     return `Annexure for Adjustment HT Billing Working Sheet for the Month of ${selectedMonth}/${selectedYear}`;
   }, [selectedMonth, selectedYear]);
 
-  const formatDate = useCallback((value) => {
-    try {
-      if (!value) return 'N/A';
-      const d = new Date(value);
-      if (isNaN(d.getTime())) return 'N/A';
-      return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
-    } catch {
-      return 'N/A';
-    }
-  }, []);
-
   return (
     <Box sx={{ p: 2 }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-        <Typography variant="h5" fontWeight={700}>{headerTitle}</Typography>
+        <Box sx={{ flex: 1, textAlign: 'center' }}>
+          <Typography variant="h6" sx={{ fontSize: '1.1rem', fontWeight: 600 }}>{headerTitle}</Typography>
+          {selectedConsumptionSiteId !== 'all' && siteMap[String(selectedConsumptionSiteId)]?.htscNo && (
+            <Typography 
+              variant="subtitle1" 
+              sx={{ 
+                mt: 0.5, 
+                display: 'inline-block',
+                backgroundColor: '#4caf50', 
+                color: 'white',
+                px: 1.5,
+                py: 0.5,
+                borderRadius: 1,
+                fontWeight: 'bold'
+              }}
+            >
+              Service No: {siteMap[String(selectedConsumptionSiteId)].htscNo}
+            </Typography>
+          )}
+        </Box>
         <Box sx={{ display: 'flex', gap: 2 }}>
           <TextField size="small" select label="Consumption Site" value={selectedConsumptionSiteId} onChange={e => setSelectedConsumptionSiteId(e.target.value)} sx={{ minWidth: 220 }}>
             <MenuItem value="all">All Consumption Sites</MenuItem>
@@ -309,10 +662,6 @@ const ConsumptionAllocation = () => {
               boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
               '&:last-child': { mb: 0 }
             }}>
-              <Typography variant="h6" sx={{ mb: 2 }}>
-                {section.consumptionSiteName || `Consumption Site ${consId}`} ({consId})
-              </Typography>
-              
               {/* Calculate section totals before rendering the table */}
               {(() => {
                 const targetUnits = consUnitsBySite[consId] || { c24: 0, c1: 0, c2: 0, c3: 0, c4: 0, c5: 0 };
@@ -322,12 +671,13 @@ const ConsumptionAllocation = () => {
                   <Table size="small" sx={{ 
                 border: '1px solid #e0e0e0',
                 '& .MuiTableCell-root': {
-                  border: '1px solid #f0f0f0',
+                  border: '1px solid #e0e0e0',
                   padding: '8px 12px',
+                  backgroundColor: '#ffffff',
                   '&.header-cell': {
-                    backgroundColor: '#f5f7fa',
+                    backgroundColor: '#c8e6c9',
                     fontWeight: 600,
-                    color: '#2d3748',
+                    color: '#000000',
                     borderBottom: '2px solid #e0e0e0'
                   },
                   '&.highlight': {
@@ -336,8 +686,7 @@ const ConsumptionAllocation = () => {
                   },
                   '&.subtext': {
                     color: '#6b7280',
-                    fontSize: '0.85rem',
-                    backgroundColor: '#fafafa'
+                    fontSize: '0.85rem'
                   },
                   '&.section-header': {
                     backgroundColor: '#e8f4fd',
@@ -345,19 +694,28 @@ const ConsumptionAllocation = () => {
                     color: '#1a365d'
                   },
                   '&.section-value': {
-                    backgroundColor: '#f0f9ff',
+                    backgroundColor: '#ffffff',
                     fontWeight: 500
                   }
                 },
                 '& .MuiTableRow-hover:hover': {
-                  backgroundColor: '#f8fafc'
+                  backgroundColor: '#f5f5f5'
                 }
               }}>
-                {/* Consumption Units Section */}
                 <TableHead>
                   <TableRow>
-                    <TableCell className="section-header" colSpan={7}>
-                      Consumption Units
+                    <TableCell className="header-cell"> </TableCell>
+                    <TableCell className="header-cell" align="center">C24</TableCell>
+                    <TableCell className="header-cell" align="center">C1</TableCell>
+                    <TableCell className="header-cell" align="center">C2</TableCell>
+                    <TableCell className="header-cell" align="center">C3</TableCell>
+                    <TableCell className="header-cell" align="center">C4</TableCell>
+                    <TableCell className="header-cell" align="center">C5</TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell className="header-cell">Consumption</TableCell>
+                    <TableCell className="header-cell" colSpan={6}>
+                      
                     </TableCell>
                   </TableRow>
                   <TableRow>
@@ -387,20 +745,6 @@ const ConsumptionAllocation = () => {
                     <TableCell align="right" className="section-value">0</TableCell>
                     <TableCell align="right" className="section-value">0</TableCell>
                   </TableRow>
-                  <TableRow>
-                    <TableCell className="section-header" colSpan={7} style={{ paddingTop: '20px' }}>
-                      Production Site Allocations
-                    </TableCell>
-                  </TableRow>
-                  <TableRow>
-                    <TableCell className="header-cell">Production Site</TableCell>
-                    <TableCell className="header-cell" align="center">C24</TableCell>
-                    <TableCell className="header-cell" align="center">C1</TableCell>
-                    <TableCell className="header-cell" align="center">C2</TableCell>
-                    <TableCell className="header-cell" align="center">C3</TableCell>
-                    <TableCell className="header-cell" align="center">C4</TableCell>
-                    <TableCell className="header-cell" align="center">C5</TableCell>
-                  </TableRow>
                 </TableHead>
                 <TableBody>
                   {(() => {
@@ -415,7 +759,8 @@ const ConsumptionAllocation = () => {
                         // Newest first
                         return tb - ta;
                       })
-                      .map((r, idx) => {
+                      .map((r, idx, array) => {
+                        const isLastProductionSite = idx === array.length - 1;
                         // Available before applying this allocation
                         const available = {
                           c24: Math.max(0, sectionTotals.c24 - cumulative.c24),
@@ -441,8 +786,46 @@ const ConsumptionAllocation = () => {
                         cumulative.c3 += Number(r.c3) || 0;
                         cumulative.c4 += Number(r.c4) || 0;
                         cumulative.c5 += Number(r.c5) || 0;
+                        const prodSite = prodSiteMap[r.productionSiteId] || {};
                         return (
                           <React.Fragment key={`${r.pk}-${idx}`}>
+                            {/* Supply Details Row */}
+                            <TableRow sx={{ '& .MuiTableCell-root': { py: 1 } }}>
+                              <TableCell className="header-cell" sx={{ 
+                                backgroundColor: '#4caf50',
+                                color: 'white',
+                                borderBottom: '1px solid #e0e0e0',
+                                textAlign: 'left',
+                                paddingLeft: '16px',
+                                width: '28.57%',
+                                borderRight: '1px solid #e0e0e0',
+                                fontWeight: 'bold'
+                              }} colSpan={2}>
+                                {prodSite.htscNo || 'N/A'}
+                              </TableCell>
+                              <TableCell className="header-cell" sx={{ 
+                                backgroundColor: '#4caf50',
+                                color: 'white',
+                                borderBottom: '1px solid #e0e0e0',
+                                textAlign: 'center',
+                                width: '28.57%',
+                                borderRight: '1px solid #e0e0e0',
+                                fontWeight: 'bold'
+                              }} colSpan={2}>
+                                {prodSite.siteType || prodSite.type || prodSite.siteCategory || 'N/A'}
+                              </TableCell>
+                              <TableCell className="header-cell" sx={{ 
+                                backgroundColor: '#4caf50',
+                                color: 'white',
+                                borderBottom: '1px solid #e0e0e0',
+                                fontWeight: 'bold',
+                                textAlign: 'left',
+                                paddingLeft: '16px',
+                                width: '42.86%'
+                              }} colSpan={3}>
+                                {r.productionSiteName || 'N/A'}
+                              </TableCell>
+                            </TableRow>
                             {/* Main Data Row */}
                             <TableRow hover>
                               <TableCell className="highlight">
@@ -464,7 +847,7 @@ const ConsumptionAllocation = () => {
                                       CHARGED
                                     </Box>
                                   )}
-                                  {r.productionSiteName || r.productionSiteId}
+                                  Supply
                                 </Box>
                               </TableCell>
                               <TableCell align="right">{formatNumber(r.c24)}</TableCell>
@@ -487,14 +870,225 @@ const ConsumptionAllocation = () => {
                             </TableRow>
                             
                             <TableRow>
-                              <TableCell className="subtext" sx={{ pl: 4, borderBottom: '2px solid #e0e0e0' }}>Consumption balance</TableCell>
-                              <TableCell className="subtext" align="right" sx={{ borderBottom: '2px solid #e0e0e0' }}>{formatNumber(rem.c24)}</TableCell>
-                              <TableCell className="subtext" align="right" sx={{ borderBottom: '2px solid #e0e0e0' }}>{formatNumber(rem.c1)}</TableCell>
-                              <TableCell className="subtext" align="right" sx={{ borderBottom: '2px solid #e0e0e0' }}>{formatNumber(rem.c2)}</TableCell>
-                              <TableCell className="subtext" align="right" sx={{ borderBottom: '2px solid #e0e0e0' }}>{formatNumber(rem.c3)}</TableCell>
-                              <TableCell className="subtext" align="right" sx={{ borderBottom: '2px solid #e0e0e0' }}>{formatNumber(rem.c4)}</TableCell>
-                              <TableCell className="subtext" align="right" sx={{ borderBottom: '2px solid #e0e0e0' }}>{formatNumber(rem.c5)}</TableCell>
+                              <TableCell 
+                                className="subtext" 
+                                sx={{ 
+                                  pl: 4, 
+                                  borderBottom: isLastProductionSite ? '2px solid #e0e0e0' : '1px solid #e0e0e0',
+                                  fontWeight: isLastProductionSite ? 500 : 'normal'
+                                }}
+                              >
+                                Consumption balance
+                              </TableCell>
+                              <TableCell 
+                                className="subtext" 
+                                align="right" 
+                                sx={{ 
+                                  borderBottom: isLastProductionSite ? '2px solid #e0e0e0' : '1px solid #e0e0e0',
+                                  fontWeight: isLastProductionSite ? 500 : 'normal'
+                                }}
+                              >
+                                {formatNumber(rem.c24)}
+                              </TableCell>
+                              <TableCell 
+                                className="subtext" 
+                                align="right" 
+                                sx={{ 
+                                  borderBottom: isLastProductionSite ? '2px solid #e0e0e0' : '1px solid #e0e0e0',
+                                  fontWeight: isLastProductionSite ? 500 : 'normal'
+                                }}
+                              >
+                                {formatNumber(rem.c1)}
+                              </TableCell>
+                              <TableCell 
+                                className="subtext" 
+                                align="right" 
+                                sx={{ 
+                                  borderBottom: isLastProductionSite ? '2px solid #e0e0e0' : '1px solid #e0e0e0',
+                                  fontWeight: isLastProductionSite ? 500 : 'normal'
+                                }}
+                              >
+                                {formatNumber(rem.c2)}
+                              </TableCell>
+                              <TableCell 
+                                className="subtext" 
+                                align="right" 
+                                sx={{ 
+                                  borderBottom: isLastProductionSite ? '2px solid #e0e0e0' : '1px solid #e0e0e0',
+                                  fontWeight: isLastProductionSite ? 500 : 'normal'
+                                }}
+                              >
+                                {formatNumber(rem.c3)}
+                              </TableCell>
+                              <TableCell 
+                                className="subtext" 
+                                align="right" 
+                                sx={{ 
+                                  borderBottom: isLastProductionSite ? '2px solid #e0e0e0' : '1px solid #e0e0e0',
+                                  fontWeight: isLastProductionSite ? 500 : 'normal'
+                                }}
+                              >
+                                {formatNumber(rem.c4)}
+                              </TableCell>
+                              <TableCell 
+                                className="subtext" 
+                                align="right" 
+                                sx={{ 
+                                  borderBottom: isLastProductionSite ? '2px solid #e0e0e0' : '1px solid #e0e0e0',
+                                  fontWeight: isLastProductionSite ? 500 : 'normal'
+                                }}
+                              >
+                                {formatNumber(rem.c5)}
+                              </TableCell>
                             </TableRow>
+                            
+                            {/* Banking Units Section - Shown after all production sites */}
+                            {isLastProductionSite && prodSitesWithBanking.length > 0 && (
+                              <>
+                                {prodSitesWithBanking.map((bankData) => (
+                                  <React.Fragment key={`banking-${bankData.id}`}>
+                                    {/* Supply Details Row - Matches production site header */}
+                                    <TableRow sx={{ '& .MuiTableCell-root': { py: 1 } }}>
+                                      <TableCell className="header-cell" sx={{ 
+                                        backgroundColor: '#1b5e20',
+                                        color: 'white',
+                                        borderBottom: '1px solid #e0e0e0',
+                                        textAlign: 'left',
+                                        paddingLeft: '16px',
+                                        width: '28.57%',
+                                        borderRight: '1px solid #e0e0e0',
+                                        fontWeight: 'bold'
+                                      }} colSpan={2}>
+                                        {bankData.htscNo || 'N/A'}
+                                      </TableCell>
+                                      <TableCell className="header-cell" sx={{ 
+                                        backgroundColor: '#1b5e20',
+                                        color: 'white',
+                                        borderBottom: '1px solid #e0e0e0',
+                                        textAlign: 'center',
+                                        width: '28.57%',
+                                        borderRight: '1px solid #e0e0e0',
+                                        fontWeight: 'bold'
+                                      }} colSpan={2}>
+                                        {bankData.siteType || 'N/A'}
+                                      </TableCell>
+                                      <TableCell className="header-cell" sx={{ 
+                                        backgroundColor: '#1b5e20',
+                                        color: 'white',
+                                        borderBottom: '1px solid #e0e0e0',
+                                        fontWeight: 'bold',
+                                        textAlign: 'left',
+                                        paddingLeft: '16px',
+                                        width: '42.86%'
+                                      }} colSpan={3}>
+                                        {bankData.name || 'N/A'}
+                                      </TableCell>
+                                    </TableRow>
+                                    
+                                    {/* Main Banking Data Row */}
+                                    <TableRow hover>
+                                      <TableCell className="highlight" sx={{ backgroundColor: '#c8e6c9' }}>
+                                        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                                          Banking Units
+                                        </Box>
+                                      </TableCell>
+                                      <TableCell align="right" sx={{ fontWeight: 500, color: '#1b5e20', backgroundColor: '#c8e6c9' }}>
+                                        {formatNumber((bankData.c1 || 0) + (bankData.c2 || 0) + (bankData.c3 || 0) + (bankData.c4 || 0) + (bankData.c5 || 0))}
+                                      </TableCell>
+                                      {[1, 2, 3, 4, 5].map(cat => (
+                                        <TableCell 
+                                          key={`bank-${bankData.id}-c${cat}`} 
+                                          align="right"
+                                          sx={{ color: '#1b5e20', backgroundColor: '#c8e6c9' }}
+                                        >
+                                          {formatNumber(bankData[`c${cat}`] || 0)}
+                                        </TableCell>
+                                      ))}
+                                    </TableRow>
+                                    
+                                    {/* Spacing between entries */}
+                                    <TableRow>
+                                      <TableCell colSpan={7} sx={{ height: '16px', border: 'none' }}></TableCell>
+                                    </TableRow>
+                                  </React.Fragment>
+                                ))}
+                                
+                                {/* Total Banking Units row removed as per user request */}
+                              </>
+                            )}
+
+                            {/* Lapse Units Section - Shown after banking units */}
+                            {isLastProductionSite && prodSitesWithLapse.length > 0 && (
+                              <>
+                                {prodSitesWithLapse.map((lapseItem) => (
+                                  <React.Fragment key={`lapse-${lapseItem.id}`}>
+                                    {/* Supply Details Row - Matches production site header */}
+                                    <TableRow sx={{ '& .MuiTableCell-root': { py: 1 } }}>
+                                      <TableCell className="header-cell" sx={{ 
+                                        backgroundColor: '#ef5350',
+                                        color: 'white',
+                                        borderBottom: '1px solid #e0e0e0',
+                                        textAlign: 'left',
+                                        paddingLeft: '16px',
+                                        width: '28.57%',
+                                        borderRight: '1px solid #e0e0e0',
+                                        fontWeight: 'bold'
+                                      }} colSpan={2}>
+                                        {lapseItem.htscNo || 'N/A'}
+                                      </TableCell>
+                                      <TableCell className="header-cell" sx={{ 
+                                        backgroundColor: '#ef5350',
+                                        color: 'white',
+                                        borderBottom: '1px solid #e0e0e0',
+                                        textAlign: 'center',
+                                        width: '28.57%',
+                                        borderRight: '1px solid #e0e0e0',
+                                        fontWeight: 'bold'
+                                      }} colSpan={2}>
+                                        {lapseItem.siteType || 'N/A'}
+                                      </TableCell>
+                                      <TableCell className="header-cell" sx={{ 
+                                        backgroundColor: '#ef5350',
+                                        color: 'white',
+                                        borderBottom: '1px solid #e0e0e0',
+                                        fontWeight: 'bold',
+                                        textAlign: 'left',
+                                        paddingLeft: '16px',
+                                        width: '42.86%'
+                                      }} colSpan={3}>
+                                        {lapseItem.name || 'N/A'}
+                                      </TableCell>
+                                    </TableRow>
+                                    
+                                    {/* Main Lapse Data Row */}
+                                    <TableRow hover>
+                                      <TableCell className="highlight" sx={{ backgroundColor: '#ffebee' }}>
+                                        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                                          Lapse Units
+                                        </Box>
+                                      </TableCell>
+                                      <TableCell align="right" sx={{ fontWeight: 500, color: '#c62828', backgroundColor: '#ffebee' }}>
+                                        {formatNumber((lapseItem.c1 || 0) + (lapseItem.c2 || 0) + (lapseItem.c3 || 0) + (lapseItem.c4 || 0) + (lapseItem.c5 || 0))}
+                                      </TableCell>
+                                      {[1, 2, 3, 4, 5].map(cat => (
+                                        <TableCell 
+                                          key={`lapse-${lapseItem.id}-c${cat}`} 
+                                          align="right"
+                                          sx={{ color: '#c62828', backgroundColor: '#ffebee' }}
+                                        >
+                                          {formatNumber(lapseItem[`c${cat}`] || 0)}
+                                        </TableCell>
+                                      ))}
+                                    </TableRow>
+                                    
+                                    {/* Spacing between entries */}
+                                    <TableRow>
+                                      <TableCell colSpan={7} sx={{ height: '16px', border: 'none' }}></TableCell>
+                                    </TableRow>
+                                  </React.Fragment>
+                                ))}
+                              </>
+                            )}
                           </React.Fragment>
                         );
                       });
@@ -503,6 +1097,95 @@ const ConsumptionAllocation = () => {
               </Table>
               );
             })()}
+
+            {/* OA Adjustment Charges Table - Shown after all sections */}
+            {Object.keys(prodSiteMap).length > 0 && (
+              <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2, mb: 3 }}>
+                <Box sx={{ width: '100%', maxWidth: '900px' }}>
+                  <Typography variant="subtitle2" sx={{ mb: 1.5, fontWeight: 'bold', color: '#1976d2', textAlign: 'center', fontSize: '0.9rem' }}>
+                    OA Adjustment Charges
+                  </Typography>
+
+                {/* Render each production site with its charges */}
+                {Object.entries(prodSiteMap).map(([siteId, siteData]) => (
+                  <Box key={`oa-charges-${siteId}`} sx={{ mb: 1.5 }}>
+                    {/* Production Site Header - Single Line */}
+                    <Box sx={{ 
+                      backgroundColor: '#c8e6c9', 
+                      padding: '8px 12px', 
+                      borderBottom: '1px solid #e0e0e0'
+                    }}>
+                      <Typography variant="caption" sx={{ fontWeight: '600', color: '#000000', fontSize: '0.8rem', display: 'block', lineHeight: 1.6 }}>
+                        GEN.SC.NO: <span style={{ fontWeight: 'bold', color: '#000000' }}>{siteData.htscNo || 'N/A'}</span>
+                        <span style={{ marginLeft: '40px' }}>
+                          Inj.Volt: <span style={{ fontWeight: 'bold', color: '#000000' }}>{siteData.injectionVoltage_KV ? `${siteData.injectionVoltage_KV}KV` : (siteData.injectionVoltage || siteData.voltage || 'N/A')}</span>
+                        </span>
+                        <span style={{ marginLeft: '40px' }}>
+                          Capacity: <span style={{ fontWeight: 'bold', color: '#000000' }}>{siteData.name || siteData.siteName || `Production Site ${siteId}`}</span>
+                        </span>
+                      </Typography>
+                    </Box>
+
+                    {/* Charges Table for this site */}
+                    <Table size="small" sx={{ 
+                      border: '1px solid #e0e0e0',
+                      borderTop: 'none',
+                      '& .MuiTableCell-root': {
+                        border: '1px solid #e0e0e0',
+                        padding: '5px 8px',
+                        fontSize: '0.75rem'
+                      },
+                      '& .MuiTableHead-root .MuiTableCell-root': {
+                        fontSize: '0.75rem',
+                        padding: '6px 8px',
+                        fontWeight: '600',
+                        backgroundColor: '#c8e6c9',
+                        color: '#000000',
+                        borderBottom: '2px solid #e0e0e0'
+                      },
+                      '& .MuiTableBody-root .MuiTableRow-root': {
+                        height: 'auto'
+                      }
+                    }}>
+                      <TableHead>
+                        <TableRow>
+                          <TableCell sx={{ width: '30%', textAlign: 'left' }}>CHARGE CODE</TableCell>
+                          <TableCell sx={{ width: '50%', textAlign: 'left' }}>CHARGE DESCRIPTION</TableCell>
+                          <TableCell sx={{ width: '20%', textAlign: 'right' }}>CHARGE AMOUNT</TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {/* Charge Data Rows */}
+                        {getChargesForSite(siteId).map((charge, idx) => (
+                          <TableRow key={`charge-${siteId}-${idx}`} sx={{ '&:hover': { backgroundColor: '#f9f9f9' } }}>
+                            <TableCell sx={{ fontWeight: '600', fontSize: '0.75rem', textAlign: 'left', color: '#000' }}>
+                              {charge.code}
+                            </TableCell>
+                            <TableCell sx={{ fontSize: '0.75rem', textAlign: 'left', color: '#333' }}>
+                              {charge.description}
+                            </TableCell>
+                            <TableCell sx={{ fontWeight: '500', color: '#000', fontSize: '0.75rem', textAlign: 'right' }}>
+                              {formatNumber(charge.amount)}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+
+                        {/* Site Total Row */}
+                        <TableRow sx={{ backgroundColor: '#f0f0f0', fontWeight: 'bold', borderTop: '2px solid #333' }}>
+                          <TableCell colSpan={2} sx={{ fontWeight: 'bold', fontSize: '0.75rem', textAlign: 'right', paddingRight: '16px' }}>
+                            Total:
+                          </TableCell>
+                          <TableCell sx={{ fontWeight: 'bold', color: '#000', fontSize: '0.75rem', textAlign: 'right', borderTop: '2px solid #333' }}>
+                            {formatNumber(getTotalChargesForSite(siteId))}
+                          </TableCell>
+                        </TableRow>
+                      </TableBody>
+                    </Table>
+                  </Box>
+                ))}
+                </Box>
+              </Box>
+            )}
             </Paper>
           );
         })

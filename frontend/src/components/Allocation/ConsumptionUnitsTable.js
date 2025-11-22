@@ -97,14 +97,19 @@ const formatMonthDisplay = (monthKey) => {
 
 const ConsumptionUnitsTable = ({ 
   consumptionData, 
-  isLoading, 
-  error, 
-  onAllocationSaved, 
+  selectedYear, 
+  shareholdings, 
   companyId, 
-  shareholdings = [] 
+  isLoading, 
+  error,
+  onAllocationSaved,
+  onAllocationPercentageChanged 
 }) => {
   const { user } = useAuth();
   const [allocationDialogOpen, setAllocationDialogOpen] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [localError, setLocalError] = useState(null);
   const { enqueueSnackbar } = useSnackbar();
   
   // Handle dialog open
@@ -141,8 +146,13 @@ const ConsumptionUnitsTable = ({
     setAllocationDialogOpen(true);
   }, []);
 
-  const handleAllocationSave = useCallback(async () => {
+  const handleAllocationSave = useCallback(async (localAllocations) => {
     try {
+      // Call the allocation percentage changed handler if provided
+      if (onAllocationPercentageChanged) {
+        onAllocationPercentageChanged(localAllocations);
+      }
+      
       if (onAllocationSaved) {
         await onAllocationSaved();
       }
@@ -152,7 +162,7 @@ const ConsumptionUnitsTable = ({
       console.error('Error saving allocations:', error);
       enqueueSnackbar(error.message || 'Failed to save allocations', { variant: 'error' });
     }
-  }, [onAllocationSaved, enqueueSnackbar]);
+  }, [onAllocationSaved, onAllocationPercentageChanged, enqueueSnackbar]);
 
   // Format month for display
   const formatMonth = (sk) => {

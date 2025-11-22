@@ -19,26 +19,23 @@ import {
   Paper,
   TextField,
   IconButton,
-  Tooltip,
-  Grid,
-  MenuItem,
-  Select,
-  FormControl,
-  InputLabel
+  Tooltip
 } from '@mui/material';
 import { Save as SaveIcon, Close as CloseIcon, Edit as EditIcon, Refresh as RefreshIcon } from '@mui/icons-material';
 import { useSnackbar } from 'notistack';
 import api from '../../services/api';
-
-const LOCAL_STORAGE_KEY = 'savedAllocationPercentages';
+import captiveApi from '../../services/captiveApi';
+import {
+  loadAllocationPercentages,
+  saveAllocationPercentages,
+  updateAllocationPercentage,
+  getAllocationPercentage,
+  mergeWithServerData
+} from '../../utils/allocationLocalStorage';
 
 const AllocationPercentageDialog = ({ open, onClose, onSave }) => {
   const { user, hasSiteAccess } = useAuth();
   
-  // State for company selection
-  const [selectedCompanyId, setSelectedCompanyId] = useState('');
-  const [companies, setCompanies] = useState([]);
-  const [accessibleCompanies, setAccessibleCompanies] = useState([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState('');
   const [allocations, setAllocations] = useState([]);
@@ -49,104 +46,26 @@ const AllocationPercentageDialog = ({ open, onClose, onSave }) => {
   const [localAllocations, setLocalAllocations] = useState({});
   const [lockedAllocations, setLockedAllocations] = useState({});
   const { enqueueSnackbar } = useSnackbar();
+  const selectedCompanyId = ''; // Removed company selection
 
-  // Load saved allocations from localStorage
-  const loadSavedAllocations = useCallback(() => {
-    try {
-      const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
-      return saved ? JSON.parse(saved) : {};
-    } catch (error) {
-      console.error('Error loading saved allocations:', error);
-      return {};
-    }
-  }, []);
-
-  // Fetch companies where user has production site access
-  const fetchCompanies = useCallback(async () => {
-    try {
-      console.log('Current user:', user);
-      
-      // Get user's accessible production sites
-      const productionSites = user?.metadata?.accessibleSites?.productionSites?.L || [];
-      console.log('Raw production sites:', productionSites);
-      
-      // Extract unique company IDs from accessible production sites
-      const companyIds = [...new Set(
-        productionSites
-          .map(site => {
-            // Handle different site ID formats
-            const siteId = site.S || site?.M?.S?.S || site;
-            console.log('Processing site:', site, 'Extracted ID:', siteId);
-            const companyId = siteId ? siteId.split('_')[0] : null;
-            // Convert to number if it's a numeric string to match API response
-            return companyId ? (isNaN(companyId) ? companyId : Number(companyId)) : null;
-          })
-          .filter(Boolean) // Remove any null/undefined values
-      )];
-
-      console.log('Extracted company IDs:', companyIds);
-
-      if (companyIds.length === 0) {
-        console.warn('No company IDs found in production sites');
-        setAccessibleCompanies([]);
-        enqueueSnackbar('No production sites accessible', { variant: 'info' });
-        return;
-      }
-
-      // Fetch details of accessible companies
-      const companiesResponse = await api.get('/company');
-      console.log('Companies API response:', companiesResponse.data);
-      
-      if (companiesResponse.data && Array.isArray(companiesResponse.data.data)) {
-        // Filter companies based on the extracted company IDs
-        const accessibleCompanies = companiesResponse.data.data.filter(
-          company => companyIds.includes(company.companyId)
-        );
-
-        console.log('Filtered accessible companies:', accessibleCompanies);
-        setCompanies(accessibleCompanies);
-        setAccessibleCompanies(accessibleCompanies);
-        
-        // Auto-select first accessible company if none selected
-        if (accessibleCompanies.length > 0 && !selectedCompanyId) {
-          setSelectedCompanyId(accessibleCompanies[0].companyId);
-        }
-      }
-    } catch (error) {
-      console.error('Error fetching accessible companies:', error);
-      enqueueSnackbar(
-        error.response?.data?.message || 'Failed to load accessible companies', 
-        { variant: 'error' }
-      );
-    }
-  }, [selectedCompanyId, enqueueSnackbar, user]);
-
-  // Save allocations to localStorage
-  const saveAllocationsToLocal = (allocations) => {
-    try {
-      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(allocations));
-    } catch (error) {
-      console.error('Error saving allocations to localStorage:', error);
-    }
-  };
-
-  const loadData = useCallback(async () => {
-    if (!selectedCompanyId) return;
-    
+  // Fetch allocations data
+  const fetchData = useCallback(async () => {
     try {
       setIsProcessing(true);
       setError('');
 
       // Load saved allocations from local storage
-      const savedAllocations = loadSavedAllocations();
+      const savedAllocations = loadAllocationPercentages();
       
-      // Fetch allocation data from the backend with the selected company ID
-      const response = await api.get(`/captive/allocations/${selectedCompanyId}`);
-      const allocationData = response.data.data;
+      // Fetch allocation data from the backend using the captive API
+      const response = await captiveApi.getAll();
       
-      if (!allocationData || !allocationData.allocations) {
-        throw new Error('No allocation data received from server');
+      if (!response || !Array.isArray(response)) {
+        throw new Error('Invalid response format from server');
       }
+      
+      // Transform the response into the expected format
+      const allocationData = { allocations: response };
       
       // Process the allocations
       const allocationsMap = {};
@@ -196,16 +115,11 @@ const AllocationPercentageDialog = ({ open, onClose, onSave }) => {
           const serverAlloc = allocationsMap[key];
           
           if (serverAlloc) {
-            // Use server value if available
             initialLocalAllocations[key] = serverAlloc.allocationPercentage;
             if (serverAlloc.isLocked) {
               lockedAllocations[key] = true;
             }
-          } else if (savedAllocations[key] !== undefined) {
-            // Fall back to saved local value
-            initialLocalAllocations[key] = parseFloat(savedAllocations[key]) || 0;
           } else {
-            // Default to 0
             initialLocalAllocations[key] = 0;
           }
         });
@@ -244,14 +158,11 @@ const AllocationPercentageDialog = ({ open, onClose, onSave }) => {
     } finally {
       setIsProcessing(false);
     }
-  }, [selectedCompanyId, enqueueSnackbar]);
+  }, [enqueueSnackbar]);
 
   useEffect(() => {
     if (open) {
-      fetchCompanies();
-      if (selectedCompanyId) {
-        loadData();
-      }
+      fetchData();
     } else {
       setAllocations([]);
       setGenerators([]);
@@ -260,7 +171,7 @@ const AllocationPercentageDialog = ({ open, onClose, onSave }) => {
       setEditingCell(null);
       setLocalAllocations({});
     }
-  }, [open, selectedCompanyId, fetchCompanies, loadData]);
+  }, [open, fetchData]);
 
   const handleEditClick = (generatorId, shareholderId, currentValue) => {
     const key = `${generatorId}-${shareholderId}`;
@@ -280,100 +191,99 @@ const AllocationPercentageDialog = ({ open, onClose, onSave }) => {
     }
 
     const key = `${generatorId}-${shareholderId}`;
-    const updatedAllocations = {
-      ...localAllocations,
-      [key]: newPercentage
-    };
+    const success = updateAllocationPercentage(generatorId, shareholderId, newPercentage);
     
-    // Update the allocations array to reflect the change
-    const updatedAllocationsArray = allocations.map(alloc => {
-      if (alloc.generatorCompanyId === generatorId && alloc.shareholderCompanyId === shareholderId) {
-        return { ...alloc, allocationPercentage: newPercentage };
-      }
-      return alloc;
-    });
-    
-    setAllocations(updatedAllocationsArray);
-    setLocalAllocations(updatedAllocations);
-    saveAllocationsToLocal(updatedAllocations);
-    setEditingCell(null);
-    
-    enqueueSnackbar('Allocation updated', { variant: 'success' });
+    if (success) {
+      // Update the allocations array to reflect the change
+      const updatedAllocationsArray = allocations.map(alloc => {
+        if (alloc.generatorCompanyId === generatorId && alloc.shareholderCompanyId === shareholderId) {
+          return { ...alloc, allocationPercentage: newPercentage };
+        }
+        return alloc;
+      });
+      
+      setAllocations(updatedAllocationsArray);
+      setLocalAllocations(loadAllocationPercentages()); // Reload from localStorage
+      setEditingCell(null);
+      
+      enqueueSnackbar('Allocation updated locally', { variant: 'success' });
+    } else {
+      enqueueSnackbar('Failed to update allocation', { variant: 'error' });
+    }
   };
 
-  const handleUpdateAllocation = (generatorId, shareholderId, value) => {
-    const key = `${generatorId}-${shareholderId}`;
+  const handleUpdateAllocation = async (generatorId, shareholderId, value) => {
+  const key = `${generatorId}-${shareholderId}`;
+  
+  // Check if the allocation is locked
+  if (lockedAllocations[key]) {
+    enqueueSnackbar('This allocation is locked and cannot be modified', { variant: 'warning' });
+    return false;
+  }
+
+  const newPercentage = parseFloat(value);
+  if (isNaN(newPercentage) || newPercentage < 0 || newPercentage > 100) {
+    enqueueSnackbar('Please enter a valid percentage between 0 and 100', { variant: 'error' });
+    return false;
+  }
+
+  try {
+    setIsProcessing(true);
     
-    // Check if the allocation is locked
-    if (lockedAllocations[key]) {
-      enqueueSnackbar('This allocation is locked and cannot be modified', { variant: 'warning' });
-      return false;
-    }
-
-    const newPercentage = parseFloat(value);
-    if (isNaN(newPercentage) || newPercentage < 0 || newPercentage > 100) {
-      enqueueSnackbar('Please enter a valid percentage between 0 and 100', { variant: 'error' });
-      return false;
-    }
-
-    const updatedAllocations = {
-      ...localAllocations,
+    // Update server first
+    await captiveApi.updateAllocationPercentage(generatorId, shareholderId, newPercentage);
+    
+    // Update local storage
+    updateAllocationPercentage(generatorId, shareholderId, newPercentage);
+    
+    // Update state
+    setAllocations(prevAllocations => 
+      prevAllocations.map(alloc => 
+        alloc.generatorCompanyId === generatorId && 
+        alloc.shareholderCompanyId === shareholderId
+          ? { ...alloc, allocationPercentage: newPercentage }
+          : alloc
+      )
+    );
+    
+    setLocalAllocations(prev => ({
+      ...prev,
       [key]: newPercentage
-    };
+    }));
     
-    // Update local state and save to localStorage
-    setLocalAllocations(updatedAllocations);
-    saveAllocationsToLocal(updatedAllocations);
-    
-    // No need to save to backend anymore
-    enqueueSnackbar('Allocation updated locally', { variant: 'info' });
-    
+    enqueueSnackbar('Allocation updated successfully', { variant: 'success' });
     return true;
-  };
+  } catch (error) {
+    console.error('Error updating allocation:', error);
+    enqueueSnackbar(
+      error.response?.data?.message || 'Failed to update allocation', 
+      { variant: 'error' }
+    );
+    return false;
+  } finally {
+    setIsProcessing(false);
+  }
+};
 
   const handleSaveAll = async () => {
     try {
       setIsProcessing(true);
       
-      // Prepare updates for the backend
-      const updates = [];
+      // Save current local allocations to localStorage (already done on each change)
+      const currentAllocations = loadAllocationPercentages();
       
-      // Process each generator-shareholder combination
-      generators.forEach(gen => {
-        shareholders.forEach(sh => {
-          const key = `${gen.id}-${sh.id}`;
-          // Only include if not locked and value has changed
-          if (!lockedAllocations[key] && localAllocations[key] !== undefined) {
-            updates.push({
-              generatorCompanyId: gen.id,
-              shareholderCompanyId: sh.id,
-              allocationPercentage: parseFloat(localAllocations[key]) || 0,
-              allocationStatus: 'active'
-            });
-          }
-        });
-      });
-      
-      // Save to backend if there are updates
-      if (updates.length > 0) {
-        await api.post('/captive/update-bulk', updates);
-      }
-      
-      // Save to local storage
-      saveAllocationsToLocal(localAllocations);
-      
-      // Notify parent component
-      if (onSave) onSave(localAllocations);
+      // Notify parent component with current local allocations
+      if (onSave) onSave(currentAllocations);
       
       // Close the dialog
       onClose();
       
-      enqueueSnackbar('Allocations saved successfully', { variant: 'success' });
+      enqueueSnackbar('All allocation changes saved locally', { variant: 'success' });
       
     } catch (error) {
       console.error('Error saving allocations:', error);
       enqueueSnackbar(
-        error.response?.data?.message || 'Failed to save allocations', 
+        'Failed to save allocations locally', 
         { variant: 'error' }
       );
     } finally {
@@ -394,38 +304,14 @@ const AllocationPercentageDialog = ({ open, onClose, onSave }) => {
     return !!lockedAllocations[key];
   };
 
-  const handleCompanyChange = (event) => {
-    setSelectedCompanyId(event.target.value);
-  };
-
   return (
     <Dialog open={open} onClose={onClose} maxWidth="lg" fullWidth>
       <DialogTitle>
         <Box display="flex" justifyContent="space-between" alignItems="center">
           <Box display="flex" alignItems="center" gap={2}>
             <Typography variant="h6">Allocation Percentages</Typography>
-            <FormControl variant="outlined" size="small" sx={{ minWidth: 200, ml: 2 }}>
-              <InputLabel id="company-select-label">Select Company</InputLabel>
-              <Select
-                labelId="company-select-label"
-                value={selectedCompanyId}
-                onChange={handleCompanyChange}
-                label="Select Company"
-                disabled={accessibleCompanies.length === 0}
-              >
-                {accessibleCompanies.length > 0 ? (
-                  accessibleCompanies.map((company) => (
-                    <MenuItem key={company.companyId} value={company.companyId}>
-                      {company.companyName || `Company ${company.companyId}`}
-                    </MenuItem>
-                  ))
-                ) : (
-                  <MenuItem disabled>No companies available</MenuItem>
-                )}
-              </Select>
-            </FormControl>
             <Tooltip title="Refresh Data">
-              <IconButton onClick={loadData} size="small" disabled={isProcessing}>
+              <IconButton onClick={fetchData} size="small" disabled={isProcessing}>
                 <RefreshIcon />
               </IconButton>
             </Tooltip>
@@ -437,9 +323,7 @@ const AllocationPercentageDialog = ({ open, onClose, onSave }) => {
       </DialogTitle>
 
       <DialogContent>
-        {!selectedCompanyId ? (
-          <Alert severity="info">Please select a company to view allocations</Alert>
-        ) : error ? (
+        {error ? (
           <Alert severity="error" sx={{ mb: 2 }}>
             {error}
           </Alert>

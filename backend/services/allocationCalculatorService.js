@@ -36,6 +36,57 @@ function cloneUnits(obj) {
 }
 
 /**
+ * Filters consumption units based on include and exclude lists
+ * @param {Array} consumptionUnits - Array of consumption units
+ * @param {Array} includeConsumptionSites - Array of consumption site IDs to include (if provided, only these are used)
+ * @param {Array} excludeConsumptionSites - Array of consumption site IDs to exclude
+ * @returns {Array} Filtered consumption units
+ */
+function filterConsumptionSites(consumptionUnits = [], includeConsumptionSites = [], excludeConsumptionSites = []) {
+  console.log('[filterConsumptionSites] Starting filter with:',
+    `include=${includeConsumptionSites?.length || 0} sites`,
+    `exclude=${excludeConsumptionSites?.length || 0} sites`);
+
+  if (!Array.isArray(consumptionUnits) || consumptionUnits.length === 0) {
+    console.log('[filterConsumptionSites] No consumption units to filter');
+    return [];
+  }
+
+  let filtered = [...consumptionUnits];
+
+  // If include list is provided, only use those sites
+  if (Array.isArray(includeConsumptionSites) && includeConsumptionSites.length > 0) {
+    filtered = filtered.filter(unit => {
+      const siteId = unit.consumptionSiteId || unit.id;
+      const isIncluded = includeConsumptionSites.includes(siteId) || 
+                         includeConsumptionSites.includes(String(siteId));
+      if (!isIncluded) {
+        console.log(`[filterConsumptionSites] Filtering out site ${siteId} (not in include list)`);
+      }
+      return isIncluded;
+    });
+    console.log(`[filterConsumptionSites] After include filter: ${filtered.length} units remain`);
+  }
+
+  // Apply exclude list
+  if (Array.isArray(excludeConsumptionSites) && excludeConsumptionSites.length > 0) {
+    filtered = filtered.filter(unit => {
+      const siteId = unit.consumptionSiteId || unit.id;
+      const isExcluded = excludeConsumptionSites.includes(siteId) || 
+                         excludeConsumptionSites.includes(String(siteId));
+      if (isExcluded) {
+        console.log(`[filterConsumptionSites] Filtering out site ${siteId} (in exclude list)`);
+      }
+      return !isExcluded;
+    });
+    console.log(`[filterConsumptionSites] After exclude filter: ${filtered.length} units remain`);
+  }
+
+  console.log(`[filterConsumptionSites] Final filtered result: ${filtered.length} units from ${consumptionUnits.length} original`);
+  return filtered;
+}
+
+/**
  * Advanced Energy Allocation Calculator
  * 
  * Allocates energy from production to consumption sites following these rules:
@@ -48,10 +99,15 @@ function cloneUnits(obj) {
  * @param {Array} params.productionUnits - Array of production units
  * @param {Array} params.consumptionUnits - Array of consumption units
  * @param {Array} params.bankingUnits - Array of banked units from previous periods
+ * @param {Array} params.includeConsumptionSites - Array of consumption site IDs to include (if provided, only these are used)
+ * @param {Array} params.excludeConsumptionSites - Array of consumption site IDs to exclude
  * @returns {Object} Allocation results including allocations, banking, and lapsed units
  */
-function calculateAllocations({ productionUnits = [], consumptionUnits = [], bankingUnits = [] }) {
+function calculateAllocations({ productionUnits = [], consumptionUnits = [], bankingUnits = [], includeConsumptionSites = [], excludeConsumptionSites = [] }) {
   console.log('[calculateAllocations] Starting allocation process');
+  
+  // Filter consumption sites based on include/exclude lists
+  consumptionUnits = filterConsumptionSites(consumptionUnits, includeConsumptionSites, excludeConsumptionSites);
   
   // Ensure all production units have proper initialization
   productionUnits = productionUnits.map(unit => ({
@@ -65,7 +121,7 @@ function calculateAllocations({ productionUnits = [], consumptionUnits = [], ban
   }));
 
   // Log initial state
-  console.log(`[calculateAllocations] Processing ${productionUnits.length} production units, ${consumptionUnits.length} consumption units, ${bankingUnits.length} banking units`);
+  console.log(`[calculateAllocations] Processing ${productionUnits.length} production units, ${consumptionUnits.length} consumption units (after filtering), ${bankingUnits.length} banking units`);
   
   // Prepare data structures
   const allocations = [];
@@ -356,5 +412,6 @@ function calculateAllocations({ productionUnits = [], consumptionUnits = [], ban
 }
 
 module.exports = {
-  calculateAllocations
+  calculateAllocations,
+  filterConsumptionSites
 };

@@ -1,3 +1,8 @@
+import {
+  loadAllocationPercentages,
+  convertToCaptiveDataFormat
+} from './allocationLocalStorage';
+
 const ALL_PERIODS = ['c1', 'c2', 'c3', 'c4', 'c5'];
 
 function createUnitWithRemaining(unit, isProduction = false) {
@@ -39,6 +44,113 @@ function getTotalRemaining(unit) {
 
 function hasRemaining(unit) {
   return getTotalRemaining(unit) > 0;
+}
+
+/**
+ * Filters consumption units based on include/exclude settings
+ * @param {Array} consumptionUnits - All consumption units
+ * @param {Object} includeExcludeSettings - Settings for inclusion/exclusion
+ * @param {Object} includeExcludeSettings.includedSites - Set of site IDs to include
+ * @param {Object} includeExcludeSettings.excludedSites - Set of site IDs to exclude
+ * @param {boolean} includeExcludeSettings.excludeByDefault - Whether to exclude by default
+ * @returns {Array} - Filtered consumption units
+ */
+function filterConsumptionUnits(consumptionUnits, includeExcludeSettings = {}) {
+  const {
+    includedSites = new Set(),
+    excludedSites = new Set(),
+    excludeByDefault = false
+  } = includeExcludeSettings;
+
+  debugLog('Filtering consumption units with include/exclude settings', {
+    totalUnits: consumptionUnits.length,
+    includedSitesCount: includedSites.size,
+    excludedSitesCount: excludedSites.size,
+    excludeByDefault
+  });
+
+  return consumptionUnits.filter(unit => {
+    const siteId = String(unit.consumptionSiteId || unit.id || '');
+    
+    // If site is explicitly excluded, always exclude it
+    if (excludedSites.has(siteId)) {
+      debugLog('Excluding site (explicitly excluded)', { siteId, siteName: unit.siteName });
+      return false;
+    }
+    
+    // If site is explicitly included, always include it
+    if (includedSites.has(siteId)) {
+      debugLog('Including site (explicitly included)', { siteId, siteName: unit.siteName });
+      return true;
+    }
+    
+    // Otherwise, use the default behavior
+    const shouldInclude = !excludeByDefault;
+    debugLog(`Site ${shouldInclude ? 'included' : 'excluded'} (default behavior)`, { 
+      siteId, 
+      siteName: unit.siteName,
+      excludeByDefault
+    });
+    
+    return shouldInclude;
+  });
+}
+
+/**
+ * Creates include/exclude settings from various input formats
+ * @param {Object|Array|Set} included - Included sites (can be array, set, or object with boolean values)
+ * @param {Object|Array|Set} excluded - Excluded sites (can be array, set, or object with boolean values)
+ * @param {boolean} excludeByDefault - Default behavior when not explicitly included/excluded
+ * @returns {Object} - Normalized include/exclude settings
+ */
+function createIncludeExcludeSettings(included = new Set(), excluded = new Set(), excludeByDefault = false) {
+  // Convert included sites to Set
+  let includedSites = new Set();
+  if (included instanceof Set) {
+    includedSites = included;
+  } else if (Array.isArray(included)) {
+    includedSites = new Set(included.map(id => String(id)));
+  } else if (typeof included === 'object' && included !== null) {
+    // Handle object format like { siteId1: true, siteId2: false }
+    Object.entries(included).forEach(([id, value]) => {
+      if (value) includedSites.add(String(id));
+    });
+  }
+
+  // Convert excluded sites to Set
+  let excludedSites = new Set();
+  if (excluded instanceof Set) {
+    excludedSites = excluded;
+  } else if (Array.isArray(excluded)) {
+    excludedSites = new Set(excluded.map(id => String(id)));
+  } else if (typeof excluded === 'object' && excluded !== null) {
+    // Handle object format like { siteId1: true, siteId2: false }
+    Object.entries(excluded).forEach(([id, value]) => {
+      if (value) excludedSites.add(String(id));
+    });
+  }
+
+  // Remove any sites that are in both sets (exclusion takes precedence)
+  const conflictSites = [...includedSites].filter(id => excludedSites.has(id));
+  if (conflictSites.length > 0) {
+    console.warn('Sites found in both include and exclude lists. Exclusion takes precedence:', conflictSites);
+    conflictSites.forEach(id => includedSites.delete(id));
+  }
+
+  const settings = {
+    includedSites,
+    excludedSites,
+    excludeByDefault: Boolean(excludeByDefault)
+  };
+
+  debugLog('Created include/exclude settings', {
+    includedSites: Array.from(includedSites),
+    excludedSites: Array.from(excludedSites),
+    excludeByDefault,
+    conflictsResolved: conflictSites.length
+  });
+
+  return settings;
 }
 
 
@@ -102,6 +214,43 @@ const debugLog = (message, data = {}) => {
 };
 
 /**
+ * Merge local captive data with server captive data
+ * Local data takes precedence over server data for the same generator-shareholder pairs
+ * @param {Array} localData - Local captive data
+ * @param {Array} serverData - Server captive data
+ * @returns {Array} - Merged captive data
+ */
+function mergeCaptiveData(localData = [], serverData = []) {
+  const mergedMap = new Map();
+  
+  // Add server data first
+  serverData.forEach(entry => {
+    const key = `${entry.generatorCompanyId}-${entry.shareholderCompanyId}`;
+    mergedMap.set(key, { ...entry });
+  });
+  
+  // Override with local data
+  localData.forEach(entry => {
+    const key = `${entry.generatorCompanyId}-${entry.shareholderCompanyId}`;
+    const existing = mergedMap.get(key);
+    
+    if (existing) {
+      // Update existing entry with local percentage
+      mergedMap.set(key, {
+        ...existing,
+        allocationPercentage: entry.allocationPercentage,
+        allocationStatus: 'active'
+      });
+    } else {
+      // Add new local entry
+      mergedMap.set(key, { ...entry });
+    }
+  });
+  
+  return Array.from(mergedMap.values());
+}
+
+/**
  * Distributes percentages as whole numbers that sum to exactly 100%
  * @param {Array<{percentage: number, [key: string]: any}>} items - Array of items with percentages
  * @returns {Array<{percentage: number, [key: string]: any}>} - Items with whole number percentages
@@ -137,7 +286,8 @@ export function calculateAllocations({
   captiveData = [],
   month = '',
   productionSites = [],
-  consumptionSitePriorityMap = {}
+  consumptionSitePriorityMap = {},
+  consumptionSiteIncludeExclude = {}
 }) {
   debugLog('Starting allocation calculation', {
     productionUnits: productionUnits.length,
@@ -145,7 +295,54 @@ export function calculateAllocations({
     bankingUnits: bankingUnits.length,
     captiveData: captiveData.length,
     month,
-    hasConsumptionPriority: Object.keys(consumptionSitePriorityMap).length > 0
+    hasConsumptionPriority: Object.keys(consumptionSitePriorityMap).length > 0,
+    hasIncludeExcludeSettings: Object.keys(consumptionSiteIncludeExclude).length > 0
+  });
+
+  // Load allocation percentages from local storage
+  const localAllocationData = loadAllocationPercentages();
+  const localCaptiveData = convertToCaptiveDataFormat(localAllocationData);
+  
+  debugLog('Local allocation data loaded', {
+    localEntriesCount: localCaptiveData.length,
+    localEntries: localCaptiveData.map(entry => ({
+      generatorCompanyId: entry.generatorCompanyId,
+      shareholderCompanyId: entry.shareholderCompanyId,
+      allocationPercentage: entry.allocationPercentage
+    }))
+  });
+
+  // Merge local data with server captive data (local data takes precedence)
+  const mergedCaptiveData = mergeCaptiveData(localCaptiveData, captiveData);
+  
+  debugLog('Merged captive data', {
+    localCount: localCaptiveData.length,
+    serverCount: captiveData.length,
+    mergedCount: mergedCaptiveData.length
+  });
+
+  // Use merged data for calculations
+  const effectiveCaptiveData = mergedCaptiveData;
+
+  // Normalize include/exclude settings
+  const includeExcludeSettings = createIncludeExcludeSettings(
+    consumptionSiteIncludeExclude.included,
+    consumptionSiteIncludeExclude.excluded,
+    consumptionSiteIncludeExclude.excludeByDefault
+  );
+
+  // Apply include/exclude filtering to consumption units
+  const filteredConsumptionUnits = filterConsumptionUnits(consumptionUnits, includeExcludeSettings);
+  
+  debugLog('Consumption unit filtering complete', {
+    originalCount: consumptionUnits.length,
+    filteredCount: filteredConsumptionUnits.length,
+    excludedCount: consumptionUnits.length - filteredConsumptionUnits.length,
+    includeExcludeSettings: {
+      includedCount: includeExcludeSettings.includedSites.size,
+      excludedCount: includeExcludeSettings.excludedSites.size,
+      excludeByDefault: includeExcludeSettings.excludeByDefault
+    }
   });
   const allocationMonth = month || `${String(new Date().getMonth() + 1).padStart(2, '0')}${new Date().getFullYear()}`;
   const monthYear = allocationMonth;
@@ -153,14 +350,14 @@ export function calculateAllocations({
   // Build captive allocation map using generator company ID and shareholder company ID
   const captiveMap = {};
   
-  // Validate captive data
-  if (!Array.isArray(captiveData)) {
-    console.warn('Invalid captiveData: expected array, got', typeof captiveData);
-    captiveData = [];
+  // Validate effective captive data
+  if (!Array.isArray(effectiveCaptiveData)) {
+    console.warn('Invalid effectiveCaptiveData: expected array, got', typeof effectiveCaptiveData);
+    effectiveCaptiveData = [];
   }
 
-  // Process captive data to build the allocation map
-  captiveData.forEach((entry, index) => {
+  // Process effective captive data to build the allocation map
+  effectiveCaptiveData.forEach((entry, index) => {
     try {
       if (!entry) {
         console.warn(`Skipping null/undefined captive data entry at index ${index}`);
@@ -364,7 +561,7 @@ export function calculateAllocations({
   });
 
   // Process consumption units with enhanced shareholder company ID handling
-  const consumers = consumptionUnits
+  const consumers = filteredConsumptionUnits
     .map((unit, index) => {
       try {
         if (!unit) {
@@ -1218,3 +1415,6 @@ export function calculateAllocations({
   
   return result;
 }
+
+// Export the new include/exclude functions for external use
+export { filterConsumptionUnits, createIncludeExcludeSettings };

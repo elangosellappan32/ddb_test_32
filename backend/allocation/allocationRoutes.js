@@ -10,6 +10,9 @@ router.post('/', validateJson, validateAllocation, allocationController.createAl
 // Create batch allocations
 router.post('/batch', validateJson, validateAllocation, allocationController.createAllocation);
 
+// Calculate allocations with consumption site filtering
+router.get('/calculate/with-filtering', allocationController.calculateAllocationsWithFiltering);
+
 // Get all allocations (for report page, no month filter)
 router.get('/', allocationController.getAllAllocations);
 

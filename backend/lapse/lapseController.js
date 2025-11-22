@@ -6,7 +6,39 @@ const lapseService = require('../services/lapseService');
 exports.getLapsesByPk = async (req, res) => {
     try {
         const { pk } = req.params;
-        logger.info(`[LapseController] Fetching lapses for PK: ${pk}`);
+        const { month } = req.query;
+        
+        logger.info(`[LapseController] Fetching lapses for PK: ${pk}`, { month });
+        
+        // If month is provided, use the service to get lapses by company and month
+        if (month) {
+            // Extract companyId from pk
+            const companyId = pk.split('_')[0];
+            if (!companyId) {
+                logger.warn(`[LapseController] Invalid pk format for month query: ${pk}`);
+                return res.json({
+                    success: true,
+                    data: []
+                });
+            }
+            
+            const result = await lapseService.getLapsesByCompanyAndMonth(companyId, month);
+            
+            if (!result || !Array.isArray(result)) {
+                logger.warn(`[LapseController] Invalid response from service for PK: ${pk}`);
+                return res.json({
+                    success: true,
+                    data: []
+                });
+            }
+            
+            return res.json({
+                success: true,
+                data: result
+            });
+        }
+        
+        // Otherwise, fetch all lapses for the PK
         const result = await lapseService.getLapsesByPk(pk);
         
         if (!result || !Array.isArray(result)) {

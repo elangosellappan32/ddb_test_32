@@ -6,6 +6,7 @@ const logger = require('../utils/logger');
 const { ALL_PERIODS } = require('../constants/periods');
 const ValidationError = require('../utils/errors').ValidationError;
 const productionSiteDAL = require('../productionSite/productionSiteDAL');
+const { calculateAllocations, filterConsumptionSites } = require('../services/allocationCalculatorService');
 const docClient = require('../utils/db');
 const { ScanCommand } = require('@aws-sdk/lib-dynamodb');
 
@@ -48,50 +49,28 @@ const createAllocation = async (req, res, next) => {
         }
         
         // Log company ID extraction for debugging
-        logger.info('Company ID extraction for user:', {
+        logger.debug('Company ID extraction for user:', {
             userId: req.user?.userId,
             directCompanyId: req.user?.companyId,
-            directCompanyIdType: typeof req.user?.companyId,
             metadataCompanyId: req.user?.metadata?.companyId,
-            metadataCompanyIdType: typeof req.user?.metadata?.companyId,
             accessibleSitesCompanyId: req.user?.metadata?.accessibleSites?.companyId,
-            accessibleSitesCompanyIdType: typeof req.user?.metadata?.accessibleSites?.companyId,
             companyIds: req.user?.companyIds,
             extractedCompanyId: userCompanyId,
-            extractedCompanyIdType: typeof userCompanyId,
-            userKeys: req.user ? Object.keys(req.user) : [],
-            allocationCount: allocations.length
+            userKeys: req.user ? Object.keys(req.user) : []
         });
         
         if (!userCompanyId) {
-            logger.error('No company ID found in user session - detailed info:', { 
+            logger.error('No company ID found in user session', { 
                 userId: req.user?.userId,
-                userName: req.user?.username,
-                userRole: req.user?.role,
-                userObject: JSON.stringify(req.user, null, 2),
-                requestPath: req.path,
-                requestMethod: req.method
+                userObject: req.user
             });
             return res.status(403).json({ 
                 success: false, 
-                message: 'User company information not found',
-                debug: {
-                    userId: req.user?.userId,
-                    directCompanyId: req.user?.companyId,
-                    availableKeys: req.user ? Object.keys(req.user) : []
-                }
+                message: 'User company information not found' 
             });
         }
-        
-        // Ensure companyId is converted to string for consistency
-        userCompanyId = String(userCompanyId);
-        logger.info('Company ID set to:', { userCompanyId, type: typeof userCompanyId });
 
         const results = [];
-        let effectiveCompanyId; // Declare here so it's accessible in all catch blocks
-        let productionSiteId;
-        let consumptionSiteId;
-        let month;
         
         // Process each allocation sequentially to properly handle lapse and banking units
         for (const alloc of allocations) {
@@ -100,10 +79,8 @@ const createAllocation = async (req, res, next) => {
                     throw new ValidationError('Invalid allocation: missing pk or sk');
                 }
 
-                const [pkCompanyId, pSiteId, cSiteId] = alloc.pk.split('_');
-                productionSiteId = pSiteId;
-                consumptionSiteId = cSiteId;
-                month = alloc.sk;
+                const [pkCompanyId, productionSiteId, consumptionSiteId] = alloc.pk.split('_');
+                const month = alloc.sk;
                 
                 // Log the allocation being processed
                 logger.info(`Processing allocation`, {
@@ -114,17 +91,15 @@ const createAllocation = async (req, res, next) => {
                     consumptionSiteId,
                     month,
                     userCompanyId,
-                    userId: req.user?.userId,
-                    allocationMetadata: alloc._allocationMetadata,
-                    changedPeriods: alloc._changedPeriods
+                    userId: req.user?.userId
                 });
                 
                 if (!productionSiteId) {
                     throw new ValidationError('Missing production site ID in allocation PK');
                 }
                 
-                // Use the company ID from the PK, which was set by the frontend based on production site ownership
-                effectiveCompanyId = pkCompanyId;
+                // Always use the company ID from the authenticated user's session
+                const effectiveCompanyId = userCompanyId;
                 console.log(`Looking up production site ${productionSiteId} for company ${effectiveCompanyId}`);
                 
                 // Try to find the production site using the exact ID from the PK
@@ -207,53 +182,30 @@ const createAllocation = async (req, res, next) => {
                     ? { ...existingAlloc, ...alloc, updatedat: new Date().toISOString() }
                     : { ...alloc, createdat: new Date().toISOString(), updatedat: new Date().toISOString() };
                 
-                // Track which periods were actually changed (not just sent as 0)
-                const changedPeriods = [];
-                let hasChanges = false;
-                
-                for (const period of ALL_PERIODS) {
+                // Only update if there are actual changes
+                const hasChanges = ALL_PERIODS.some(period => {
                     const oldVal = Number(existingAlloc?.[period] || 0);
                     const newVal = Number(alloc[period] || 0);
-                    
-                    if (oldVal !== newVal) {
-                        hasChanges = true;
-                        changedPeriods.push(period);
-                        logger.debug(`[AllocationController] Period ${period} changed: ${oldVal} -> ${newVal}`);
-                    }
-                }
+                    return oldVal !== newVal;
+                });
 
                 let result;
                 if (hasChanges) {
                     result = await allocationDAL.putItem(merged);
-                    logger.info(`[AllocationController] Updated allocation`, {
-                        pk: alloc.pk,
-                        sk: alloc.sk,
-                        changedPeriods,
-                        changeCount: changedPeriods.length
-                    });
                 } else {
                     // Return the existing record as is if no changes
                     result = existingAlloc || merged;
                     result.unchanged = true; // Flag to indicate no changes were made
-                    logger.debug(`[AllocationController] No changes for allocation`, {
-                        pk: alloc.pk,
-                        sk: alloc.sk
-                    });
                 }
                 results.push(result);
 
-                // Handle each period's changes - only process periods that actually changed
-                for (const period of changedPeriods) {
+                // Handle each period's changes
+                for (const period of ALL_PERIODS) {
                     const oldVal = Number(existingAlloc?.[period] || 0);
                     const newVal = Number(alloc[period] || 0);
                     const delta = newVal - oldVal;
                     
-                    logger.debug(`[AllocationController] Processing period ${period}`, {
-                        oldVal,
-                        newVal,
-                        delta,
-                        bankingEnabled
-                    });
+                    if (delta === 0) continue;
 
                     if (bankingEnabled) {
                         // Handle banking site logic
@@ -559,6 +511,94 @@ const getFilteredAllocations = async (req, res, next) => {
     }
 };
 
+/**
+ * Calculate allocations with consumption site filtering
+ * Query parameters:
+ *   - includeConsumptionSites: comma-separated list of consumption site IDs to include
+ *   - excludeConsumptionSites: comma-separated list of consumption site IDs to exclude
+ *   - month: month for allocation (MMYYYY format)
+ */
+const calculateAllocationsWithFiltering = async (req, res, next) => {
+    try {
+        const { month, includeConsumptionSites, excludeConsumptionSites } = req.query;
+        
+        if (!month) {
+            return res.status(400).json({
+                success: false,
+                message: 'Month parameter is required (MMYYYY format)'
+            });
+        }
+
+        // Parse include/exclude site lists
+        const includeSites = includeConsumptionSites 
+            ? includeConsumptionSites.split(',').map(s => s.trim()).filter(s => s)
+            : [];
+        
+        const excludeSites = excludeConsumptionSites
+            ? excludeConsumptionSites.split(',').map(s => s.trim()).filter(s => s)
+            : [];
+
+        logger.info('Calculate allocations with filtering', {
+            month,
+            includeSites,
+            excludeSites
+        });
+
+        // Fetch all production units for the month
+        const allAllocations = await allocationDAL.getAllocationsByMonth(month);
+        
+        // Group by production site
+        const productionUnitsMap = new Map();
+        allAllocations.forEach(alloc => {
+            const pkParts = (alloc.pk || '').split('_');
+            const productionSiteId = pkParts[1];
+            
+            if (productionSiteId && !productionUnitsMap.has(productionSiteId)) {
+                productionUnitsMap.set(productionSiteId, {
+                    productionSiteId,
+                    c1: alloc.c1 || 0,
+                    c2: alloc.c2 || 0,
+                    c3: alloc.c3 || 0,
+                    c4: alloc.c4 || 0,
+                    c5: alloc.c5 || 0,
+                    siteName: alloc.siteName,
+                    type: alloc.type,
+                    month: alloc.month || month
+                });
+            }
+        });
+
+        const productionUnits = Array.from(productionUnitsMap.values());
+
+        // For now, we'll use mock consumption units
+        // In a real implementation, these would be fetched from consumption site data
+        logger.warn('[calculateAllocationsWithFiltering] Using empty consumption units - implement fetching from consumption sites');
+        const consumptionUnits = [];
+
+        // Calculate allocations with filtering
+        const result = calculateAllocations({
+            productionUnits,
+            consumptionUnits,
+            bankingUnits: [],
+            includeConsumptionSites: includeSites,
+            excludeConsumptionSites: excludeSites
+        });
+
+        return res.json({
+            success: true,
+            data: result,
+            filters: {
+                month,
+                includeSites,
+                excludeSites
+            }
+        });
+    } catch (error) {
+        logger.error('Error calculating allocations with filtering:', error);
+        next(error);
+    }
+};
+
 // Export all controller functions
 module.exports = {
     createAllocation,
@@ -572,5 +612,6 @@ module.exports = {
     updateFormVBSite,
     getChargingAllocation,
     getFilteredAllocations,
+    calculateAllocationsWithFiltering,
     calculateTotal
 };

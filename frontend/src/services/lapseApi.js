@@ -39,13 +39,28 @@ const lapseApi = {
 
   async fetchByPeriod(period, companyId) {
     try {
-      const response = await api.get(API_CONFIG.ENDPOINTS.LAPSE.GET_BY_PERIOD(period, companyId));
+      if (!companyId) {
+        throw new Error('Company ID is required');
+      }
+      
+      // Construct the PK as companyId_dummy (we'll use the query param for month)
+      const pk = encodeURIComponent(companyId);
+      
+      // Build URL with pk and month query parameter
+      const response = await api.get(`${API_CONFIG.ENDPOINTS.LAPSE.BASE}/${pk}?month=${period}`);
+      
       return {
         data: Array.isArray(response.data?.data) 
           ? response.data.data.map(formatLapseData) 
           : []
       };
     } catch (error) {
+      if (error.response && error.response.status === 404) {
+        console.log(`[LapseAPI] No lapse records found for period ${period}`);
+        return { data: [] };
+      }
+      
+      console.error('[LapseAPI] Error fetching by period:', error);
       throw handleApiError(error);
     }
   },

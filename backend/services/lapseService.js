@@ -10,6 +10,14 @@ class LapseService {
             throw error;
         }
     }
+    async getLapsesByPk(pk) {
+        try {
+            return await lapseDAL.getLapsesByPk(pk);
+        } catch (error) {
+            logger.error('[LapseService] getLapsesByPk Error:', error);
+            throw error;
+        }
+    }
 
     async create(lapseData) {
         try {
@@ -76,6 +84,36 @@ class LapseService {
             logger.error('[LapseService] GetByProductionSite Error:', error);
             throw error;
         }
+    }
+
+    async getLapsesByCompanyAndMonth(companyId, month) {
+        try {
+            if (!companyId || !month) {
+                throw new Error('Company ID and month are required');
+            }
+            
+            const lapses = await lapseDAL.getLapsesByMonth(companyId, month);
+            
+            // Transform records to include allocated field for frontend
+            return lapses.map(lapse => this.transformLapseForResponse(lapse));
+        } catch (error) {
+            logger.error('[LapseService] GetByCompanyAndMonth Error:', error);
+            throw error;
+        }
+    }
+
+    transformLapseForResponse(lapse) {
+        if (!lapse) return lapse;
+        const { c1, c2, c3, c4, c5, ...rest } = lapse;
+        return {
+            ...rest,
+            c1: Number(c1 || 0),
+            c2: Number(c2 || 0),
+            c3: Number(c3 || 0),
+            c4: Number(c4 || 0),
+            c5: Number(c5 || 0),
+            allocated: { c1, c2, c3, c4, c5 }
+        };
     }
 
     async update(pk, sk, updates) {
