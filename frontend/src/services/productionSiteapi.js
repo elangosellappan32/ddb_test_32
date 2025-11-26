@@ -36,7 +36,9 @@ const formatSiteData = (data) => {
       dateOfCommission: data.dateOfCommission ? new Date(data.dateOfCommission).toISOString() : null,
       version: Number(data.version || 1),
       createdat: data.createdat || new Date().toISOString(),
-      updatedat: data.updatedat || new Date().toISOString()
+      updatedat: data.updatedat || new Date().toISOString(),
+      // Include companyName from the API response if available
+      companyName: data.companyName || data.companyName || null
     };
 
     logWithTime('[STEP] Formatted site data:', formatted);

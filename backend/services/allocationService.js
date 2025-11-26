@@ -455,6 +455,10 @@ class AllocationService {
 
     /**
      * Validate that only one allocation can be charged per month
+     * @param {string} month - The month in MMYYYY format
+     * @param {string} pk - The primary key of the current allocation
+     * @param {boolean} currentCharge - Whether the current allocation should be charged
+     * @returns {Promise<boolean>} - Returns true if validation passes
      */
     async validateAllocationCharge(month, pk, currentCharge) {
         try {
@@ -468,12 +472,125 @@ class AllocationService {
             const existingCharged = existingChargedAllocations.find(a => a.pk !== pk);
             
             if (existingCharged) {
-                throw new ValidationError(`Another allocation (${existingCharged.pk}) is already marked as charged for this month`);
+                throw new Error('Only one allocation can be marked as chargeable per month');
             }
             
             return true;
         } catch (error) {
-            logger.error('[AllocationService] ValidateAllocationCharge Error:', error);
+            logger.error('[AllocationService] Error validating allocation charge:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Clean up allocations for a production or consumption site
+     * @param {string} companyId - The company ID
+     * @param {Object} options - Options for cleanup
+     * @param {string} [options.productionSiteId] - The production site ID to clean up allocations for
+     * @param {string} [options.consumptionSiteId] - The consumption site ID to clean up allocations for
+     * @returns {Promise<Object>} - The cleanup statistics
+     */
+    async cleanupSiteAllocations(companyId, { productionSiteId, consumptionSiteId } = {}) {
+        if (!companyId) {
+            throw new Error('Company ID is required');
+        }
+
+        if (!productionSiteId && !consumptionSiteId) {
+            throw new Error('Either productionSiteId or consumptionSiteId must be provided');
+        }
+
+        try {
+            // Build filter expression based on what IDs we have
+            let filterExpression = 'contains(pk, :companyId)';
+            let expressionAttributeValues = {
+                ':companyId': `${companyId}_`
+            };
+
+            // Add filters for production site ID and/or consumption site ID
+            if (productionSiteId && consumptionSiteId) {
+                // Both IDs provided - find allocations where either matches
+                filterExpression += ' AND (contains(pk, :prodId) OR contains(pk, :consId))';
+                expressionAttributeValues[':prodId'] = `_${productionSiteId}_`;
+                expressionAttributeValues[':consId'] = `_${consumptionSiteId}`;
+            } else if (productionSiteId) {
+                // Production site only - find allocations where production site ID matches
+                filterExpression += ' AND contains(pk, :prodId)';
+                expressionAttributeValues[':prodId'] = `_${productionSiteId}_`;
+            } else {
+                // Consumption site only - find allocations where consumption site ID matches
+                filterExpression += ' AND contains(pk, :consId)';
+                expressionAttributeValues[':consId'] = `_${consumptionSiteId}`;
+            }
+
+            // Find all matching allocations
+            const params = {
+                TableName: this.allocationDAL.tableName,
+                FilterExpression: filterExpression,
+                ExpressionAttributeValues: expressionAttributeValues,
+                ProjectionExpression: 'pk, sk'
+            };
+
+            const { Items: allocations = [] } = await this.allocationDAL.docClient.send(new ScanCommand(params));
+            
+            // Additional validation to ensure exact matching of the site IDs
+            let filteredAllocations = allocations;
+            if (productionSiteId || consumptionSiteId) {
+                filteredAllocations = allocations.filter(item => {
+                    const pkParts = item.pk.split('_');
+                    if (pkParts.length !== 3) return false;
+                    
+                    const [pkCompanyId, pkProductionSiteId, pkConsumptionSiteId] = pkParts;
+                    
+                    // Must match company ID
+                    if (pkCompanyId !== companyId) return false;
+                    
+                    // If production site ID is provided, it must match
+                    if (productionSiteId && pkProductionSiteId !== productionSiteId) return false;
+                    
+                    // If consumption site ID is provided, it must match
+                    if (consumptionSiteId && pkConsumptionSiteId !== consumptionSiteId) return false;
+                    
+                    return true;
+                });
+            }
+            
+            if (filteredAllocations.length === 0) {
+                return { deletedCount: 0 };
+            }
+
+            // Delete allocations in batches
+            const BATCH_SIZE = 25;
+            for (let i = 0; i < filteredAllocations.length; i += BATCH_SIZE) {
+                const batch = filteredAllocations.slice(i, i + BATCH_SIZE);
+                await Promise.all(batch.map(item =>
+                    this.allocationDAL.docClient.send(new DeleteCommand({
+                        TableName: this.allocationDAL.tableName,
+                        Key: {
+                            pk: item.pk,
+                            sk: item.sk
+                        }
+                    }))
+                ));
+            }
+
+            logger.info(`Deleted ${filteredAllocations.length} allocations`, {
+                companyId,
+                productionSiteId,
+                consumptionSiteId,
+                totalFound: allocations.length,
+                actuallyDeleted: filteredAllocations.length,
+                matchingLogic: productionSiteId && consumptionSiteId ? 'OR logic (either matches)' : 
+                              productionSiteId ? 'Production site match' : 'Consumption site match'
+            });
+
+            return { deletedCount: filteredAllocations.length };
+
+        } catch (error) {
+            logger.error('Error cleaning up site allocations:', error, {
+                companyId,
+                productionSiteId,
+                consumptionSiteId
+            });
             throw error;
         }
     }

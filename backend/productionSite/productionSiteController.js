@@ -1,4 +1,5 @@
 const productionSiteDAL = require('./productionSiteDAL');
+const companyDAL = require('../company/companyDAL');
 const logger = require('../utils/logger');
 const TableNames = require('../constants/tableNames');
 const { updateUserSiteAccess, removeSiteAccess } = require('../services/siteAccessService');
@@ -303,10 +304,27 @@ const getProductionSite = async (req, res) => {
             });
         }
 
+        // Get company name
+        let companyName = 'Unknown Company';
+        try {
+            const company = await companyDAL.getCompanyById(companyId);
+            if (company && company.companyName) {
+                companyName = company.companyName;
+            }
+        } catch (error) {
+            logger.error(`Error fetching company ${companyId}:`, error);
+        }
+
+        // Add company name to the result
+        const resultWithCompany = {
+            ...result,
+            companyName: result.companyName || companyName
+        };
+
         res.json({
             success: true,
             message: 'Production site retrieved successfully',
-            data: result
+            data: resultWithCompany
         });
     } catch (error) {
         logger.error('[ProductionSiteController] Get Error:', error);
@@ -479,8 +497,13 @@ const deleteProductionSite = async (req, res) => {
 
 const getAllProductionSites = async (req, res) => {
     try {
+        logger.info('[ProductionSiteController] Fetching all production sites');
+        
         // Get all production sites
         let items = await productionSiteDAL.getAllProductionSites();
+        
+        // Log raw items for debugging
+        logger.debug(`[ProductionSiteController] Raw production sites data:`, items);
         
         // Filter items based on user's accessible sites
         if (req.user && req.user.accessibleSites) {
@@ -489,17 +512,96 @@ const getAllProductionSites = async (req, res) => {
                 const siteId = `${item.companyId}_${item.productionSiteId}`;
                 return accessibleSiteIds.includes(siteId);
             });
+            logger.debug(`[ProductionSiteController] Filtered to ${items.length} accessible sites`);
         }
 
-        res.json({
+        if (!items || items.length === 0) {
+            logger.info('[ProductionSiteController] No production sites found');
+            return res.status(200).json({
+                success: true,
+                message: 'No production sites found',
+                data: []
+            });
+        }
+
+        // Get unique company IDs and log them
+        const companyIds = [...new Set(items.map(item => {
+            const id = item.companyId;
+            logger.debug(`[ProductionSiteController] Found company ID: ${id} (type: ${typeof id})`);
+            return id;
+        }))];
+        
+        logger.info(`[ProductionSiteController] Fetching details for company IDs:`, companyIds);
+        
+        // Fetch company details for all unique company IDs with better error handling
+        const companies = await Promise.all(
+            companyIds.map(async (companyId) => {
+                try {
+                    logger.debug(`[ProductionSiteController] Fetching company with ID: ${companyId}`);
+                    const company = await companyDAL.getCompanyById(companyId);
+                    
+                    if (!company) {
+                        logger.warn(`[ProductionSiteController] No company found for ID: ${companyId}`);
+                        return null;
+                    }
+                    
+                    logger.debug(`[ProductionSiteController] Fetched company:`, {
+                        companyId: company.companyId,
+                        companyName: company.companyName
+                    });
+                    
+                    return company;
+                } catch (error) {
+                    logger.error(`[ProductionSiteController] Error fetching company ${companyId}:`, error);
+                    return null;
+                }
+            })
+        );
+
+        logger.debug('[ProductionSiteController] Fetched companies:', companies);
+
+        // Create a map of companyId to companyName with type handling
+        const companyMap = {};
+        companies.forEach(company => {
+            if (company && company.companyId !== undefined) {
+                // Map both string and number versions of the ID
+                const id = company.companyId;
+                companyMap[String(id)] = company.companyName;
+                companyMap[Number(id)] = company.companyName;
+                logger.debug(`[ProductionSiteController] Mapped company ID ${id} to name: ${company.companyName}`);
+            }
+        });
+
+        // Add companyName to each site with type handling
+        const itemsWithCompanyNames = items.map(item => {
+            const companyName = companyMap[item.companyId] || 
+                              companyMap[String(item.companyId)] || 
+                              companyMap[Number(item.companyId)] || 
+                              'Unknown Company';
+            
+            logger.debug(`[ProductionSiteController] Site ${item.productionSiteId} (${item.name}) has company ID: ${item.companyId} (type: ${typeof item.companyId}), mapped to name: ${companyName}`);
+            
+            return {
+                ...item,
+                companyName: companyName
+            };
+        });
+
+        logger.info(`[ProductionSiteController] Successfully processed ${itemsWithCompanyNames.length} production sites`);
+
+        return res.status(200).json({
             success: true,
-            data: items
+            message: 'Production sites retrieved successfully',
+            data: itemsWithCompanyNames
         });
     } catch (error) {
-        logger.error('[ProductionSiteController] Error fetching production sites:', error);
-        res.status(500).json({
+        logger.error('[ProductionSiteController] Error getting production sites:', {
+            error: error.message,
+            stack: error.stack
+        });
+        return res.status(500).json({
             success: false,
-            message: 'Failed to fetch production sites',
+            message: 'Failed to retrieve production sites',
             error: error.message
         });
     }

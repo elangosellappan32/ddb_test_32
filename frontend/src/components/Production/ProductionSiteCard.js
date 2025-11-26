@@ -159,6 +159,7 @@ const ProductionSiteCard = ({
   // Normalize and protect site data
   const safeData = {
     name: (localSite?.name || 'Unnamed Site').replace(/_/g, ' '),
+    companyName: localSite?.companyName || localSite?.company?.name || localSite?.companyName || 'No Company',
     type: (localSite?.type || 'Unknown').toLowerCase(),
     status: rawStatus, // Store the raw status
     normalizedStatus: normalizeStatus(rawStatus), // Store the normalized status
@@ -201,6 +202,11 @@ const ProductionSiteCard = ({
           <Box sx={{ flex: 1, minWidth: 0 }}>
             <Tooltip title={safeData.name}>
               <Typography variant="h6" noWrap>{safeData.name}</Typography>
+            </Tooltip>
+            <Tooltip title={safeData.companyName}>
+              <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block', mt: 0.5, backgroundColor: 'rgba(0,0,0,0.05)', p: 0.5, borderRadius: 1 }}>
+                {safeData.companyName}
+              </Typography>
             </Tooltip>
             <Typography
               variant="caption"

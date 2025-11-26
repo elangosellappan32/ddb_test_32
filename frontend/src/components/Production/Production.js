@@ -70,14 +70,7 @@ const Production = () => {
   // Check if user has access to any production sites or can create new ones
   const hasAccessToSites = useMemo(() => {
     // Log current access state for debugging
-    console.log('Checking production site access:', {
-      isAdmin: isAdmin(),
-      userRole: user?.role,
-      hasReadPermission: permissions?.read,
-      hasCreatePermission: permissions?.create,
-      accessibleSitesCount: accessibleSites?.length || 0,
-      permissions: user?.permissions
-    });
+  
 
     // Admin always has full access
     if (isAdmin()) {
@@ -113,7 +106,7 @@ const Production = () => {
     return false;
   }, [isAdmin, user, permissions, accessibleSites]);
 
-  // Filter sites based on user's accessible sites
+  // Filter sites based on user's accessible sites and company access
   const filterSitesByAccess = useCallback((sitesData) => {
     try {
       if (!user) {
@@ -121,44 +114,94 @@ const Production = () => {
         return [];
       }
       
-      // Admin can see all sites
-      if (isAdmin()) {
-        console.log('Admin user, returning all sites');
-        return sitesData;
-      }
-      
-      // If no accessible sites data, check permissions
-      if (!accessibleSites || accessibleSites.length === 0) {
-        // For viewer and user roles with READ permission, show all sites
-        if (user.role && ['VIEWER', 'USER'].includes(user.role.toUpperCase()) && 
-            hasPermission(user, 'production', 'READ')) {
-          console.log(`${user.role} with READ permission, returning all sites`);
-          return sitesData;
-        }
-        console.log('No accessible sites found for user');
+      // Ensure sitesData is an array
+      if (!Array.isArray(sitesData)) {
+        console.warn('sitesData is not an array:', sitesData);
         return [];
       }
       
-      console.log('Filtering sites. Accessible site IDs:', accessibleSites);
+      // Admin can see all sites
+      if (isAdmin()) {
+        console.log('Admin user, returning all sites');
+        return sitesData.map(site => ({
+          ...site,
+          company: site.company || { 
+            id: site.companyId, 
+            name: site.companyName || `Company ${site.companyId}`,
+            companyId: site.companyId 
+          }
+        }));
+      }
       
+      // Get accessible company IDs from user metadata
+      const accessibleCompanyIds = [];
+      if (user.metadata?.accessibleSites?.company?.L?.length > 0) {
+        user.metadata.accessibleSites.company.L.forEach(item => {
+          if (item?.S) {
+            accessibleCompanyIds.push(String(item.S).trim());
+          }
+        });
+      }
+      
+      // Get accessible site IDs from user metadata
+      const accessibleSiteIds = [];
+      if (user.metadata?.accessibleSites?.productionSites?.L?.length > 0) {
+        user.metadata.accessibleSites.productionSites.L.forEach(item => {
+          if (item?.S) {
+            accessibleSiteIds.push(String(item.S).trim());
+          }
+        });
+      }
+      
+      console.log('Accessible company IDs:', accessibleCompanyIds);
+      console.log('Accessible site IDs:', accessibleSiteIds);
+      
+      // Filter sites based on company and site access
       const filtered = sitesData.filter(site => {
-        // Format the site ID to match the stored format (companyId_siteId)
-        const siteId = `${site.companyId}_${site.productionSiteId}`;
-        const hasAccess = hasSiteAccess(siteId, 'production');
-        if (!hasAccess) {
-          console.log(`User does not have access to site ${siteId}`);
+        // Ensure site has required fields
+        if (!site.companyId || !site.productionSiteId) {
+          console.warn('Site missing required fields:', site);
+          return false;
         }
+        
+        const siteCompanyId = String(site.companyId).trim();
+        const siteId = `${siteCompanyId}_${site.productionSiteId}`;
+        
+        // Check if user has access to the company
+        const hasCompanyAccess = accessibleCompanyIds.length === 0 || 
+                               accessibleCompanyIds.includes(siteCompanyId);
+        
+        // Check if user has explicit access to the site
+        const hasExplicitSiteAccess = accessibleSiteIds.length > 0 && 
+                                    accessibleSiteIds.includes(siteId);
+        
+        const hasAccess = hasCompanyAccess || hasExplicitSiteAccess;
+        
+        if (!hasAccess) {
+          console.log(`User does not have access to site ${siteId} (company: ${siteCompanyId})`);
+        }
+        
         return hasAccess;
       });
       
-      console.log(`Filtered ${sitesData.length} sites to ${filtered.length} accessible sites`);
-      return filtered;
+      // Ensure company object is properly set for each site
+      const processedSites = filtered.map(site => ({
+        ...site,
+        company: site.company || { 
+          id: site.companyId, 
+          name: site.companyName || `Company ${site.companyId}`,
+          companyId: site.companyId
+        }
+      }));
+      
+      console.log(`Filtered ${sitesData.length} sites to ${processedSites.length} accessible sites`);
+      return processedSites;
       
     } catch (error) {
       console.error('Error filtering sites by access:', error);
       return [];
     }
-  }, [user, isAdmin, accessibleSites, hasSiteAccess]);
+  }, [user, isAdmin, hasPermission, hasSiteAccess]);
 
   const validateSiteData = (site) => {
     return {
@@ -209,26 +252,26 @@ const Production = () => {
         sitesData = sitesData.Items;
       }
       
-      // Transform data to ensure consistent format
-      const formattedData = sitesData.map(site => ({
-        id: `${site.companyId || '1'}_${site.productionSiteId || ''}`, // Add unique ID for React keys
-        companyId: String(site.companyId || '1'),
-        productionSiteId: String(site.productionSiteId || ''),
-        name: site.name || 'Unnamed Site',
-        type: (site.type || 'unknown').toLowerCase(),
-        location: site.location || 'Unknown Location',
-        status: (site.status || 'inactive').toLowerCase(),
-        capacity_MW: Number(site.capacity_MW || 0),
-        injectionVoltage_KV: Number(site.injectionVoltage_KV || 0),
-        annualProduction_L: Number(site.annualProduction_L || 0),
-        revenuePerUnit: site.revenuePerUnit != null ? parseFloat(site.revenuePerUnit) : 0,
-        htscNo: site.htscNo || '',
-        banking: site.banking || 0,
-        dateOfCommission: site.dateOfCommission ? new Date(site.dateOfCommission) : null,
-        version: Number(site.version || 1),
-        createdat: site.createdat || new Date().toISOString(),
-        updatedat: site.updatedat || new Date().toISOString()
-      }));
+     const formattedData = sitesData.map(site => ({
+  id: `${site.companyId}_${site.productionSiteId}`,
+  companyId: String(site.companyId),
+  productionSiteId: String(site.productionSiteId),
+  name: site.name || 'Unnamed Site',
+  type: site.type || 'unknown',
+  location: site.location || 'Unknown',
+  status: (site.status || 'inactive').toLowerCase(),
+  capacity_MW: Number(site.capacity_MW || 0),
+  injectionVoltage_KV: Number(site.injectionVoltage_KV || 0),
+  annualProduction_L: Number(site.annualProduction_L || 0),
+  revenuePerUnit: site.revenuePerUnit != null ? parseFloat(site.revenuePerUnit) : 0,
+  htscNo: site.htscNo || '',
+  banking: site.banking || 0,
+  dateOfCommission: site.dateOfCommission ? new Date(site.dateOfCommission) : null,
+  version: Number(site.version || 1),
+  createdat: site.createdat || new Date().toISOString(),
+  updatedat: site.updatedat || new Date().toISOString(),
+  companyName: site.companyName || null  // Add this line to include companyName
+}));
       
       console.log('[Production] Formatted data:', formattedData);
       
@@ -495,29 +538,55 @@ const Production = () => {
       let companyId = null;
       let source = 'none';
       
-      // 1. Try selected site first (for edits)
-      if (selectedSite?.companyId) {
+      // 1. Try to get from form data first (highest priority)
+      if (formData.companyId) {
+        companyId = String(formData.companyId);
+        source = 'formData';
+        console.log(`[Production] Using company ID from form data: ${companyId}`);
+      }
+      // 2. Try to get from selected site
+      else if (selectedSite?.companyId) {
         companyId = String(selectedSite.companyId);
         source = 'selectedSite';
-        console.log(`[Production] Using company ID from selected site: ${companyId}`);
       }
-      
-      // 2. Try user object's companyId
-      if (!companyId && currentUser.companyId) {
+      // 3. Try user object's companyId
+      else if (currentUser.companyId) {
         companyId = String(currentUser.companyId);
         source = 'user.companyId';
         console.log(`[Production] Using company ID from user object: ${companyId}`);
       }
       
-      // 3. Try to extract from accessible sites
-      if (!companyId && currentUser.metadata?.accessibleSites?.productionSites?.L?.length > 0) {
-        const firstSite = currentUser.metadata.accessibleSites.productionSites.L[0]?.S;
-        console.log('[Production] First accessible site:', firstSite);
+      // 3. Try to extract from accessibleSites.company array first
+      if (!companyId && currentUser.metadata?.accessibleSites?.company?.L?.length > 0) {
+        const companyIds = currentUser.metadata.accessibleSites.company.L
+          .map(item => item?.S)
+          .filter(Boolean);
         
-        if (firstSite && firstSite.includes('_')) {
-          companyId = firstSite.split('_')[0];
-          source = 'accessibleSites';
-          console.log(`[Production] Extracted company ID from accessible sites: ${companyId}`);
+        if (companyIds.length > 0) {
+          companyId = companyIds[0]; // Use the first company ID
+          source = 'accessibleSites.company';
+          console.log(`[Production] Using company ID from accessibleSites.company: ${companyId}`);
+        }
+      }
+      
+      // 4. Fallback to extracting from production sites if no company ID found yet
+      if (!companyId && currentUser.metadata?.accessibleSites?.productionSites?.L?.length > 0) {
+        const siteIds = currentUser.metadata.accessibleSites.productionSites.L
+          .map(item => item?.S)
+          .filter(Boolean);
+        
+        if (siteIds.length > 0) {
+          // Extract unique company IDs from site IDs (format: companyId_siteId)
+          const companyIds = [...new Set(siteIds.map(id => {
+            const parts = id.split('_');
+            return parts.length > 1 ? parts[0] : null;
+          }).filter(Boolean))];
+          
+          if (companyIds.length > 0) {
+            companyId = companyIds[0]; // Use the first company ID found
+            source = 'accessibleSites.productionSites';
+            console.log(`[Production] Extracted company ID from accessible production sites: ${companyId}`);
+          }
         }
       }
       

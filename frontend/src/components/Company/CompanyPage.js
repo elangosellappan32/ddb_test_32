@@ -471,7 +471,7 @@ const CompanyPage = () => {
       const list = Array.isArray(result?.data) ? result.data : [];
       setCompanies(list);
 
-      // Reset form and close dialog
+      // Reset form and close ̥dialog
       handleCloseCreate();
     } catch (err) {
       const errorMsg = err.response?.data?.message ||

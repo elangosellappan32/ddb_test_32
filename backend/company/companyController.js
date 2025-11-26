@@ -14,13 +14,19 @@ exports.createCompany = async (req, res) => {
             });
         }
 
-        // Optional simple validation
-        if (!['generator', 'shareholder'].includes(companyData.type)) {
+        // Convert type to lowercase for case-insensitive comparison
+        const companyType = companyData.type?.toLowerCase();
+        
+        // Validate type is either generator or shareholder (case-insensitive)
+        if (!['generator', 'shareholder'].includes(companyType)) {
             return res.status(400).json({
                 success: false,
                 message: 'type must be either "generator" or "shareholder"'
             });
         }
+        
+        // Update the type to be lowercase for consistency
+        companyData.type = companyType;
 
         if (companyData.emailId && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(companyData.emailId)) {
             return res.status(400).json({
@@ -69,18 +75,41 @@ exports.updateCompany = async (req, res) => {
     }
 
     // Disallow attempting to change key fields from the API layer
-    if (updates.companyId || updates.companyName) {
+    const existingCompany = await companyDAL.getCompanyById(companyId);
+    if (!existingCompany) {
+      return res.status(404).json({
+        success: false,
+        message: 'Company not found'
+      });
+    }
+
+    // Only block if companyId or companyName are being modified
+    if ((updates.companyId !== undefined && updates.companyId !== existingCompany.companyId) ||
+        (updates.companyName !== undefined && updates.companyName !== existingCompany.companyName)) {
       return res.status(400).json({
         success: false,
         message: 'companyId and companyName cannot be updated'
       });
     }
+    
+    // Remove companyId and companyName from updates since they can't be changed
+    delete updates.companyId;
+    delete updates.companyName;
 
-    if (updates.type && !['generator', 'shareholder'].includes(updates.type)) {
-      return res.status(400).json({
-        success: false,
-        message: 'type must be either "generator" or "shareholder"'
-      });
+    if (updates.type) {
+      // Convert type to lowercase for case-insensitive comparison
+      const companyType = updates.type.toLowerCase();
+      
+      // Validate type is either generator or shareholder (case-insensitive)
+      if (!['generator', 'shareholder'].includes(companyType)) {
+        return res.status(400).json({
+          success: false,
+          message: 'type must be either "generator" or "shareholder"'
+        });
+      }
+      
+      // Update the type to be lowercase for consistency
+      updates.type = companyType;
     }
 
     if (updates.emailId && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(updates.emailId)) {

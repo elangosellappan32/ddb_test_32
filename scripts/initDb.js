@@ -1030,6 +1030,54 @@ const createDefaultCompanies = async () => {
     }
 };
 
+const createCaptiveTable = async () => {
+    const tableName = 'Captive';
+    const params = {
+        TableName: tableName,
+        KeySchema: [
+            { AttributeName: 'generatorCompanyId', KeyType: 'HASH' },  // Partition key
+            { AttributeName: 'shareholderCompanyId', KeyType: 'RANGE' }  // Sort key
+        ],
+        AttributeDefinitions: [
+            { AttributeName: 'generatorCompanyId', AttributeType: 'N' },  // N = Number
+            { AttributeName: 'shareholderCompanyId', AttributeType: 'N' },
+            { AttributeName: 'allocationStatus', AttributeType: 'S' }  // For GSI
+        ],
+        GlobalSecondaryIndexes: [
+            {
+                IndexName: 'StatusIndex',
+                KeySchema: [
+                    { AttributeName: 'allocationStatus', KeyType: 'HASH' },
+                    { AttributeName: 'generatorCompanyId', KeyType: 'RANGE' }
+                ],
+                Projection: {
+                    ProjectionType: 'ALL'
+                },
+                ProvisionedThroughput: {
+                    ReadCapacityUnits: 1,
+                    WriteCapacityUnits: 1
+                }
+            }
+        ],
+        ProvisionedThroughput: {
+            ReadCapacityUnits: 1,
+            WriteCapacityUnits: 1
+        }
+    };
+
+    try {
+        await client.send(new CreateTableCommand(params));
+        console.log(`Created ${tableName} table successfully`);
+    } catch (error) {
+        if (error.name === 'ResourceInUseException') {
+            console.log(`${tableName} table already exists, skipping creation`);
+        } else {
+            console.error(`Error creating ${tableName} table:`, error);
+            throw error;
+        }
+    }
+};
+
 const createUserTable = async () => {
     const params = {
         TableName: TableNames.USERS,

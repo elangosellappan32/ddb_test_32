@@ -174,21 +174,19 @@ const Consumption = () => {
     
     try {
       const currentUser = user || JSON.parse(localStorage.getItem('user') || '{}');
-      const companyId = currentUser?.companyId || '1';
       
       if (selectedSite?.consumptionSiteId) {
-        // Update existing site
+        // Update existing site - use companyId from form data or fall back to selected site
         await consumptionSiteApi.update(
-          selectedSite.companyId,
+          formData.companyId || selectedSite.companyId,
           selectedSite.consumptionSiteId,
           formData
         );
         enqueueSnackbar('Site updated successfully', { variant: 'success' });
       } else {
-        // Create new site
+        // Create new site - use companyId from form data
         const siteData = {
           ...formData,
-          companyId,
           status: 'Active',
           user: {
             id: currentUser.id || currentUser.userId,

@@ -51,6 +51,7 @@ const formatSiteData = (data) => {
     // Format and validate each field with strict type checking
     const formatted = {
       companyId: String(data.companyId || '1'),
+      companyName: data.companyName || data.company?.name || 'Unknown Company',
       consumptionSiteId: String(data.consumptionSiteId || '1'),
       name: data.name?.toString().trim() || 'Unnamed Site',
       type: data.type?.toString().trim() || 'Industry',
@@ -255,26 +256,18 @@ class ConsumptionSiteApi {
       
       // Ensure companyId is a string
       companyId = String(companyId);
-      
-      // In production, verify the user has permission to create for this company
-      if (!isDevelopment && user?.companyId && user.companyId !== companyId) {
-        console.warn('[ConsumptionSiteAPI] User company ID does not match provided company ID:', {
-          userCompanyId: user.companyId,
-          providedCompanyId: companyId,
-          user: user
-        });
-        throw new Error('You do not have permission to create sites for this company');
-      }
 
       // Prepare the site data with proper formatting
       const siteData = {
         ...data,
-        companyId: String(companyId),
+        // Ensure required fields are properly formatted
         name: String(data.name || '').trim(),
         type: String(data.type || 'Industry').trim(),
         location: String(data.location || '').trim(),
         annualConsumption_L: Number(data.annualConsumption_L || 0),
-        status: String(data.status || 'Active').trim()
+        status: String(data.status || 'Active').trim(),
+        // Ensure companyId is a string
+        companyId: String(companyId)
       };
 
       console.log('[ConsumptionSiteAPI] Creating consumption site with:', siteData);
@@ -291,11 +284,6 @@ class ConsumptionSiteApi {
       );
       
       // Invalidate cache to ensure fresh data on next fetch
-      this.invalidateCache();
-
-      console.log('[ConsumptionSiteAPI] Consumption site created:', response.data);
-      
-      // Invalidate the cache
       this.invalidateCache();
       
       return response.data;

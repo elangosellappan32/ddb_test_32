@@ -346,119 +346,128 @@ const AllocationDetailsTable = ({
                                 </TableRow>
                             </TableHead>
                             <TableBody>
-                                {uniqueData.map((allocation, idx) => (
-                                    <TableRow 
-                                        key={`${allocation.productionSiteId}-${allocation.consumptionSiteId || type}-${idx}`}
-                                        hover
-                                        sx={{
-                                            '&:nth-of-type(odd)': { backgroundColor: 'action.hover' },
-                                            '&:hover': {
-                                                backgroundColor: 'action.selected',
-                                            },
-                                        }}
-                                    >
-                                        <TableCell>
-                                            <Box>
-                                                <Box display="flex" alignItems="center" gap={1}>
-                                                    <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                                                        {allocation.productionSite || allocation.siteName || `Site ${allocation.productionSiteId}`}
-                                                    </Typography>
-                                                    {allocation.charge && (
-                                                        <Tooltip title="This allocation is charged for the month">
-                                                            <Box sx={{ 
-                                                                width: 12, 
-                                                                height: 12, 
-                                                                borderRadius: '50%', 
-                                                                bgcolor: 'success.main',
-                                                                border: '1px solid',
-                                                                borderColor: 'success.dark'
-                                                            }} />
-                                                        </Tooltip>
+                                {uniqueData.map((allocation, index) => {
+                                    // Create a unique key using productionSiteId, consumptionSiteId, and a timestamp
+                                    const rowKey = `row-${allocation.productionSiteId}-${allocation.consumptionSiteId || type}-${allocation.updatedAt || Date.now()}`;
+                                    
+                                    return (
+                                        <TableRow 
+                                            key={rowKey}
+                                            hover
+                                            sx={{
+                                                '&:nth-of-type(odd)': { backgroundColor: 'action.hover' },
+                                                '&:hover': {
+                                                    backgroundColor: 'action.selected',
+                                                },
+                                            }}
+                                        >
+                                            <TableCell>
+                                                <Box>
+                                                    <Box display="flex" alignItems="center" gap={1}>
+                                                        <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                                                            {allocation.productionSite || allocation.siteName || `Site ${allocation.productionSiteId}`}
+                                                        </Typography>
+                                                        {allocation.charge && (
+                                                            <Tooltip title="This allocation is charged for the month">
+                                                                <Box sx={{ 
+                                                                    width: 12, 
+                                                                    height: 12, 
+                                                                    borderRadius: '50%', 
+                                                                    bgcolor: 'success.main',
+                                                                    border: '1px solid',
+                                                                    borderColor: 'success.dark'
+                                                                }} />
+                                                            </Tooltip>
+                                                        )}
+                                                    </Box>
+                                                    {allocation.siteType && (
+                                                        <Typography variant="caption" color="textSecondary">{allocation.siteType}</Typography>
                                                     )}
                                                 </Box>
-                                                {allocation.siteType && (
-                                                    <Typography variant="caption" color="textSecondary">{allocation.siteType}</Typography>
-                                                )}
-                                            </Box>
-                                        </TableCell>
-                                        {type === 'allocation' && (
-                                            <TableCell>
-                                                <Typography variant="body2">
-                                                    {allocation.consumptionSite || `Site ${allocation.consumptionSiteId}`}
-                                                </Typography>
                                             </TableCell>
-                                        )}
-                                        {getAllocationPeriods().map(period => {
-                                            // Get value from either allocated object or root level
-                                            const val = allocation.allocated?.[period.id] ?? allocation[period.id] ?? 0;
-                                            return (
-                                                <TableCell key={period.id} align="right" 
-                                                    sx={{ 
-                                                        color: period.isPeak ? 'warning.main' : 'inherit',
-                                                        fontWeight: period.isPeak ? 'bold' : 'normal',
-                                                        minWidth: 60
-                                                    }}
-                                                >
-                                                    {Math.round(Number(val))}
+                                            {type === 'allocation' && (
+                                                <TableCell>
+                                                    <Typography variant="body2">
+                                                        {allocation.consumptionSite || `Site ${allocation.consumptionSiteId}`}
+                                                    </Typography>
                                                 </TableCell>
-                                            );
-                                        })}
-                                        {type === 'allocation' && (
-                                            <TableCell align="center" sx={{ minWidth: 80 }}>
-                                                <Box 
-                                                    sx={{
-                                                        display: 'inline-flex',
-                                                        alignItems: 'center',
-                                                        justifyContent: 'center',
-                                                        width: 24,
-                                                        height: 24,
-                                                        borderRadius: '50%',
-                                                        bgcolor: (allocation.charge || allocation.allocated?.charge) ? 'success.main' : 'error.main',
-                                                        color: 'white',
-                                                        fontWeight: 'bold',
-                                                        fontSize: '0.75rem',
-                                                        border: '1px solid',
-                                                        borderColor: (allocation.charge || allocation.allocated?.charge) ? 'success.dark' : 'error.dark',
-                                                        cursor: 'default',
-                                                        mx: 'auto'
-                                                    }}
-                                                    title={(allocation.charge || allocation.allocated?.charge) ? 'This allocation is charged for the month' : 'Not charged for this month'}
-                                                >
-                                                    {(allocation.charge || allocation.allocated?.charge) ? '✓' : '✗'}
-                                                </Box>
-                                            </TableCell>
-                                        )}
-                                        <TableCell align="right" sx={{ fontWeight: 'bold', color: getAllocationTypeColor(type) }}>
-                                            {calculateTotal(allocation)}
-                                        </TableCell>
-                                        {type === 'allocation' && (
-                                            <TableCell align="center">
-                                                <Tooltip title="Edit Allocation">
-                                                    <IconButton 
-                                                        size="small" 
-                                                        onClick={() => handleEdit(allocation, type)}
-                                                        aria-label={`Edit allocation for ${allocation.productionSite || allocation.siteName}`}
-                                                        sx={{
-                                                            opacity: 0.5,
-                                                            transition: 'opacity 0.2s',
-                                                            '&:hover, &:focus-visible': {
-                                                                opacity: 1,
-                                                                color: 'primary.main'
-                                                            },
-                                                            '&:focus-visible': {
-                                                                outline: '2px solid',
-                                                                outlineOffset: '2px',
-                                                                outlineColor: 'primary.main'
-                                                            }
+                                            )}
+                                            {getAllocationPeriods().map(period => {
+                                                // Get value from either allocated object or root level
+                                                const val = allocation.allocated?.[period.id] ?? allocation[period.id] ?? 0;
+                                                const cellKey = `${rowKey}-${period.id}`;
+                                                
+                                                return (
+                                                    <TableCell 
+                                                        key={cellKey} 
+                                                        align="right" 
+                                                        sx={{ 
+                                                            color: period.isPeak ? 'warning.main' : 'inherit',
+                                                            fontWeight: period.isPeak ? 'bold' : 'normal',
+                                                            minWidth: 60
                                                         }}
                                                     >
-                                                        <EditIcon fontSize="small" />
-                                                    </IconButton>
-                                                </Tooltip>
+                                                        {val}
+                                                    </TableCell>
+                                                );
+                                            })}
+                                            {type === 'allocation' && (
+                                                <TableCell align="center">
+                                                    <Box 
+                                                        sx={{
+                                                            display: 'inline-flex',
+                                                            alignItems: 'center',
+                                                            justifyContent: 'center',
+                                                            width: 24,
+                                                            height: 24,
+                                                            borderRadius: '50%',
+                                                            bgcolor: (allocation.charge || allocation.allocated?.charge) ? 'success.main' : 'error.main',
+                                                            color: 'white',
+                                                            fontWeight: 'bold',
+                                                            fontSize: '0.75rem',
+                                                            border: '1px solid',
+                                                            borderColor: (allocation.charge || allocation.allocated?.charge) ? 'success.dark' : 'error.dark',
+                                                            cursor: 'default',
+                                                            mx: 'auto'
+                                                        }}
+                                                        title={(allocation.charge || allocation.allocated?.charge) ? 'This allocation is charged for the month' : 'Not charged for this month'}
+                                                    >
+                                                        {(allocation.charge || allocation.allocated?.charge) ? '✓' : '✗'}
+                                                    </Box>
+                                                </TableCell>
+                                            )}
+                                            <TableCell align="right" sx={{ fontWeight: 'bold', color: getAllocationTypeColor(type) }}>
+                                                {calculateTotal(allocation)}
                                             </TableCell>
-                                        )}
-                                    </TableRow>
-                                ))}
+                                            {type === 'allocation' && (
+                                                <TableCell align="center">
+                                                    <Tooltip title="Edit Allocation">
+                                                        <IconButton 
+                                                            size="small" 
+                                                            onClick={() => handleEdit(allocation, type)}
+                                                            aria-label={`Edit allocation for ${allocation.productionSite || allocation.siteName}`}
+                                                            sx={{
+                                                                opacity: 0.5,
+                                                                transition: 'opacity 0.2s',
+                                                                '&:hover, &:focus-visible': {
+                                                                    opacity: 1,
+                                                                    color: 'primary.main'
+                                                                },
+                                                                '&:focus-visible': {
+                                                                    outline: '2px solid',
+                                                                    outlineOffset: '2px',
+                                                                    outlineColor: 'primary.main'
+                                                                }
+                                                            }}
+                                                        >
+                                                            <EditIcon fontSize="small" />
+                                                        </IconButton>
+                                                    </Tooltip>
+                                                </TableCell>
+                                            )}
+                                        </TableRow>
+                                    );
+                                })}
                             </TableBody>
                         </Table>
                     </TableContainer>

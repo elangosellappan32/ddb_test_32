@@ -1,5 +1,6 @@
 const logger = require('../utils/logger');
 const consumptionSiteDAL = require('./consumptionSiteDAL');
+const companyDAL = require('../company/companyDAL');
 const { updateUserSiteAccess, removeSiteAccess } = require('../services/siteAccessService');
 
 // Update validateRequiredFields to match production site validation
@@ -102,26 +103,56 @@ const validateAnnualConsumption = (value) => {
 // CRUD Operations
 const getAllConsumptionSites = async (req, res) => {
     try {
-        let items = await consumptionSiteDAL.getAllConsumptionSites();
-
-        // Filter items based on user's accessible sites
-        if (req.user && req.user.accessibleSites) {
-            const accessibleSiteIds = req.user.accessibleSites.consumptionSites.L.map(site => site.S);
-            items = items.filter(item => {
-                const siteId = `${item.companyId}_${item.consumptionSiteId}`;
-                return accessibleSiteIds.includes(siteId);
+        const sites = await consumptionSiteDAL.getAllConsumptionSites();
+        
+        if (!sites || sites.length === 0) {
+            return res.status(200).json({
+                success: true,
+                message: 'No consumption sites found',
+                data: []
             });
         }
 
-        res.json({
+        // Get unique company IDs
+        const companyIds = [...new Set(sites.map(site => site.companyId))];
+        
+        // Fetch company details for all unique company IDs
+        const companies = await Promise.all(
+            companyIds.map(async (companyId) => {
+                try {
+                    return await companyDAL.getCompanyById(companyId);
+                } catch (error) {
+                    logger.error(`Error fetching company ${companyId}:`, error);
+                    return null;
+                }
+            })
+        );
+
+        // Create a map of companyId to companyName
+        const companyMap = companies.reduce((acc, company) => {
+            if (company) {
+                acc[company.companyId] = company.companyName;
+            }
+            return acc;
+        }, {});
+
+        // Add companyName to each site
+        const sitesWithCompanyNames = sites.map(site => ({
+            ...site,
+            companyName: companyMap[site.companyId] || 'Unknown Company'
+        }));
+
+        return res.status(200).json({
             success: true,
-            data: items
+            message: 'Consumption sites retrieved successfully',
+            data: sitesWithCompanyNames
         });
     } catch (error) {
-        logger.error('[ConsumptionSiteController] GetAll Error:', error);
-        res.status(500).json({
+        logger.error('Error getting consumption sites:', error);
+        return res.status(500).json({
             success: false,
-            message: error.message
+            message: 'Failed to retrieve consumption sites',
+            error: error.message
         });
     }
 };

@@ -255,10 +255,30 @@ const ConsumptionSiteCard = ({
             },
           }}
         >
-          {/* Site Name */}
-          <Typography variant="h6" noWrap sx={{ width: '100%', mb: 0.5 }}>
-            {safeData.name}
-          </Typography>
+          {/* Site Name and Company */}
+          <Box sx={{ width: '100%', mb: 1 }}>
+            <Typography variant="h6" noWrap>
+              {safeData.name}
+            </Typography>
+            {site?.companyName && (
+              <Tooltip title={site.companyName}>
+                <Typography 
+                  variant="subtitle2" 
+                  color="text.secondary" 
+                  noWrap
+                  sx={{ 
+                    fontWeight: 500,
+                    maxWidth: '100%',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    lineHeight: 1.2
+                  }}
+                >
+                  {site.companyName}
+                </Typography>
+              </Tooltip>
+            )}
+          </Box>
 
           {/* Tiny Status Dot + Status Label + Update Time */}
           <Box

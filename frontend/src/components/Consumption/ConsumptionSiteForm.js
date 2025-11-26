@@ -61,15 +61,15 @@ const INITIAL_FORM_STATE = {
 };
 
 const ConsumptionSiteForm = ({ 
-  initialData, 
+  initialData = null, 
   onSubmit, 
   onCancel, 
   loading = false, 
   permissions = {},
   isEditing = false,
-  companyId: propCompanyId,
-  user,
-  site // Alias for initialData for consistency with ProductionSiteForm
+  companyId: propCompanyId = '',
+  user = null,
+  site = null // Alias for initialData for consistency with ProductionSiteForm
 }) => {
   const { enqueueSnackbar } = useSnackbar();
   const navigate = useNavigate();
@@ -82,8 +82,30 @@ const ConsumptionSiteForm = ({
   const [companiesError, setCompaniesError] = useState('');
   const [companiesLoaded, setCompaniesLoaded] = useState(false);
   
-  // Get companyId from props or user context
-  const companyId = propCompanyId || user?.companyId || '1';
+  // Get company ID from form data or props
+  const getCompanyId = useCallback((data = formData) => {
+    // 1. Try to get from form data first (highest priority)
+    if (data?.companyId) {
+      console.log(`[ConsumptionSiteForm] Using company ID from form data: ${data.companyId}`);
+      return String(data.companyId);
+    }
+    // 2. Try from props
+    if (propCompanyId) {
+      console.log(`[ConsumptionSiteForm] Using company ID from props: ${propCompanyId}`);
+      return String(propCompanyId);
+    }
+    // 3. Try from user context (but don't default to '1')
+    if (user?.companyId) {
+      console.log(`[ConsumptionSiteForm] Using company ID from user context: ${user.companyId}`);
+      return String(user.companyId);
+    }
+    // 4. Return null if no company ID is found - this will trigger validation error
+    console.log('[ConsumptionSiteForm] No company ID found in form data, props, or user context');
+    return null;
+  }, [formData, propCompanyId, user]);
+
+  // Get the current company ID (will be null if not available)
+  const companyId = getCompanyId();
 
   // Normalize site type to ensure it's one of the valid types
   const normalizeType = (type) => {
@@ -137,8 +159,9 @@ const ConsumptionSiteForm = ({
         const dataSource = initialData || site; // Support both initialData and site props
         
         if (dataSource) {
-          // Get the company ID from dataSource or use the provided companyId
-          const siteCompanyId = dataSource.companyId || companyId;
+          // Always use the company ID from dataSource if available
+          // Only fall back to other sources if it's not available
+          const siteCompanyId = dataSource.companyId || propCompanyId || user?.companyId;
           
           // Find the company in the loaded companies list using string comparison
           let company = companies.find(c => String(c.companyId) === String(siteCompanyId));
@@ -242,9 +265,10 @@ const ConsumptionSiteForm = ({
     const newErrors = {};
     
     // Required fields validation
-    const requiredFields = ['name', 'location', 'annualConsumption', 'status'];
+    const requiredFields = ['name', 'location', 'annualConsumption', 'status', 'companyId'];
     requiredFields.forEach(field => {
-      if (!data[field] && data[field] !== 0) {
+      const value = data[field];
+      if ((value === undefined || value === null || value === '') && value !== 0) {
         newErrors[field] = 'This field is required';
       }
     });
@@ -285,8 +309,15 @@ const ConsumptionSiteForm = ({
     });
     setTouched(allTouched);
     
-    // Validate form
-    const isValid = validateForm();
+    // Create submission data with companyId from form or props
+    const submissionData = { 
+      ...formData,
+      // Ensure companyId is set from form data or props
+      companyId: formData.companyId || propCompanyId
+    };
+    
+    // Validate form with submission data
+    const isValid = validateForm(submissionData);
     if (!isValid) {
       enqueueSnackbar('Please fix the form errors before submitting', { 
         variant: 'error',
@@ -296,12 +327,9 @@ const ConsumptionSiteForm = ({
     }
     
     try {
-      // Create a clean submission object with only the fields we need
-      const submissionData = {
-        // Include IDs if they exist
-        ...(formData.companyId && { companyId: formData.companyId }),
-        ...(formData.consumptionSiteId && { consumptionSiteId: formData.consumptionSiteId }),
-        
+      // Prepare the final submission data with proper formatting
+      const finalSubmissionData = {
+        ...submissionData,
         // Core fields with proper formatting
         name: formData.name.trim(),
         type: normalizeType(formData.type),
@@ -319,7 +347,8 @@ const ConsumptionSiteForm = ({
         updatedat: new Date().toISOString()
       };
 
-      await onSubmit(submissionData);
+      // Submit the prepared submission data
+      await onSubmit(finalSubmissionData);
       
     } catch (error) {
       console.error('Error saving consumption site:', error);
@@ -723,14 +752,5 @@ ConsumptionSiteForm.propTypes = {
   })
 };
 
-ConsumptionSiteForm.defaultProps = {
-  loading: false,
-  permissions: {},
-  isEditing: false,
-  initialData: null,
-  site: null,
-  user: null,
-  companyId: ''
-};
 
 export default ConsumptionSiteForm;
