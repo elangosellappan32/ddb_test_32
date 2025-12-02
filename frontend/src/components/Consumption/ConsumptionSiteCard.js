@@ -23,7 +23,8 @@ import {
   Home as HomeIcon,
   LocalLaundryService as TextileIcon,
   Error as ErrorIcon,
-  FiberManualRecord as StatusDotIcon
+  FiberManualRecord as StatusDotIcon,
+  Business as BusinessIcon
 } from '@mui/icons-material';
 import { formatDistanceToNowStrict } from 'date-fns';
 
@@ -262,20 +263,27 @@ const ConsumptionSiteCard = ({
             </Typography>
             {site?.companyName && (
               <Tooltip title={site.companyName}>
-                <Typography 
-                  variant="subtitle2" 
-                  color="text.secondary" 
-                  noWrap
-                  sx={{ 
-                    fontWeight: 500,
-                    maxWidth: '100%',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    lineHeight: 1.2
-                  }}
-                >
-                  {site.companyName}
-                </Typography>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.5 }}>
+                  <BusinessIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
+                  <Typography 
+                    variant="subtitle2" 
+                    color="text.secondary" 
+                    noWrap
+                    sx={{ 
+                      fontWeight: 500,
+                      maxWidth: '100%',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      lineHeight: 1.2,
+                      backgroundColor: 'rgba(0,0,0,0.05)',
+                      p: 0.5,
+                      borderRadius: 1,
+                      flex: 1
+                    }}
+                  >
+                    {site.companyName}
+                  </Typography>
+                </Box>
               </Tooltip>
             )}
           </Box>

@@ -31,7 +31,8 @@ import {
   BarChart as BarChartIcon,
   Receipt as ReceiptIcon,
   SyncAlt as SyncAltIcon,
-  Apartment as CompanyIcon
+  Apartment as CompanyIcon,
+  People as PeopleIcon
 } from '@mui/icons-material';
 import { useAuth } from '../context/AuthContext';
 import { useNavigation } from '../context/NavigationContext';
@@ -113,8 +114,15 @@ const Navbar = () => {
       label: 'Compliance', 
       path: '/report',
       resource: 'report'
-    }
-  ], []);
+    },
+    // Only show Users icon for super admin (ROLE-1)
+    ...(user?.roleId === 'ROLE-1' ? [{
+      icon: <PeopleIcon />, 
+      label: 'Users', 
+      path: '/users',
+      resource: 'users'
+    }] : [])
+  ].filter(Boolean), [user?.roleId]);
 
 
   const handleNavigation = (path) => {

@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import PropTypes from 'prop-types';
-import { useSnackbar } from 'notistack';
 import {
   Box, TextField, Button, Grid, MenuItem, FormControl, InputLabel, Select, CircularProgress,
   Switch, FormControlLabel, InputAdornment, FormHelperText, Typography, Paper, Card,
@@ -44,7 +43,6 @@ const INITIAL_FORM_STATE = {
 
 const ProductionSiteForm = ({ initialData, onSubmit, onCancel, loading, site, companyId: propCompanyId, user }) => {
   const navigate = useNavigate();
-  const { enqueueSnackbar } = useSnackbar();
   const [formData, setFormData] = useState(INITIAL_FORM_STATE);
   const [errors, setErrors] = useState({});
   const [touched, setTouched] = useState({});
@@ -55,142 +53,153 @@ const ProductionSiteForm = ({ initialData, onSubmit, onCancel, loading, site, co
   const [companiesError, setCompaniesError] = useState('');
   const [companiesLoaded, setCompaniesLoaded] = useState(false);
   
-  // Get companyId from props, user context, or accessibleSites
-  const companyId = React.useMemo(() => {
-    // 1. Use prop if provided
-    if (propCompanyId) return String(propCompanyId);
-    
-    // 2. Try to get from accessibleSites.company array (first company the user has access to)
-    if (user?.metadata?.accessibleSites?.company?.L?.length > 0) {
-      const companyIds = user.metadata.accessibleSites.company.L
-        .map(item => item?.S)
-        .filter(Boolean);
-      
-      if (companyIds.length > 0) {
-        console.log(`[ProductionSiteForm] Using company ID from accessibleSites.company: ${companyIds[0]}`);
-        return companyIds[0];
-      }
-    }
-    
-    // 3. Try user's companyId as fallback
-    if (user?.companyId) return String(user.companyId);
-    
-    // 4. If we're editing an existing site, use its companyId
-    if (site?.companyId) return String(site.companyId);
-    
-    // 5. Fallback to empty string - will be handled by form validation
-    console.warn('[ProductionSiteForm] No company ID found');
-    return '';
-  }, [propCompanyId, user, site]);
+  // Get companyId from props or user context
+  const companyId = propCompanyId || user?.companyId || '1';
 
   // Load companies when component mounts
   useEffect(() => {
-    let isMounted = true;
-    
     const loadCompanies = async () => {
-      if (!isMounted) return;
-      
       try {
         setCompaniesLoading(true);
         setCompaniesError('');
-        
-        // First try to get companies from accessibleSites
-        const accessibleCompanies = [];
-        
-        if (user?.metadata?.accessibleSites?.company?.L?.length > 0) {
-          user.metadata.accessibleSites.company.L
-            .filter(item => item?.S)
-            .forEach(item => {
-              accessibleCompanies.push({
-                companyId: item.S,
-                companyName: `Company ${item.S}`
-              });
-            });
-        }
-        
-        // Always include the current companyId if it's not in accessible companies
-        if (companyId && !accessibleCompanies.some(c => c.companyId === companyId)) {
-          accessibleCompanies.push({
-            companyId: companyId,
-            companyName: `Company ${companyId}`
-          });
-        }
-        
-        // If we have accessible companies, set them immediately
-        if (accessibleCompanies.length > 0) {
-          setCompanies(accessibleCompanies);
-        }
-        
-        // Then try to fetch additional company details from API
-        try {
-          const response = await companyApi.getGeneratorCompanies();
-          const list = Array.isArray(response?.data) ? response.data : 
-                     Array.isArray(response) ? response : [];
-          
-          if (!isMounted) return;
-          
-          // Merge with any companies we already have from accessibleSites
-          setCompanies(prevCompanies => {
-            const companyMap = new Map();
-            
-            // Add companies from API first (these have more complete data)
-            list.forEach(c => {
-              const id = String(c.companyId || c.id || '');
-              if (id) {
-                companyMap.set(id, {
-                  companyId: id,
-                  companyName: c.companyName || c.name || `Company ${id}`,
-                  ...c
-                });
-              }
-            });
-            
-            // Add companies from accessibleSites if not already in the map
-            [...prevCompanies, ...accessibleCompanies].forEach(c => {
-              const id = String(c.companyId);
-              if (id && !companyMap.has(id)) {
-                companyMap.set(id, {
-                  companyId: id,
-                  companyName: c.companyName || `Company ${id}`,
-                  ...c
-                });
-              }
-            });
-            
-            return Array.from(companyMap.values());
-          });
-        } catch (apiError) {
-          console.warn('Failed to fetch companies from API, using accessible sites only', apiError);
-          if (!isMounted) return;
-          
-          if (accessibleCompanies.length === 0) {
-            throw apiError;
-          }
-        }
+        const response = await companyApi.getGeneratorCompanies();
+
+        // Support both wrapped and direct array responses
+        const list = Array.isArray(response?.data) ? response.data : Array.isArray(response) ? response : [];
+
+        const normalized = list.map((c) => ({
+          companyId: c.companyId,
+          companyName: c.companyName || c.name || `Company ${c.companyId}`,
+        }));
+
+        setCompanies(normalized);
+        setCompaniesLoaded(true);
       } catch (error) {
         console.error('Failed to load generator companies for ProductionSiteForm:', error);
-        if (!isMounted) return;
-        
-        setCompaniesError('Failed to load generator companies. ' + (error.message || ''));
+        setCompaniesError('Failed to load generator companies');
+        setCompaniesLoaded(true);
       } finally {
-        if (isMounted) {
-          setCompaniesLoading(false);
-          setCompaniesLoaded(true);
-        }
+        setCompaniesLoading(false);
       }
     };
 
     loadCompanies();
+  }, [companyId]);
 
-    return () => {
-      isMounted = false;
+  // Handle initial data after companies are loaded
+  useEffect(() => {
+    if (!companiesLoaded) return;
+
+    const updateFormData = () => {
+      if (site) {
+        try {
+          // Get the company ID from site or use the provided companyId
+          const siteCompanyId = site.companyId || companyId;
+          
+          // Find the company in the loaded companies list
+          let company = companies.find(c => String(c.companyId) === String(siteCompanyId));
+          
+          // If not found in list, create a fallback company object using site data
+          if (!company) {
+            company = {
+              companyId: siteCompanyId,
+              companyName: site.companyName || `Company ${siteCompanyId}`
+            };
+          }
+          
+          // Normalize type
+          const normalizedType = site.type
+            ? site.type.charAt(0).toUpperCase() + site.type.slice(1).toLowerCase()
+            : '';
+
+          // Get the status directly from the site object without defaulting to 'Inactive'
+          let normalizedStatus = '';
+          if (site.status && typeof site.status === 'string') {
+            const trimmedStatus = site.status.trim();
+            const matchedStatus = SITE_STATUS.find(status => 
+              status.toLowerCase() === trimmedStatus.toLowerCase()
+            );
+            normalizedStatus = matchedStatus || '';
+          }
+
+          const validType = SITE_TYPES.includes(normalizedType) ? normalizedType : '';
+          
+          // Only validate status if it exists, don't default to 'Inactive'
+          const validStatus = normalizedStatus && SITE_STATUS.includes(normalizedStatus) 
+            ? normalizedStatus 
+           : '';
+
+          // Parse date of commission - handle various input formats
+          let parsedDateOfCommission = null;
+          if (site.dateOfCommission) {
+            try {
+              // Handle both string and Date objects
+              const date = site.dateOfCommission instanceof Date 
+                ? site.dateOfCommission 
+                : new Date(site.dateOfCommission);
+                
+              if (!isNaN(date.getTime())) {
+                // Ensure it's a valid date and not in the future
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                
+                if (date <= today) {
+                  parsedDateOfCommission = date;
+                } else {
+                  console.warn('Date of commission is in the future, ignoring');
+                }
+              }
+            } catch (error) {
+              console.error('Error parsing dateOfCommission:', error);
+            }
+          }
+
+          // Parse numeric values, ensuring proper handling of null/undefined
+          const newFormData = {
+            name: site.name || '',
+            type: validType,
+            location: site.location || '',
+            capacity_MW: site.capacity_MW != null ? parseFloat(site.capacity_MW) : '',
+            injectionVoltage_KV: site.injectionVoltage_KV != null ? parseFloat(site.injectionVoltage_KV) : '',
+            htscNo: site.htscNo || '',
+            annualProduction_L: site.annualProduction_L != null ? parseFloat(site.annualProduction_L) : '',
+            revenuePerUnit: site.revenuePerUnit != null ? parseFloat(site.revenuePerUnit) : '',
+            status: validStatus,
+            banking: validStatus && INACTIVE_STATUSES.includes(validStatus) ? 0 : (site.banking ? 1 : 0),
+            dateOfCommission: parsedDateOfCommission,
+            companyId: siteCompanyId,
+            companyName: company.companyName,
+            productionSiteId: site.productionSiteId,
+            version: site.version || 1
+          };
+
+          setFormData(newFormData);
+          validateForm(newFormData);
+        } catch (error) {
+          console.error('Error initializing form data:', error);
+          setFormError('Failed to load site data.');
+        }
+      } else {
+        // For new sites - preset status as Active and set companyId (if available)
+        const company = companies.find(c => String(c.companyId) === String(companyId));
+        const newFormData = { 
+          ...INITIAL_FORM_STATE, 
+          status: 'Active', 
+          companyId,
+          companyName: company ? company.companyName : `Company ${companyId}`
+        };
+        setFormData(newFormData);
+      }
     };
-  }, [companyId, user]);
+
+    updateFormData();
+    setTouched({});
+    setErrors({});
+    setFormError('');
+  }, [site, companyId, companiesLoaded, companies]);
 
   // Validate form
   const validateForm = useCallback((data = formData) => {
-    if (!data) return false;
-
     const newErrors = {};
     const requiredFields = ['name', 'location', 'capacity_MW', 'injectionVoltage_KV', 'type', 'status', 'dateOfCommission'];
 
@@ -199,7 +208,7 @@ const ProductionSiteForm = ({ initialData, onSubmit, onCancel, loading, site, co
         if (!data[field] || (data[field] instanceof Date && isNaN(data[field].getTime()))) {
           newErrors[field] = 'This field is required';
         }
-      } else if (data[field] === '' || data[field] === null || data[field] === undefined) {
+      } else if ((!data[field] && data[field] !== 0)) {
         newErrors[field] = 'This field is required';
       }
     });
@@ -221,112 +230,9 @@ const ProductionSiteForm = ({ initialData, onSubmit, onCancel, loading, site, co
     return Object.keys(newErrors).length === 0;
   }, [formData]);
 
-  // Handle initial data after companies are loaded
   useEffect(() => {
-    if (!companiesLoaded) return;
-
-    const updateFormData = () => {
-      try {
-        let newFormData = { ...INITIAL_FORM_STATE };
-
-        if (site) {
-          // Get the company ID from site (this takes precedence)
-          const siteCompanyId = site.companyId ? String(site.companyId) : '';
-
-          // Find the company in the loaded companies list
-          let company = companies.find(c => String(c.companyId) === siteCompanyId);
-
-          // If not found in list, create a fallback company object using site data
-          if (!company && siteCompanyId) {
-            company = {
-              companyId: siteCompanyId,
-              companyName: site.companyName || `Company ${siteCompanyId}`
-            };
-            // Add to companies list if not already there
-            if (!companies.some(c => c.companyId === siteCompanyId)) {
-              setCompanies(prev => [...prev, company]);
-            }
-          }
-
-          // Normalize type
-          const normalizedType = site.type
-            ? site.type.charAt(0).toUpperCase() + site.type.slice(1).toLowerCase()
-            : '';
-
-          // Handle status with proper defaults
-          let normalizedStatus = 'Active'; // Default status for existing sites
-          if (site.status && typeof site.status === 'string') {
-            const trimmedStatus = site.status.trim();
-            const matchedStatus = SITE_STATUS.find(status =>
-              status.toLowerCase() === trimmedStatus.toLowerCase()
-            );
-            normalizedStatus = matchedStatus || 'Active';
-          }
-
-          const validType = SITE_TYPES.includes(normalizedType) ? normalizedType : SITE_TYPES[0];
-          const validStatus = SITE_STATUS.includes(normalizedStatus) ? normalizedStatus : 'Active';
-
-          // Parse date of commission
-          let parsedDateOfCommission = new Date(); // Default to today
-          if (site.dateOfCommission) {
-            try {
-              const date = site.dateOfCommission instanceof Date
-                ? site.dateOfCommission
-                : new Date(site.dateOfCommission);
-
-              if (!isNaN(date.getTime())) {
-                parsedDateOfCommission = date;
-              }
-            } catch (error) {
-              console.error('Error parsing dateOfCommission:', error);
-            }
-          }
-
-          // Set form data for existing site
-          newFormData = {
-            ...newFormData,
-            name: site.name || '',
-            type: validType,
-            location: site.location || '',
-            capacity_MW: site.capacity_MW != null ? parseFloat(site.capacity_MW) : '',
-            injectionVoltage_KV: site.injectionVoltage_KV != null ? parseFloat(site.injectionVoltage_KV) : '',
-            htscNo: site.htscNo || '',
-            annualProduction_L: site.annualProduction_L != null ? parseFloat(site.annualProduction_L) : '',
-            revenuePerUnit: site.revenuePerUnit != null ? parseFloat(site.revenuePerUnit) : '',
-            status: validStatus,
-            banking: validStatus && INACTIVE_STATUSES.includes(validStatus) ? 0 : (site.banking ? 1 : 0),
-            dateOfCommission: parsedDateOfCommission,
-            companyId: siteCompanyId,
-            companyName: company?.companyName || `Company ${siteCompanyId}`,
-            productionSiteId: site.productionSiteId,
-            version: site.version || 1
-          };
-        } else {
-          // For new sites
-          const company = companyId ? companies.find(c => String(c.companyId) === String(companyId)) : null;
-          newFormData = {
-            ...newFormData,
-            status: 'Active',
-            companyId: companyId || '',
-            companyName: company ? company.companyName : (companyId ? `Company ${companyId}` : ''),
-            type: SITE_TYPES[0], // Default to first type
-            dateOfCommission: new Date() // Default to today
-          };
-        }
-
-        setFormData(newFormData);
-        validateForm(newFormData);
-      } catch (error) {
-        console.error('Error initializing form data:', error);
-        setFormError('Failed to load site data. ' + (error.message || ''));
-      }
-    };
-
-    updateFormData();
-    setTouched({});
-    setErrors({});
-    setFormError('');
-  }, [site, companyId, companiesLoaded, companies, validateForm]);
+    validateForm();
+  }, [formData, validateForm]);
 
   const handleChange = (e, value) => {
     // Handle date picker changes (value is the second argument when coming from DatePicker)
@@ -398,57 +304,22 @@ const ProductionSiteForm = ({ initialData, onSubmit, onCancel, loading, site, co
   const handleSubmit = async (e) => {
     e.preventDefault();
     setFormError('');
+    const allTouched = {};
+    Object.keys(formData).forEach(f => allTouched[f] = true);
+    setTouched(allTouched);
 
-    // Validate company ID is selected
-    if (!formData.companyId) {
-      setErrors(prev => ({ ...prev, companyId: 'Please select a company' }));
-      enqueueSnackbar('Please select a company', { variant: 'error' });
-      return;
-    }
-
-    if (!validateForm()) {
-      enqueueSnackbar('Please fix the form errors before submitting', { variant: 'error' });
-      return;
-    }
-
-    try {
-      // Get the selected company ID from the form
-      const selectedCompanyId = formData.companyId;
-      
-      // Find the selected company to get the name
-      const selectedCompany = companies.find(c => String(c.companyId) === String(selectedCompanyId));
-      
-      if (!selectedCompany) {
-        throw new Error('Selected company not found in the list of accessible companies');
+    if (validateForm()) {
+      try {
+        const formDataToSubmit = {
+          ...formData,
+          dateOfCommission: formData.dateOfCommission 
+            ? new Date(formData.dateOfCommission).toISOString()
+            : null
+        };
+        await onSubmit(formDataToSubmit);
+      } catch (error) {
+        setFormError(error.message || 'Failed to save site.');
       }
-      
-      // Prepare the data to submit
-      const submitData = {
-        ...formData,
-        companyId: selectedCompanyId,
-        companyName: selectedCompany.companyName,
-        // Convert banking to number (0 or 1)
-        banking: formData.banking ? 1 : 0,
-      };
-
-      // Remove any empty strings and convert to null for optional fields
-      Object.keys(submitData).forEach(key => {
-        if (submitData[key] === '') {
-          submitData[key] = null;
-        }
-      });
-
-      console.log('Submitting production site with data:', submitData);
-      
-      // Call the parent's onSubmit with the prepared data
-      await onSubmit(submitData);
-    } catch (error) {
-      console.error('Error submitting form:', error);
-      setFormError(error.message || 'Failed to save production site');
-      enqueueSnackbar(error.message || 'Failed to save production site', { 
-        variant: 'error',
-        autoHideDuration: 5000
-      });
     }
   };
 

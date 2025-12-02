@@ -26,7 +26,8 @@ import {
   Cached as RefreshIcon,
   Error as ErrorIcon,
   AttachMoney as MoneyIcon,
-  Event as EventIcon
+  Event as EventIcon,
+  Business as BusinessIcon
 } from '@mui/icons-material';
 import { formatDistanceToNow } from 'date-fns';
 
@@ -204,9 +205,12 @@ const ProductionSiteCard = ({
               <Typography variant="h6" noWrap>{safeData.name}</Typography>
             </Tooltip>
             <Tooltip title={safeData.companyName}>
-              <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block', mt: 0.5, backgroundColor: 'rgba(0,0,0,0.05)', p: 0.5, borderRadius: 1 }}>
-                {safeData.companyName}
-              </Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.5 }}>
+                <BusinessIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
+                <Typography variant="caption" color="text.secondary" noWrap sx={{ backgroundColor: 'rgba(0,0,0,0.05)', p: 0.5, borderRadius: 1, flex: 1 }}>
+                  {safeData.companyName}
+                </Typography>
+              </Box>
             </Tooltip>
             <Typography
               variant="caption"

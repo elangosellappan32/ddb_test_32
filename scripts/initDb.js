@@ -41,13 +41,13 @@ const createRoleTable = async () => {
         const defaultRoles = [
             {
                 roleId: 'ROLE-1',
-                roleName: 'admin',
-                description: 'Administrator role with full access',
+                roleName: 'super_admin',
+                description: 'Super Administrator with full system access including user and role management',
                 permissions: {
                     production: ['CREATE', 'READ', 'UPDATE', 'DELETE'],
                     'production-units': ['CREATE', 'READ', 'UPDATE', 'DELETE'],
                     'production-charges': ['CREATE', 'READ', 'UPDATE', 'DELETE'],
-                    'consumption': ['CREATE', 'READ', 'UPDATE', 'DELETE'],
+                    consumption: ['CREATE', 'READ', 'UPDATE', 'DELETE'],
                     'consumption-units': ['CREATE', 'READ', 'UPDATE', 'DELETE'],
                     allocation: ['CREATE', 'READ', 'UPDATE', 'DELETE'],
                     banking: ['CREATE', 'READ', 'UPDATE', 'DELETE'],
@@ -55,6 +55,30 @@ const createRoleTable = async () => {
                     captive: ['CREATE', 'READ', 'UPDATE', 'DELETE'],
                     company: ['CREATE', 'READ', 'UPDATE', 'DELETE'],
                     users: ['CREATE', 'READ', 'UPDATE', 'DELETE'],
+                    roles: ['CREATE', 'READ', 'UPDATE', 'DELETE']
+                },
+                metadata: {
+                    accessLevel: 'Super Admin',
+                    isSystemRole: true
+                },
+                createdAt: timestamp,
+                updatedAt: timestamp
+            },
+            {
+                roleId: 'ROLE-2',
+                roleName: 'admin',
+                description: 'Administrator role with full access except user and role management',
+                permissions: {
+                    production: ['CREATE', 'READ', 'UPDATE', 'DELETE'],
+                    'production-units': ['CREATE', 'READ', 'UPDATE', 'DELETE'],
+                    'production-charges': ['CREATE', 'READ', 'UPDATE', 'DELETE'],
+                    consumption: ['CREATE', 'READ', 'UPDATE', 'DELETE'],
+                    'consumption-units': ['CREATE', 'READ', 'UPDATE', 'DELETE'],
+                    allocation: ['CREATE', 'READ', 'UPDATE', 'DELETE'],
+                    banking: ['CREATE', 'READ', 'UPDATE', 'DELETE'],
+                    lapse: ['CREATE', 'READ', 'UPDATE', 'DELETE'],
+                    captive: ['CREATE', 'READ', 'UPDATE', 'DELETE'],
+                    company: ['CREATE', 'READ', 'UPDATE', 'DELETE'],
                     roles: ['READ']
                 },
                 metadata: {
@@ -65,14 +89,14 @@ const createRoleTable = async () => {
                 updatedAt: timestamp
             },
             {
-                roleId: 'ROLE-2',
+                roleId: 'ROLE-3',
                 roleName: 'user',
                 description: 'Standard user with basic access',
                 permissions: {
                     production: ['READ', 'UPDATE'],
                     'production-units': ['READ', 'UPDATE'],
                     'production-charges': ['READ', 'UPDATE'],
-                    'consumption': ['READ', 'UPDATE'],
+                    consumption: ['READ', 'UPDATE'],
                     'consumption-units': ['READ', 'UPDATE'],
                     allocation: ['READ', 'UPDATE'],
                     banking: ['READ', 'UPDATE'],
@@ -90,14 +114,14 @@ const createRoleTable = async () => {
                 updatedAt: timestamp
             },
             {
-                roleId: 'ROLE-3',
+                roleId: 'ROLE-4',
                 roleName: 'viewer',
                 description: 'Read-only access',
                 permissions: {
                     production: ['READ'],
                     'production-units': ['READ'],
                     'production-charges': ['READ'],
-                    'consumption': ['READ'],
+                    consumption: ['READ'],
                     'consumption-units': ['READ'],
                     allocation: ['READ'],
                     banking: ['READ'],
@@ -1107,36 +1131,11 @@ const createUserTable = async () => {
 
 const createDefaultUsers = async () => {
     const users = [
-        // STRIO Admin
+        // Super Admin
         {
-            username: 'strio_admin',
-            email: 'admin@strio.com',
-            password: 'admin123',
-            roleId: 'ROLE-1',
-            metadata: {
-                accessibleSites: {
-                    productionSites: { L: [
-                        { S: '1_1' }, { S: '1_2' }
-                    ]},
-                    consumptionSites: { L: [
-                        { S: '2_1' }, { S: '3_2' }
-                    ]},
-                    company: { L: [
-                        { S: '1' }
-                    ]}
-                }
-            },
-            isActive: true,
-            version: 1,
-            createdAt: timestamp,
-            updatedAt: timestamp,
-            lastLogin: null
-        },
-        // Consultant Admin
-        {
-            username: 'consultant_admin',
-            email: 'consultant@strio.com',
-            password: 'consultant123',
+            username: 'super_admin',
+            email: 'superadmin@system.com',
+            password: 'superadmin123',
             roleId: 'ROLE-1',
             metadata: {
                 accessibleSites: {
@@ -1157,19 +1156,44 @@ const createDefaultUsers = async () => {
             updatedAt: timestamp,
             lastLogin: null
         },
-        // STRIO User
+        // STRIO Admin
         {
-            username: 'strio_user',
-            email: 'user@strio.com',
-            password: 'user123',
+            username: 'strio_admin',
+            email: 'admin@strio.com',
+            password: 'admin123',
             roleId: 'ROLE-2',
             metadata: {
                 accessibleSites: {
                     productionSites: { L: [
-                        { S: '1_1' }, { S: '1_2' }
+                        { S: '1_1' }, { S: '1_2' }, { S: '5_3' }
                     ]},
                     consumptionSites: { L: [
-                        { S: '2_1' }, { S: '3_2' }
+                        { S: '2_1' }, { S: '3_2' }, { S: '4_3' }
+                    ]},
+                    company: { L: [
+                        { S: '1' }, { S: '5' }
+                    ]}
+                }
+            },
+            isActive: true,
+            version: 1,
+            createdAt: timestamp,
+            updatedAt: timestamp,
+            lastLogin: null
+        },
+        // Consultant Admin
+        {
+            username: 'consultant_admin',
+            email: 'consultant@strio.com',
+            password: 'consultant123',
+            roleId: 'ROLE-2',
+            metadata: {
+                accessibleSites: {
+                    productionSites: { L: [
+                        { S: '1_1' }, { S: '1_2' }, { S: '5_3' }
+                    ]},
+                    consumptionSites: { L: [
+                        { S: '2_1' }, { S: '3_2' }, { S: '4_3' }
                     ]},
                     company: { L: [
                         { S: '1' }
@@ -1182,11 +1206,11 @@ const createDefaultUsers = async () => {
             updatedAt: timestamp,
             lastLogin: null
         },
-        // STRIO Viewer
+        // STRIO User
         {
-            username: 'strio_viewer',
-            email: 'viewer@strio.com',
-            password: 'viewer123',
+            username: 'strio_user',
+            email: 'user@strio.com',
+            password: 'user123',
             roleId: 'ROLE-3',
             metadata: {
                 accessibleSites: {
@@ -1207,12 +1231,37 @@ const createDefaultUsers = async () => {
             updatedAt: timestamp,
             lastLogin: null
         },
+        // STRIO Viewer
+        {
+            username: 'strio_viewer',
+            email: 'viewer@strio.com',
+            password: 'viewer123',
+            roleId: 'ROLE-4',
+            metadata: {
+                accessibleSites: {
+                    productionSites: { L: [
+                        { S: '5_3' }
+                    ]},
+                    consumptionSites: { L: [
+                        { S: '2_1' }, { S: '3_2' }
+                    ]},
+                    company: { L: [
+                        { S: '5' }
+                    ]}
+                }
+            },
+            isActive: true,
+            version: 1,
+            createdAt: timestamp,
+            updatedAt: timestamp,
+            lastLogin: null
+        },
         // SMR Admin
         {
             username: 'smr_admin',
             email: 'admin@smr.com',
             password: 'admin123',
-            roleId: 'ROLE-1',
+            roleId: 'ROLE-2',
             metadata: {
                 accessibleSites: {
                     productionSites: { L: [
@@ -1237,7 +1286,7 @@ const createDefaultUsers = async () => {
             username: 'smr_user',
             email: 'user@smr.com',
             password: 'user123',
-            roleId: 'ROLE-2',
+            roleId: 'ROLE-3',
             metadata: {
                 accessibleSites: {
                     productionSites: { L: [
@@ -1262,17 +1311,17 @@ const createDefaultUsers = async () => {
             username: 'smr_viewer',
             email: 'viewer@smr.com',
             password: 'viewer123',
-            roleId: 'ROLE-3',
+            roleId: 'ROLE-4',
             metadata: {
                 accessibleSites: {
                     productionSites: { L: [
-                        { S: '5_3' }
+                        { S: '1_1' }, { S: '1_2' }, { S: '5_3' }
                     ]},
                     consumptionSites: { L: [
-                        { S: '2_1' }
+                        { S: '2_1' }, { S: '3_2' }, { S: '4_3' }
                     ]},
                     company: { L: [
-                        { S: '5' }
+                        { S: '1' }, { S: '5' }
                     ]}
                 }
             },
@@ -1282,11 +1331,12 @@ const createDefaultUsers = async () => {
             updatedAt: timestamp,
             lastLogin: null
         },
+        // Star Admin
         {
             username: 'star_admin',
-            email: 'viewer@smr.com',
+            email: 'staradmin@system.com',
             password: 'admin123',
-            roleId: 'ROLE-1',
+            roleId: 'ROLE-2',
             metadata: {
                 accessibleSites: {
                     productionSites: { L: [
@@ -1297,6 +1347,30 @@ const createDefaultUsers = async () => {
                     ]},
                     company: { L: [
                         { S: '1' }, { S: '5' }
+                    ]}
+                }
+            },
+            isActive: true,
+            version: 1,
+            createdAt: timestamp,
+            updatedAt: timestamp,
+            lastLogin: null
+        },
+        {
+            username: 'super_admin',
+            email: 'superadmin@system.com',
+            password: 'superadmin123',
+            roleId: 'ROLE-1',
+            metadata: {
+                accessibleSites: {
+                    productionSites: { L: [
+                        { S: '1_1' }, { S: '1_2' }, { S: '5_3' }
+                    ]},
+                    consumptionSites: { L: [
+                        { S: '2_1' }, { S: '3_2' }, { S: '4_3' }
+                    ]},
+                    company: { L: [
+                        { S: '1' }, { S: '2' }, { S: '3' }, { S: '4' }, { S: '5' }
                     ]}
                 }
             },

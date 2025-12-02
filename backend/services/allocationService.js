@@ -8,12 +8,14 @@ const ValidationUtil = require('../utils/validation');
 const { ValidationError, DatabaseError } = require('../utils/errors');
 const bankingDAL = require('../banking/bankingDAL');
 const lapseDAL = require('../lapse/lapseDAL');
+const { ScanCommand, DeleteCommand } = require('@aws-sdk/lib-dynamodb');
+const docClient = require('../utils/db');
 
 class AllocationService {
     static instance = null;
 
     constructor() {
-        this.allocationDAL = allocationDAL;
+        this.allocationDAL = new allocationDAL();
         this.bankingDAL = bankingDAL;
         this.lapseDAL = lapseDAL;
         this.pendingTransactions = new Map();
@@ -530,7 +532,7 @@ class AllocationService {
                 ProjectionExpression: 'pk, sk'
             };
 
-            const { Items: allocations = [] } = await this.allocationDAL.docClient.send(new ScanCommand(params));
+            const { Items: allocations = [] } = await docClient.send(new ScanCommand(params));
             
             // Additional validation to ensure exact matching of the site IDs
             let filteredAllocations = allocations;

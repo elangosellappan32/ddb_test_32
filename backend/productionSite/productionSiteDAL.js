@@ -15,39 +15,32 @@ const TableNames = require('../constants/tableNames');
 const docClient = require('../utils/db');
 const TableName = TableNames.PRODUCTION_SITES;
 
-const getLastProductionSiteId = async (companyId) => {
+const getLastProductionSiteId = async () => {
     try {
-        // First, try to get the highest existing ID
-        const { Items } = await docClient.send(new QueryCommand({
+        // Scan all production sites to get the highest global ID
+        const { Items } = await docClient.send(new ScanCommand({
             TableName,
-            KeyConditionExpression: 'companyId = :companyId',
-            ExpressionAttributeValues: {
-                ':companyId': companyId
-            },
-            // Sort in descending order by productionSiteId to get the highest ID first
-            ScanIndexForward: false,
-            Limit: 1
+            ProjectionExpression: 'productionSiteId',
+            FilterExpression: 'attribute_exists(productionSiteId)'
         }));
 
         if (!Items || Items.length === 0) {
             return 0;
         }
 
-        // Get the highest ID
-        const lastId = Items[0]?.productionSiteId;
-        if (!lastId && lastId !== 0) {
-            logger.warn(`[ProductionSiteDAL] Invalid productionSiteId found: ${lastId} for company ${companyId}`);
+        // Find the highest ID across all companies
+        const highestId = Items.reduce((max, item) => {
+            const id = Number(item.productionSiteId);
+            return id > max ? id : max;
+        }, 0);
+
+        if (isNaN(highestId)) {
+            logger.warn('[ProductionSiteDAL] No valid numeric productionSiteId found, starting from 0');
             return 0;
         }
 
-        const numericId = Number(lastId);
-        if (isNaN(numericId)) {
-            logger.error(`[ProductionSiteDAL] Non-numeric productionSiteId found: ${lastId} for company ${companyId}`);
-            throw new Error('Invalid production site ID format');
-        }
-
-        logger.debug(`[ProductionSiteDAL] Last production site ID for company ${companyId}: ${numericId}`);
-        return numericId;
+        logger.debug(`[ProductionSiteDAL] Last global production site ID: ${highestId}`);
+        return highestId;
     } catch (error) {
         logger.error('[ProductionSiteDAL] Get Last ProductionSiteId Error:', error);
         throw error;
@@ -62,11 +55,11 @@ const create = async (item) => {
     while (retryCount < maxRetries) {
         try {
             const now = new Date().toISOString();
-            const lastId = await getLastProductionSiteId(item.companyId);
+            const lastId = await getLastProductionSiteId();
             const newId = lastId + 1;
             
             // Log the ID generation for debugging
-            logger.debug(`[ProductionSiteDAL] Generating new production site ID. Last ID: ${lastId}, New ID: ${newId} for company ${item.companyId}`);
+            logger.debug(`[ProductionSiteDAL] Generating new production site ID. Last global ID: ${lastId}, New ID: ${newId} for company ${item.companyId}`);
             
             // Add a small delay to help prevent race conditions
             if (retryCount > 0) {
@@ -97,8 +90,8 @@ const create = async (item) => {
             }
 
             const newItem = {
-                companyId: item.companyId,
-                productionSiteId: newId,
+                companyId: String(item.companyId),
+                productionSiteId: String(newId),
                 name: item.name,
                 location: item.location,
                 type: item.type,
