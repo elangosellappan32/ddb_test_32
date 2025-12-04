@@ -63,6 +63,7 @@ const ConsumptionSiteDetails = () => {
       // Format site data with proper validation
       const site = {
         companyId: validCompanyId,
+        companyName: siteResponse?.data?.companyName || 'Unknown Company',
         consumptionSiteId: validConsumptionSiteId,
         name: siteResponse?.data?.name || 'Unnamed Site',
         type: (siteResponse?.data?.type || 'unknown').toLowerCase(),

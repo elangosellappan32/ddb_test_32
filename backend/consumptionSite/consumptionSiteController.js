@@ -177,10 +177,22 @@ const getConsumptionSite = async (req, res) => {
             });
         }
 
+        // Get company name
+        let companyName = 'Unknown Company';
+        try {
+            const company = await companyDAL.getCompanyById(companyId);
+            if (company && company.companyName) {
+                companyName = company.companyName;
+            }
+        } catch (error) {
+            logger.error(`Error fetching company ${companyId}:`, error);
+        }
+
         res.json({
             success: true,
             data: {
                 ...item,
+                companyName: item.companyName || companyName,
                 type: item.type.toLowerCase(),
                 status: item.status?.toLowerCase() || 'active',
                 version: Number(item.version || 1),

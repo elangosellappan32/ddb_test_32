@@ -9,7 +9,24 @@ const logWithTime = (message, ...optionalParams) => {
 
 const handleApiError = (error) => {
   logWithTime('❌ API Error:', error);
-  throw new Error(error.response?.data?.message || error.message || 'An error occurred');
+  
+  // Extract detailed error information
+  const errorMessage = error.response?.data?.message 
+    || error.response?.data?.error 
+    || error.message 
+    || 'An error occurred';
+  
+  const errorCode = error.response?.data?.code || error.code || 'UNKNOWN_ERROR';
+  
+  // Log the full error details
+  console.error('[ProductionSiteApi] Error Details:', {
+    status: error.response?.status,
+    message: errorMessage,
+    code: errorCode,
+    fullError: error.response?.data || error
+  });
+  
+  throw new Error(errorMessage);
 };
 
 const formatSiteData = (data) => {

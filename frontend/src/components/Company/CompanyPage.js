@@ -44,6 +44,8 @@ const CompanyPage = () => {
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [isCaptiveDialogOpen, setIsCaptiveDialogOpen] = useState(false);
   const [captiveGeneratorCompany, setCaptiveGeneratorCompany] = useState(null);
+  const [companySites, setCompanySites] = useState({ productionSites: { count: 0, sites: [] }, consumptionSites: { count: 0, sites: [] } });
+  const [isCheckingSites, setIsCheckingSites] = useState(false);
 
   // State for table and pagination
   const [page, setPage] = useState(0);
@@ -113,9 +115,34 @@ const CompanyPage = () => {
   }, []);
 
   const handleDelete = useCallback((company) => {
+    console.log('[CompanyPage] Delete initiated for company:', company);
     setSelectedCompany(company);
+    setCompanySites({ productionSites: { count: 0, sites: [] }, consumptionSites: { count: 0, sites: [] } });
+    setIsCheckingSites(true);
     setIsDeleteOpen(true);
-  }, []);
+    
+    // Check if company has sites
+    companyApi.checkSites(company.companyId)
+      .then(result => {
+        console.log('[CompanyPage] Sites check successful:', result);
+        // Handle both direct data and wrapped response
+        const siteData = result.data || result;
+        setCompanySites({
+          productionSites: siteData.productionSites || { count: 0, sites: [] },
+          consumptionSites: siteData.consumptionSites || { count: 0, sites: [] }
+        });
+      })
+      .catch(err => {
+        console.error('[CompanyPage] Error checking company sites:', err);
+        // Set empty sites on error
+        setCompanySites({ productionSites: { count: 0, sites: [] }, consumptionSites: { count: 0, sites: [] } });
+        // Show error notification
+        enqueueSnackbar('Could not load site information', { variant: 'warning' });
+      })
+      .finally(() => {
+        setIsCheckingSites(false);
+      });
+  }, [enqueueSnackbar]);
 
   const handleOpenCreate = useCallback(() => {
     setIsEditMode(false);
@@ -168,22 +195,44 @@ const CompanyPage = () => {
     setIsCaptiveDialogOpen(true);
   }, []);
 
-  const handleDeleteConfirm = useCallback(async () => {
-    if (!selectedCompany) return;
+  const handleConfirmDelete = useCallback(async () => {
+    if (!selectedCompany?.companyId) {
+      enqueueSnackbar('No company selected', { variant: 'error' });
+      return;
+    }
+
+    // Check if company has associated sites
+    const totalSites = (companySites?.productionSites?.count || 0) + (companySites?.consumptionSites?.count || 0);
+    if (totalSites > 0) {
+      enqueueSnackbar(
+        `Cannot delete company with associated sites. Please delete all ${totalSites} site(s) first.`,
+        { variant: 'error' }
+      );
+      return;
+    }
 
     try {
       setIsSubmitting(true);
-      await companyApi.delete(selectedCompany.companyId);
-      enqueueSnackbar('Company deleted successfully', { variant: 'success' });
-      await fetchCompanies(false);
+      const response = await companyApi.delete(selectedCompany.companyId);
+      console.log('[CompanyPage] Delete response:', response);
+      
+      enqueueSnackbar(`Company "${selectedCompany.companyName}" deleted successfully`, { variant: 'success' });
+
+      // Close dialog
       setIsDeleteOpen(false);
+      setSelectedCompany(null);
+      setCompanySites({ productionSites: { count: 0, sites: [] }, consumptionSites: { count: 0, sites: [] } });
+
+      // Refresh companies list
+      await fetchCompanies(false);
     } catch (err) {
-      const errorMsg = err.response?.data?.message || 'Failed to delete company';
+      console.error('[CompanyPage] Delete failed:', err);
+      const errorMsg = err.response?.data?.message || err.message || 'Failed to delete company';
       enqueueSnackbar(errorMsg, { variant: 'error' });
     } finally {
       setIsSubmitting(false);
     }
-  }, [selectedCompany, fetchCompanies, enqueueSnackbar]);
+  }, [selectedCompany, fetchCompanies, enqueueSnackbar, companySites]);
 
   const sortedCompanies = useMemo(() => {
     return [...companies].sort((a, b) => {
@@ -277,10 +326,7 @@ const CompanyPage = () => {
           <IconButton
             size="small"
             color="error"
-            onClick={() => {
-              setSelectedCompany(company);
-              setIsDeleteOpen(true);
-            }}
+            onClick={() => handleDelete(company)}
             aria-label="delete"
           >
             <DeleteIcon fontSize="small" />
@@ -488,25 +534,6 @@ const CompanyPage = () => {
     setIsDeleteOpen(false);
     setSelectedCompany(null);
   }, [isSubmitting]);
-
-  const handleConfirmDelete = useCallback(async () => {
-    if (!selectedCompany?.companyId) return;
-
-    try {
-      setIsSubmitting(true);
-      await companyApi.delete(selectedCompany.companyId);
-
-      const result = await companyApi.getAll();
-      const list = Array.isArray(result?.data) ? result.data : [];
-      setCompanies(list);
-    } catch (err) {
-      console.error('Failed to delete company', err);
-    } finally {
-      setIsSubmitting(false);
-      setIsDeleteOpen(false);
-      setSelectedCompany(null);
-    }
-  }, [selectedCompany, companyApi, setCompanies]);
 
   useEffect(() => {
     fetchCompanies();
@@ -886,70 +913,284 @@ const CompanyPage = () => {
         fullWidth
         PaperProps={{
           sx: {
-            borderRadius: 2,
-            boxShadow: 3
+            borderRadius: 2.5,
+            boxShadow: '0 20px 60px rgba(0, 0, 0, 0.3)',
+            overflow: 'visible'
           }
         }}
       >
         <DialogTitle sx={{
-          bgcolor: 'error.light',
+          bgcolor: 'error.main',
           color: 'error.contrastText',
-          py: 2.5,
+          py: 3,
           px: 3,
           display: 'flex',
           alignItems: 'center',
-          fontSize: '1.25rem',
-          fontWeight: 600
+          fontSize: '1.3rem',
+          fontWeight: 700,
+          letterSpacing: 0.5
         }}>
-          <DeleteIcon sx={{ mr: 1.5, fontSize: 28 }} />
-          Confirm Delete
+          <DeleteIcon sx={{ mr: 2, fontSize: 32 }} />
+          Delete Company
         </DialogTitle>
 
-        <DialogContent sx={{ p: 3 }}>
-          <Typography variant="body1" sx={{ mb: 2 }}>
-            Are you sure you want to delete <strong>{selectedCompany?.companyName}</strong>?
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            This action cannot be undone and will permanently remove the company and all associated data.
-          </Typography>
+        <DialogContent sx={{ p: 0 }}>
+          {isCheckingSites ? (
+            <Box sx={{ 
+              display: 'flex', 
+              justifyContent: 'center', 
+              alignItems: 'center',
+              p: 6,
+              minHeight: '250px'
+            }}>
+              <Box sx={{ textAlign: 'center' }}>
+                <CircularProgress size={50} sx={{ mb: 2 }} />
+                <Typography variant="body2" color="text.secondary">
+                  Checking associated sites...
+                </Typography>
+              </Box>
+            </Box>
+          ) : (
+            <Box sx={{ p: 3 }}>
+              {/* Company Name Section */}
+              <Box sx={{
+                bgcolor: 'primary.light',
+                border: '2px solid',
+                borderColor: 'primary.main',
+                borderRadius: 2,
+                p: 2,
+                mb: 3,
+                textAlign: 'center'
+              }}>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
+                  You are about to delete
+                </Typography>
+                <Typography variant="h6" sx={{ fontWeight: 700, color: 'primary.dark' }}>
+                  {selectedCompany?.companyName}
+                </Typography>
+              </Box>
+
+              {/* Warning Message */}
+              <Box sx={{
+                bgcolor: 'error.light',
+                border: '1px solid',
+                borderColor: 'error.lighter',
+                borderRadius: 1.5,
+                p: 2,
+                mb: 3,
+                display: 'flex',
+                gap: 2
+              }}>
+                <Box sx={{ color: 'error.main', flexShrink: 0, pt: 0.25 }}>
+                  ⚠️
+                </Box>
+                <Box>
+                  <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.5, color: 'error.dark' }}>
+                    This action cannot be undone
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    The company and all associated data will be permanently deleted from the system.
+                  </Typography>
+                </Box>
+              </Box>
+
+              {/* Sites Information Section */}
+              {(companySites?.productionSites?.count > 0 || companySites?.consumptionSites?.count > 0) ? (
+                <Box sx={{
+                  bgcolor: '#fff5e1',
+                  border: '2px solid #ffb74d',
+                  borderRadius: 2,
+                  p: 2.5,
+                  mb: 2
+                }}>
+                  {/* Header */}
+                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                    <Box sx={{ 
+                      bgcolor: '#ffa726',
+                      borderRadius: '50%',
+                      p: 1,
+                      mr: 1.5,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      minWidth: 40,
+                      minHeight: 40
+                    }}>
+                      <Typography sx={{ fontSize: '1.2rem' }}>⚡</Typography>
+                    </Box>
+                    <Typography variant="subtitle2" sx={{ fontWeight: 700, color: '#e65100' }}>
+                      {companySites?.productionSites?.count > 0 || companySites?.consumptionSites?.count > 0 
+                        ? `${(companySites?.productionSites?.count || 0) + (companySites?.consumptionSites?.count || 0)} Associated Site${((companySites?.productionSites?.count || 0) + (companySites?.consumptionSites?.count || 0)) !== 1 ? 's' : ''} Found`
+                        : 'Associated Sites Found'
+                      }
+                    </Typography>
+                  </Box>
+
+                  {/* Production Sites */}
+                  {companySites?.productionSites?.count > 0 && (
+                    <Box sx={{ mb: companySites?.consumptionSites?.count > 0 ? 2 : 0 }}>
+                      <Box sx={{
+                        bgcolor: '#fff9c4',
+                        borderLeft: '4px solid #fbc02d',
+                        p: 1.5,
+                        borderRadius: '0 4px 4px 0'
+                      }}>
+                        <Typography variant="body2" sx={{ fontWeight: 700, mb: 1, color: '#f57f17' }}>
+                          🏭 Production Sites ({companySites?.productionSites?.count || 0})
+                        </Typography>
+                        <Box sx={{ pl: 2 }}>
+                          {Array.isArray(companySites?.productionSites?.sites) && companySites.productionSites.sites.length > 0 ? (
+                            companySites.productionSites.sites.map((site, idx) => (
+                              <Box key={`prod-site-${idx}`} sx={{ mb: 0.75, display: 'flex', gap: 1 }}>
+                                <Typography sx={{ color: '#fbc02d', fontWeight: 600, minWidth: 16, mt: 0.25 }}>▪</Typography>
+                                <Box sx={{ flex: 1 }}>
+                                  <Typography variant="body2" sx={{ fontWeight: 500, color: '#333' }}>
+                                    {site?.name || 'Unnamed Production Site'}
+                                  </Typography>
+                                  {site?.location && (
+                                    <Typography variant="caption" sx={{ color: '#666', display: 'block' }}>
+                                      📍 {site.location}
+                                    </Typography>
+                                  )}
+                                </Box>
+                              </Box>
+                            ))
+                          ) : (
+                            <Typography variant="caption" sx={{ color: '#666' }}>
+                              No production sites available
+                            </Typography>
+                          )}
+                        </Box>
+                      </Box>
+                    </Box>
+                  )}
+
+                  {/* Consumption Sites */}
+                  {companySites?.consumptionSites?.count > 0 && (
+                    <Box>
+                      <Box sx={{
+                        bgcolor: '#e3f2fd',
+                        borderLeft: '4px solid #1976d2',
+                        p: 1.5,
+                        borderRadius: '0 4px 4px 0'
+                      }}>
+                        <Typography variant="body2" sx={{ fontWeight: 700, mb: 1, color: '#0d47a1' }}>
+                          💧 Consumption Sites ({companySites?.consumptionSites?.count || 0})
+                        </Typography>
+                        <Box sx={{ pl: 2 }}>
+                          {Array.isArray(companySites?.consumptionSites?.sites) && companySites.consumptionSites.sites.length > 0 ? (
+                            companySites.consumptionSites.sites.map((site, idx) => (
+                              <Box key={`cons-site-${idx}`} sx={{ mb: 0.75, display: 'flex', gap: 1 }}>
+                                <Typography sx={{ color: '#1976d2', fontWeight: 600, minWidth: 16, mt: 0.25 }}>▪</Typography>
+                                <Box sx={{ flex: 1 }}>
+                                  <Typography variant="body2" sx={{ fontWeight: 500, color: '#333' }}>
+                                    {site?.name || 'Unnamed Consumption Site'}
+                                  </Typography>
+                                  {site?.location && (
+                                    <Typography variant="caption" sx={{ color: '#666', display: 'block' }}>
+                                      📍 {site.location}
+                                    </Typography>
+                                  )}
+                                </Box>
+                              </Box>
+                            ))
+                          ) : (
+                            <Typography variant="caption" sx={{ color: '#666' }}>
+                              No consumption sites available
+                            </Typography>
+                          )}
+                        </Box>
+                      </Box>
+                    </Box>
+                  )}
+
+                  {/* Warning */}
+                  <Box sx={{
+                    bgcolor: '#ffebee',
+                    p: 1.5,
+                    borderRadius: 1,
+                    mt: 2,
+                    textAlign: 'center',
+                    border: '1px solid #ffb3ba'
+                  }}>
+                    <Typography variant="caption" sx={{ fontWeight: 600, color: '#c62828', display: 'block' }}>
+                      ⚠️ WARNING: Deleting this company will permanently remove ALL associated sites and their data
+                    </Typography>
+                  </Box>
+                </Box>
+              ) : (
+                <Box sx={{
+                  bgcolor: '#e8f5e9',
+                  border: '1px solid #81c784',
+                  borderRadius: 1.5,
+                  p: 2,
+                  mb: 2,
+                  textAlign: 'center'
+                }}>
+                  <Typography variant="body2" sx={{ color: '#2e7d32', fontWeight: 500 }}>
+                    ✓ No associated sites. Safe to delete.
+                  </Typography>
+                </Box>
+              )}
+            </Box>
+          )}
         </DialogContent>
 
-        <DialogActions sx={{ p: 2.5, borderTop: 1, borderColor: 'divider', gap: 1 }}>
+        <DialogActions sx={{ 
+          p: 2.5, 
+          borderTop: '1px solid',
+          borderColor: 'divider',
+          gap: 1.5,
+          bgcolor: '#fafafa'
+        }}>
           <Button
             onClick={() => setIsDeleteOpen(false)}
-            disabled={isSubmitting}
+            disabled={isSubmitting || isCheckingSites}
             variant="outlined"
             color="inherit"
             sx={{
               textTransform: 'none',
-              borderRadius: 1,
-              px: 3,
-              py: 1,
-              fontWeight: 500
+              borderRadius: 1.5,
+              px: 4,
+              py: 1.2,
+              fontWeight: 600,
+              border: '2px solid #e0e0e0',
+              transition: 'all 0.3s ease',
+              '&:hover': {
+                border: '2px solid #999',
+                bgcolor: '#f5f5f5'
+              }
             }}
           >
             Cancel
           </Button>
           <Button
-            onClick={handleDeleteConfirm}
+            onClick={handleConfirmDelete}
             color="error"
             variant="contained"
-            disabled={isSubmitting}
-            startIcon={isSubmitting ? <CircularProgress size={20} color="inherit" /> : null}
+            disabled={isSubmitting || isCheckingSites || (companySites?.productionSites?.count > 0 || companySites?.consumptionSites?.count > 0)}
+            startIcon={isSubmitting ? <CircularProgress size={18} color="inherit" /> : <DeleteIcon />}
+            title={companySites?.productionSites?.count > 0 || companySites?.consumptionSites?.count > 0 ? 'Delete all associated sites first' : ''}
             sx={{
               textTransform: 'none',
-              borderRadius: 1,
-              px: 3,
-              py: 1,
-              fontWeight: 500,
+              borderRadius: 1.5,
+              px: 4,
+              py: 1.2,
+              fontWeight: 600,
               boxShadow: 'none',
+              bgcolor: 'error.main',
+              transition: 'all 0.3s ease',
               '&:hover': {
-                boxShadow: 'none',
-                bgcolor: 'error.dark'
+                boxShadow: '0 8px 24px rgba(211, 47, 47, 0.4)',
+                bgcolor: 'error.dark',
+                transform: 'translateY(-2px)'
+              },
+              '&:disabled': {
+                opacity: 0.6
               }
             }}
           >
-            {isSubmitting ? 'Deleting...' : 'Delete'}
+            {isSubmitting ? 'Deleting...' : 'Delete Company'}
           </Button>
         </DialogActions>
       </Dialog>

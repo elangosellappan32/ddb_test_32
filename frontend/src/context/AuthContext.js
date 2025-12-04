@@ -70,15 +70,11 @@ export const AuthProvider = ({ children }) => {
                 return { productionSites: [], consumptionSites: [] };
             }
 
-            // Extract production sites
-            const productionSites = accessibleSites?.M?.productionSites?.M?.L?.L?.flatMap(siteArray => 
-                siteArray.L.map(item => item.M?.S?.S).filter(Boolean)
-            ) || [];
+            // Extract production sites from DynamoDB format { L: [{S: 'siteId'}, ...] }
+            const productionSites = accessibleSites.productionSites?.L?.map(item => item.S).filter(Boolean) || [];
 
-            // Extract consumption sites
-            const consumptionSites = accessibleSites?.M?.consumptionSites?.M?.L?.L?.flatMap(siteArray => 
-                siteArray.L.map(item => item.M?.S?.S).filter(Boolean)
-            ) || [];
+            // Extract consumption sites from DynamoDB format { L: [{S: 'siteId'}, ...] }
+            const consumptionSites = accessibleSites.consumptionSites?.L?.map(item => item.S).filter(Boolean) || [];
 
             return { productionSites, consumptionSites };
         } catch (error) {
@@ -118,10 +114,35 @@ export const AuthProvider = ({ children }) => {
         }
     }, [user, enqueueSnackbar]);
 
+    // Function to check if user has access to a specific company
+    const hasCompanyAccess = useCallback((companyId) => {
+        if (!user) return false;
+        // Superadmin and admin have full access to all companies
+        if (user.isSuperAdmin || user.isAdmin || user.role === 'admin' || user.role === 'superadmin' || user.roleName === 'ADMIN' || user.roleName === 'SUPERADMIN') {
+            return true;
+        }
+        
+        try {
+            const sites = getAccessibleSites();
+            const allSites = [...(sites.productionSites || []), ...(sites.consumptionSites || [])];
+            
+            // Extract company IDs from site IDs (format: companyId_siteId)
+            const accessibleCompanyIds = new Set(
+                allSites.map(siteId => String(siteId).split('_')[0]).filter(Boolean)
+            );
+            
+            return accessibleCompanyIds.has(String(companyId));
+        } catch (error) {
+            console.error('Error checking company access:', error);
+            return false;
+        }
+    }, [user, getAccessibleSites]);
+
     // Function to check if user has access to a specific site
     const hasSiteAccess = useCallback((siteId, siteType = 'production') => {
         if (!user) return false;
-        if (user.isAdmin || user.role === 'admin' || user.roleName === 'ADMIN') {
+        // Superadmin and admin have full access to all sites
+        if (user.isSuperAdmin || user.isAdmin || user.role === 'admin' || user.role === 'superadmin' || user.roleName === 'ADMIN' || user.roleName === 'SUPERADMIN') {
             return true;
         }
         
@@ -132,16 +153,11 @@ export const AuthProvider = ({ children }) => {
             // Convert siteId to string for comparison if it's a number
             const siteIdStr = String(siteId);
             
-            // Check if the siteId is in the siteArray
-            const hasAccess = siteArray.some(site => {
-                // Handle both string and number comparisons
-                return String(site) === siteIdStr || 
-                       (site && site.S && String(site.S) === siteIdStr) ||
-                       (site && site.M && site.M.S && String(site.M.S.S) === siteIdStr);
-            });
+            // Check if the siteId is in the siteArray (simple string comparison)
+            const hasAccess = siteArray.some(site => String(site) === siteIdStr);
             
             if (!hasAccess) {
-                console.warn(`Access denied to site ${siteIdStr} of type ${siteType}. Accessible sites:`, siteArray);
+                console.warn(`Access denied to site ${siteIdStr} of type ${siteType}. Accessible sites: ${JSON.stringify(siteArray)}`);
             }
             
             return hasAccess;
@@ -164,7 +180,8 @@ export const AuthProvider = ({ children }) => {
             checkPermission,
             checkAnyPermission,
             isAdmin: () => authService.isAdmin(user),
-            hasRole: (role) => user?.role === role,
+            isSuperAdmin: () => authService.isSuperAdmin(user),
+            hasRole: (role) => user?.role === role || user?.roleName === role,
             hasPermission: authService.hasPermission,
             canCreate: authService.canCreate,
             canRead: authService.canRead,
@@ -174,7 +191,8 @@ export const AuthProvider = ({ children }) => {
             // Accessible sites functionality
             getAccessibleSites,
             refreshAccessibleSites,
-            hasSiteAccess
+            hasSiteAccess,
+            hasCompanyAccess
         }}>
             {children}
         </AuthContext.Provider>

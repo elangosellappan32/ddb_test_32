@@ -26,6 +26,7 @@ const SiteInfoCard = ({ site }) => {
   };
 
   const siteInfo = {
+    companyName: site.companyName || 'Unknown Company',
     name: site.name || 'Unnamed Site',
     type: (site.type || 'unknown').toLowerCase(),
     location: site.location || 'Location not specified',
@@ -75,6 +76,11 @@ const SiteInfoCard = ({ site }) => {
     <Paper sx={{ p: 3, mb: 3, borderRadius: 2, boxShadow: 2 }}>
       <Box sx={{ py: 2 }}>
         {renderInfoItem(
+          'Company',
+          siteInfo.companyName,
+          <BusinessIcon sx={{ color: 'primary.main', mr: 1 }} />
+        )}
+        {renderInfoItem(
           'Name',
           siteInfo.name,
           <BusinessIcon sx={{ color: 'text.secondary', mr: 1 }} />
@@ -102,6 +108,7 @@ const SiteInfoCard = ({ site }) => {
 
 SiteInfoCard.propTypes = {
   site: PropTypes.shape({
+    companyName: PropTypes.string,
     name: PropTypes.string,
     type: PropTypes.string,
     location: PropTypes.string,

@@ -341,19 +341,13 @@ const ProductionSiteForm = ({ initialData, onSubmit, onCancel, loading, site, co
             )}
             <Grid container spacing={3}>
               {site && (
-                <Grid item xs={12}>
-                  <Box sx={{ 
-                    p: 2, 
-                    bgcolor: 'action.hover', 
-                    borderRadius: 1, 
-                    border: '1px solid',
-                    borderColor: 'divider'
-                  }}>
+                <Grid item xs={12} sm={6}>
+                  <Box sx={{ p: 2, bgcolor: 'action.hover', borderRadius: 1, border: '1px solid', borderColor: 'divider' }}>
                     <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1 }}>
-                      Company Information (Cannot be changed)
+                      Company (Cannot be changed)
                     </Typography>
                     <Typography variant="body1" sx={{ fontWeight: 500 }}>
-                      {formData.companyName}
+                      {formData.companyName || 'Unknown Company'}
                     </Typography>
                   </Box>
                 </Grid>

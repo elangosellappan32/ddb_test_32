@@ -289,11 +289,44 @@ const getAllConsumptionSites = async () => {
     }
 };
 
+const getByCompanyId = async (companyId) => {
+    try {
+        // Ensure companyId is converted to string for matching with stored values
+        const companyIdStr = String(companyId);
+        logger.info(`[ConsumptionSiteDAL] Fetching consumption sites for company: ${companyIdStr}`);
+        
+        const { Items } = await docClient.send(new QueryCommand({
+            TableName,
+            KeyConditionExpression: 'companyId = :companyId',
+            ExpressionAttributeValues: {
+                ':companyId': companyIdStr
+            }
+        }));
+
+        if (!Items || Items.length === 0) {
+            logger.info(`[ConsumptionSiteDAL] No consumption sites found for company ${companyIdStr}`);
+            return [];
+        }
+
+        logger.info(`[ConsumptionSiteDAL] Found ${Items.length} consumption sites for company ${companyIdStr}`);
+        return Items.map(item => ({
+            companyId: String(item.companyId),
+            consumptionSiteId: String(item.consumptionSiteId),
+            name: item.name || 'Unnamed Site',
+            location: item.location || 'Unknown Location'
+        }));
+    } catch (error) {
+        logger.error(`[ConsumptionSiteDAL] GetByCompanyId Error for company ${companyId}:`, error);
+        throw error;
+    }
+};
+
 module.exports = {
     createConsumptionSite,
     getConsumptionSite,
     getAllConsumptionSites,
     updateConsumptionSite,
     deleteConsumptionSite,
-    getLastConsumptionSiteId
+    getLastConsumptionSiteId,
+    getByCompanyId
 };

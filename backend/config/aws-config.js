@@ -12,8 +12,17 @@ const client = new DynamoDBClient({
     }
 });
 
-// Create DynamoDB Document Client
-const docClient = DynamoDBDocumentClient.from(client);
+// Create DynamoDB Document Client with proper configuration
+const docClient = DynamoDBDocumentClient.from(client, {
+    marshallOptions: {
+        removeUndefinedValues: true,
+        convertEmptyValues: true,
+        convertClassInstanceToMap: true,
+    },
+    unmarshallOptions: {
+        wrapNumbers: false
+    }
+});
 
 // Test the connection
 const testConnection = async () => {

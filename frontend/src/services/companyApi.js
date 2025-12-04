@@ -78,6 +78,23 @@ class CompanyApi {
         }
     }
 
+    // Check if company has production or consumption sites
+    async checkSites(companyId) {
+        try {
+            console.log(`[CompanyAPI] Checking sites for company ID: ${companyId}`);
+            const response = await api.get(`${API_CONFIG.BASE_URL}/company/check-sites/${companyId}`);
+            console.log(`[CompanyAPI] Sites check response:`, response.data);
+            return response.data;
+        } catch (error) {
+            console.error(`[CompanyAPI] Error checking sites for company ${companyId}:`, {
+                message: error.message,
+                response: error.response?.data,
+                status: error.response?.status
+            });
+            throw error;
+        }
+    }
+
     // Get generator companies only
     async getGeneratorCompanies() {
         try {

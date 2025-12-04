@@ -100,9 +100,6 @@ console.log('Mounting API routes...');
 app.use('/api/auth', authRoutes);
 app.use('/api/health', healthRoutes);
 
-// User routes (require authentication)
-app.use('/api/user', authenticateToken, require('./routes/userRoutes'));
-
 // Protected routes (require authentication)
 app.use('/api/roles', authenticateToken, roleRoutes);
 
@@ -139,7 +136,7 @@ app.use('/api/captive', authenticateToken,
     captiveRoutes);
 
 app.use('/api/company', authenticateToken,
-    checkPermission('production', 'READ'),
+    checkPermission('company', 'READ'),
     companyRoutes);
     
 // Report routes (require authentication)

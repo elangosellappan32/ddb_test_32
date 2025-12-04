@@ -31,8 +31,8 @@ export { validateSiteType };
 export const hasAccessToSite = (user, siteId, siteType) => {
     if (!user || !siteId || !siteType) return false;
 
-    // Admin users have access to all sites
-    if (user.role === 'admin' || user.roleName === 'ADMIN' || user.isAdmin) {
+    // Superadmin and admin users have access to all sites
+    if (user.role === 'admin' || user.role === 'superadmin' || user.roleName === 'ADMIN' || user.roleName === 'SUPERADMIN' || user.isAdmin || user.isSuperAdmin) {
         return true;
     }
 
@@ -121,13 +121,13 @@ export const getAccessibleSiteIds = (user, siteType) => {
     }
 
     // Admin users: fetch all site IDs from accessibleSites
-    if (user.role === 'admin' || user.roleName === 'ADMIN' || user.isAdmin) {
+    if (user.role === 'admin' || user.role === 'superadmin' || user.roleName === 'ADMIN' || user.roleName === 'SUPERADMIN' || user.isAdmin || user.isSuperAdmin) {
         if (!user.accessibleSites) return [];
         const sitesList = siteType === 'production'
             ? user.accessibleSites.productionSites?.L
             : user.accessibleSites.consumptionSites?.L;
         if (!Array.isArray(sitesList)) {
-            console.log(`[SiteAccess] Invalid sites list structure for admin user:`, sitesList);
+            console.log(`[SiteAccess] Invalid sites list structure for admin/superadmin user:`, sitesList);
             return [];
         }
         return sitesList.map(site => site.S).filter(Boolean);

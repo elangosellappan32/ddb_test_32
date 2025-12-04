@@ -53,11 +53,6 @@ class LapseService {
                     return await lapseDAL.updateLapse(normalizedData.pk, normalizedData.sk, normalizedData);
                 }
             } catch (error) {
-                logger.debug('[LapseService] Error checking for existing lapse, proceeding with create', {
-                    pk: normalizedData.pk,
-                    sk: normalizedData.sk,
-                    error: error.message
-                });
             }
 
             // Create lapse record if it doesn't exist

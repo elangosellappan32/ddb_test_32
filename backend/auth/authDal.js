@@ -56,10 +56,8 @@ class AuthDAL {
             // Ensure userId is set (use username as fallback)
             if (!user.userId) {
                 user.userId = user.username;
-                logger.debug(`[AuthDAL] Set userId to username for user: ${user.username}`);
             }
             
-            logger.debug(`[AuthDAL] Retrieved user: ${user.username} with userId: ${user.userId}`);
             return user;
         } catch (error) {
             logger.error('DAL Error - getUserByUsername:', error);
@@ -81,8 +79,15 @@ class AuthDAL {
 
             const result = await this.docClient.send(command);
             if (!result.Item) {
+                logger.error(`[AuthDAL] Role not found: ${roleId}`);
                 return null;
             }
+
+            logger.info(`[AuthDAL] Role retrieved successfully: ${roleId}`, {
+                roleName: result.Item.roleName,
+                hasPermissions: !!result.Item.permissions,
+                permissionKeys: result.Item.permissions ? Object.keys(result.Item.permissions) : []
+            });
 
             // Return role without any user-specific data
             return {
@@ -134,12 +139,6 @@ class AuthDAL {
                 lastLogin: userItem.lastLogin || null
             };
 
-            logger.debug(`Retrieved user data for ${username}`, { 
-                hasUserId: !!userItem.userId,
-                hasCompanyId: !!userItem.companyId,
-                role: userData.role
-            });
-
             return userData;
         } catch (error) {
             logger.error('DAL Error - getUserFromUserTable:', { 
@@ -181,10 +180,20 @@ class AuthDAL {
             throw new Error('Missing required user data');
         }
 
+        // Import roleMapper to handle friendly name to roleId conversion
+        const { mapRoleNameToId } = require('../utils/roleMapper');
+        
+        // If roleId is a friendly name (ADMIN, USER, etc.), convert it to database format (ROLE-X)
+        let roleIdToStore = userData.roleId;
+        if (!userData.roleId.startsWith('ROLE-')) {
+            roleIdToStore = mapRoleNameToId(userData.roleId);
+            logger.info(`[AuthDAL] Converted roleId from ${userData.roleId} to ${roleIdToStore}`);
+        }
+
         // Verify role exists
-        const role = await this.getRoleById(userData.roleId);
+        const role = await this.getRoleById(roleIdToStore);
         if (!role) {
-            throw new Error('Invalid role ID');
+            throw new Error(`Invalid role ID: ${roleIdToStore}`);
         }
 
         const timestamp = new Date().toISOString();
@@ -194,7 +203,7 @@ class AuthDAL {
                 username: userData.username,
                 email: userData.email,
                 password: userData.password,
-                roleId: userData.roleId,
+                roleId: roleIdToStore,
                 metadata: {
                     department: userData.metadata?.department || 'General',
                     accessLevel: role.metadata.accessLevel
@@ -422,6 +431,42 @@ class AuthDAL {
 
         logger.warn(`[AuthDAL] Could not extract companyId from user: ${user.username}`);
         return null;
+    }
+
+    /**
+     * Get accessible sites for a user
+     * @param {Object} user - User object with metadata containing accessible sites
+     * @returns {Object} Object with productionSites and consumptionSites arrays
+     */
+    async getAccessibleSites(user) {
+        try {
+            if (!user || !user.metadata?.accessibleSites) {
+                logger.warn(`[AuthDAL] No accessible sites found for user: ${user?.username}`);
+                return {
+                    productionSites: [],
+                    consumptionSites: []
+                };
+            }
+
+            const accessibleSites = user.metadata.accessibleSites;
+
+            // Extract production sites from DynamoDB format { L: [{S: 'siteId'}, ...] }
+            const productionSites = accessibleSites.productionSites?.L?.map(item => item.S).filter(Boolean) || [];
+
+            // Extract consumption sites from DynamoDB format { L: [{S: 'siteId'}, ...] }
+            const consumptionSites = accessibleSites.consumptionSites?.L?.map(item => item.S).filter(Boolean) || [];
+
+            return {
+                productionSites,
+                consumptionSites
+            };
+        } catch (error) {
+            logger.error('[AuthDAL] Error getting accessible sites:', error);
+            return {
+                productionSites: [],
+                consumptionSites: []
+            };
+        }
     }
 
 }

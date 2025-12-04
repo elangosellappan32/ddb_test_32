@@ -5,9 +5,7 @@ const logger = require('../utils/logger');
  */
 const validateSiteAccess = (siteType) => {
     return (req, res, next) => {
-        try {
-            logger.info(`[validateSiteAccess] Starting validation for ${siteType} site`);
-            logger.debug('[validateSiteAccess] User object:', JSON.stringify(req.user, null, 2));            // Check if user object exists
+        try {// Check if user object exists
             if (!req.user) {
                 logger.error('[validateSiteAccess] No user object found in request');
                 return res.status(401).json({
@@ -19,7 +17,6 @@ const validateSiteAccess = (siteType) => {
 
             // Admin users or users with ADMIN role bypass site access validation
             if (req.user.roleName === 'ADMIN' || req.user.role === 'admin') {
-                logger.info(`Admin user ${req.user.username || req.user.email} bypassing site access validation`);
                 return next();
             }
 
@@ -103,7 +100,6 @@ const validateSiteAccess = (siteType) => {
 
             // Skip site list validation for admin users
             if (req.user.role === 'admin' || req.user.roleName === 'ADMIN') {
-                logger.info('[validateSiteAccess] Admin user - bypassing site list validation');
                 return next();
             }
 
@@ -148,14 +144,11 @@ const validateSiteAccess = (siteType) => {
             
             if (!hasAccess) {
                 logger.warn(`[validateSiteAccess] Access denied: User ${req.user.username} attempted to access ${siteType} site ${siteId}`);
-                logger.debug('Available sites:', accessibleSites.map(site => site.S));
                 return res.status(403).json({
                     success: false,
                     message: `You don't have access to this ${siteType} site`
                 });
             }
-            
-            logger.info(`[validateSiteAccess] Access granted for site ${siteId}`);
             next();
         } catch (error) {
             logger.error('[validateSiteAccess] Unexpected error:', error);

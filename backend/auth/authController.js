@@ -1,6 +1,7 @@
 const jwt = require('jsonwebtoken');
 const logger = require('../utils/logger');
 const AuthDAL = require('./authDal');
+const { mapRoleIdToName } = require('../utils/roleMapper');
 
 class AuthController {
     constructor() {
@@ -13,6 +14,7 @@ class AuthController {
                 userId: userData.userId || userData.username, // Use userId if available, fallback to username
                 username: userData.username,
                 role: userData.role,
+                roleName: userData.roleName, // Include normalized role name
                 permissions: userData.permissions,
                 emailId: userData.email,
                 companyId: userData.companyId, // Include company ID in the token
@@ -47,31 +49,49 @@ class AuthController {
                 throw new Error('Invalid credentials');
             }
 
-            const permissions = userData.metadata?.permissions || (userData.role === 'admin' 
+            // Map role/roleId to proper role name for frontend
+            let roleName = userData.role || userData.roleId || 'USER';
+            
+            // Use roleMapper to convert database roleId to friendly name
+            // If userData has roleId (like ROLE-1), map it; otherwise use role field
+            if (userData.roleId) {
+                roleName = mapRoleIdToName(userData.roleId);
+            } else if (roleName && typeof roleName === 'string') {
+                // Ensure roleName is in uppercase format expected by frontend
+                const roleNameUpper = roleName.toUpperCase();
+                // Map common variations to standard role names
+                if (roleNameUpper === 'SUPERADMIN' || roleNameUpper === 'SUPER_ADMIN') {
+                    roleName = 'SUPERADMIN';
+                } else if (roleNameUpper === 'ADMIN') {
+                    roleName = 'ADMIN';
+                } else if (roleNameUpper === 'USER') {
+                    roleName = 'USER';
+                } else if (roleNameUpper === 'VIEWER') {
+                    roleName = 'VIEWER';
+                } else {
+                    roleName = 'USER'; // Default to USER
+                }
+            }
+
+            const permissions = userData.metadata?.permissions || (roleName === 'ADMIN' || roleName === 'SUPERADMIN'
                 ? ['CREATE', 'READ', 'UPDATE', 'DELETE']
                 : ['READ']);
 
             // Ensure userId is set (use username as fallback)
             const userId = userData.userId || username;
-            logger.debug(`[AuthController] Logging in user: ${username} with userId: ${userId}`);
             
             const userInfo = {
                 userId, // Use the userId from the database or fallback to username
                 username,
-                role: userData.role,
+                role: userData.role, // Keep original role for backward compatibility
+                roleName, // Add normalized roleName for frontend permission checking
                 permissions,
                 emailId: userData.email,
+                email: userData.email,
                 companyId: userData.companyId, // Include companyId if available
                 metadata: userData.metadata || {}
             };
             
-            logger.debug('[AuthController] User info for token generation:', {
-                userId: userInfo.userId,
-                username: userInfo.username,
-                role: userInfo.role,
-                hasCompanyId: !!userInfo.companyId
-            });
-
             const { accessToken, refreshToken } = this.generateTokens(userInfo);
 
             // Store refresh token
@@ -110,15 +130,40 @@ class AuthController {
                 throw new Error('Invalid refresh token');
             }
 
-            const permissions = userData.metadata?.permissions || (userData.role === 'admin' 
+            // Map role to proper role name
+            let roleName = userData.role || userData.roleId || 'USER';
+            
+            // Use roleMapper to convert database roleId to friendly name
+            if (userData.roleId) {
+                roleName = mapRoleIdToName(userData.roleId);
+            } else if (roleName && typeof roleName === 'string') {
+                const roleNameUpper = roleName.toUpperCase();
+                if (roleNameUpper === 'SUPERADMIN' || roleNameUpper === 'SUPER_ADMIN') {
+                    roleName = 'SUPERADMIN';
+                } else if (roleNameUpper === 'ADMIN') {
+                    roleName = 'ADMIN';
+                } else if (roleNameUpper === 'USER') {
+                    roleName = 'USER';
+                } else if (roleNameUpper === 'VIEWER') {
+                    roleName = 'VIEWER';
+                } else {
+                    roleName = 'USER';
+                }
+            }
+
+            const permissions = userData.metadata?.permissions || (roleName === 'ADMIN' || roleName === 'SUPERADMIN'
                 ? ['CREATE', 'READ', 'UPDATE', 'DELETE']
                 : ['READ']);
 
             const userInfo = {
                 username: userData.username,
+                userId: userData.userId || userData.username,
                 role: userData.role,
+                roleName: roleName,
                 permissions,
-                emailId: userData.email
+                emailId: userData.email,
+                email: userData.email,
+                companyId: userData.companyId
             };
 
             // Generate new tokens

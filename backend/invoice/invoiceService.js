@@ -65,11 +65,6 @@ const processAllocation = (alloc) => {
     
     // Only include non-zero allocations
     if (totalAllocation > 0) {
-        logger.debug(`Processed allocation for ${prodSiteId}-${consSiteId}:`, {
-            cValues,
-            totalAllocation,
-            rawAllocation: alloc
-        });
         
         return {
             productionSiteId: prodSiteId,

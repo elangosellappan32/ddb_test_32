@@ -10,6 +10,7 @@ import { StyledEngineProvider } from '@mui/material/styles';
 import { AuthProvider } from './context/AuthContext';
 import { NavigationProvider } from './context/NavigationContext';
 import PrivateRoute from './components/PrivateRoute';
+import { SuperAdminRoute } from './components/ProtectedRoute';
 import Login from './components/Login';
 import Layout from "./Layout";
 import ErrorBoundary from "./components/ErrorBoundary";
@@ -26,6 +27,8 @@ const Invoice = lazy(() => import("./components/invoice/InvoicePage"));
 const GraphicalReport = lazy(() => import("./components/GraphicalReport/GraphicalReport"));
 const ConsumptionAllocation = lazy(() => import("./components/ConsumptionAllocation/ConsumptionAllocation"));
 const CompanyPage = lazy(() => import("./components/Company/CompanyPage"));
+const UserPage = lazy(() => import("./pages/UserPage"));
+const SuperAdminDashboard = lazy(() => import("./pages/SuperAdminDashboard"));
 // Loading component for suspense fallback
 const LoadingFallback = () => (
   <Box display="flex" justifyContent="center" alignItems="center" minHeight="100vh">
@@ -39,6 +42,13 @@ const AppRoutes = () => {
     <Suspense fallback={<LoadingFallback />}>
       <Routes>
         <Route path="/login" element={<Login />} />
+        <Route path="/superadmin" element={
+          <SuperAdminRoute>
+            <Suspense fallback={<LoadingFallback />}>
+              <SuperAdminDashboard />
+            </Suspense>
+          </SuperAdminRoute>
+        } />
         <Route element={
           <PrivateRoute>
             <Layout />
@@ -64,6 +74,11 @@ const AppRoutes = () => {
           <Route path="/companies" element={
             <PrivateRoute requiredResource="company" requiredAction="READ">
               <CompanyPage />
+            </PrivateRoute>
+          } />
+          <Route path="/users" element={
+            <PrivateRoute requiredResource="user" requiredAction="READ">
+              <UserPage />
             </PrivateRoute>
           } />
           <Route path="/consumption/:companyId/:consumptionSiteId" element={

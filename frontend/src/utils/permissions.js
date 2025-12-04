@@ -1,20 +1,72 @@
 import { ROLES, ROLE_PERMISSIONS } from '../config/rolesConfig';
 
-export const hasPermission = (user, resource, action, context = {}) => {
-  if (!user?.role) return false;
+/**
+ * Map role from database format to ROLE_PERMISSIONS key format
+ */
+const normalizeRole = (role) => {
+  if (!role) return null;
   
-  // Check if user is admin - they have all permissions
-  if (user.role.toUpperCase() === ROLES.ADMIN) return true;
+  const roleUpper = role.toUpperCase();
+  
+  // Handle direct matches
+  if (roleUpper === 'SUPERADMIN' || roleUpper === 'SUPER_ADMIN') return ROLES.SUPERADMIN;
+  if (roleUpper === 'ADMIN') return ROLES.ADMIN;
+  if (roleUpper === 'USER') return ROLES.USER;
+  if (roleUpper === 'VIEWER') return ROLES.VIEWER;
+  
+  // Fallback for unknown roles - treat as USER
+  console.warn(`[Permissions] Unknown role '${role}', defaulting to USER`);
+  return ROLES.USER;
+};
+
+export const hasPermission = (user, resource, action, context = {}) => {
+  if (!user) {
+    console.warn('[Permissions] No user provided to hasPermission');
+    return false;
+  }
+  
+  // Use roleName if available (from login response), otherwise use role field
+  const userRole = user.roleName || user.role;
+  if (!userRole) {
+    console.warn('[Permissions] No role found in user object');
+    return false;
+  }
+  
+  const normalizedRole = normalizeRole(userRole);
+  
+  // Check if role exists in ROLE_PERMISSIONS
+  if (!ROLE_PERMISSIONS[normalizedRole]) {
+    console.warn(`[Permissions] Role '${userRole}' not found in ROLE_PERMISSIONS, normalized to '${normalizedRole}'`);
+    return false;
+  }
+  
+  // Superadmin and admin have all permissions
+  if (normalizedRole === ROLES.SUPERADMIN || normalizedRole === ROLES.ADMIN) {
+    console.debug(`[Permissions] User '${user.username}' is ${normalizedRole}, granting all permissions`);
+    return true;
+  }
   
   // Check role-based permissions
-  const userRole = user.role.toUpperCase();
-  const rolePermissions = ROLE_PERMISSIONS[userRole];
-  if (!rolePermissions) return false;
+  const rolePermissions = ROLE_PERMISSIONS[normalizedRole];
+  const resourceLower = resource.toLowerCase();
+  
+  if (!rolePermissions[resourceLower]) {
+    console.warn(`[Permissions] Resource '${resource}' not found in role '${normalizedRole}' permissions`);
+    return false;
+  }
 
-  const resourcePermissions = rolePermissions[resource.toLowerCase()];
-  if (!resourcePermissions) return false;
-
-  const hasRolePermission = resourcePermissions.includes(action.toUpperCase());
+  const resourcePermissions = rolePermissions[resourceLower];
+  const actionUpper = action.toUpperCase();
+  const hasRolePermission = resourcePermissions.includes(actionUpper);
+  
+  console.debug(`[Permissions] Permission check:`, {
+    username: user.username,
+    role: normalizedRole,
+    resource: resourceLower,
+    action: actionUpper,
+    allowed: hasRolePermission,
+    userPermissions: resourcePermissions
+  });
   
   // If the permission is not granted by role, check site access for specific resources
   if (!hasRolePermission && context.siteId && context.siteType) {
@@ -28,7 +80,12 @@ export const hasPermission = (user, resource, action, context = {}) => {
 };
 
 export const isAdmin = (user) => {
-  return user?.role?.toUpperCase() === ROLES.ADMIN;
+  const roleUpper = user?.role?.toUpperCase();
+  return roleUpper === ROLES.ADMIN || roleUpper === ROLES.SUPERADMIN;
+};
+
+export const isSuperAdmin = (user) => {
+  return user?.role?.toUpperCase() === ROLES.SUPERADMIN || user?.isSuperAdmin === true;
 };
 
 export const getModulePermissions = (user, resource) => {

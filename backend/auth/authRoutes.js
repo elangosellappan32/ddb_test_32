@@ -39,9 +39,19 @@ router.post('/login', async (req, res) => {
         }
 
         // Get role information
-        const role = await authDal.getRoleById(user.roleId);
+        let roleToFetch = user.roleId;
+        
+        // If roleId is a friendly name (ADMIN, USER, etc.), convert it to database format
+        if (roleToFetch && !roleToFetch.startsWith('ROLE-')) {
+            const { mapRoleNameToId } = require('../utils/roleMapper');
+            const convertedRoleId = mapRoleNameToId(roleToFetch);
+            logger.info(`[Auth Login] Converted roleId from ${roleToFetch} to ${convertedRoleId} for user ${username}`);
+            roleToFetch = convertedRoleId;
+        }
+        
+        const role = await authDal.getRoleById(roleToFetch);
         if (!role) {
-            logger.error(`Role not found for user ${username} with roleId ${user.roleId}`);
+            logger.error(`Role not found for user ${username} with roleId ${roleToFetch}`);
             return res.status(500).json({
                 success: false,
                 message: 'Error retrieving user role'

@@ -18,6 +18,9 @@ router.get('/shareholders', companyController.getShareholderCompanies);
 // Get companies by type
 router.get('/type/:type', companyController.getCompaniesByType);
 
+// Check if company has sites
+router.get('/check-sites/:companyId', companyController.checkCompanySites);
+
 // Get company by ID
 router.get('/id/:companyId', companyController.getCompanyById);
 

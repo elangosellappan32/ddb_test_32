@@ -13,6 +13,15 @@ const client = new DynamoDBClient({
 });
 
 // Create the DocumentClient with enhanced options
-const docClient = DynamoDBDocumentClient.from(client);
+const docClient = DynamoDBDocumentClient.from(client, {
+    marshallOptions: {
+        removeUndefinedValues: true,
+        convertEmptyValues: true,
+        convertClassInstanceToMap: true,
+    },
+    unmarshallOptions: {
+        wrapNumbers: false
+    }
+});
 
 module.exports = docClient;

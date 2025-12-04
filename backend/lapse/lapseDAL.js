@@ -26,7 +26,6 @@ class LapseDAL {
                 ScanIndexForward: true
             });
             
-            logger.debug(`[LapseDAL] Fetching lapses for PK: ${pk}`);
             const response = await docClient.send(command);
             return response.Items || [];
         } catch (error) {
@@ -86,7 +85,6 @@ class LapseDAL {
                 ConditionExpression: 'attribute_not_exists(pk) AND attribute_not_exists(sk)'
             });
             
-            logger.debug(`[LapseDAL] Creating new lapse record: ${JSON.stringify(item)}`);
             await docClient.send(command);
             return item;
         } catch (error) {
@@ -137,16 +135,6 @@ class LapseDAL {
                 ReturnValues: 'ALL_NEW'
             });
             
-            logger.debug(`[LapseDAL] Updating lapse record: ${pk}, ${sk}`, { 
-                updates: {
-                    ...restUpdates,
-                    c1: cValues.c1,
-                    c2: cValues.c2,
-                    c3: cValues.c3,
-                    c4: cValues.c4,
-                    c5: cValues.c5
-                }
-            });
             
             const response = await docClient.send(command);
             return response.Attributes;
@@ -171,17 +159,8 @@ class LapseDAL {
                 }
             });
 
-            logger.debug(`[LapseDAL] Getting lapses by month: ${companyId}, ${month}`, { 
-                tableName: this.tableName,
-                filterExpression: 'sk = :sk AND begins_with(pk, :companyPrefix)',
-                expressionValues: {
-                    sk,
-                    companyPrefix: `${companyId}_`
-                }
-            });
             
             const response = await docClient.send(command);
-            logger.debug(`[LapseDAL] Found ${response.Items?.length || 0} lapses for ${companyId}, ${month}`);
             return response.Items || [];
         } catch (error) {
             logger.error(`[LapseDAL] Error fetching lapses by month: ${error.message}`, { 
@@ -214,8 +193,6 @@ class LapseDAL {
                 params.ExpressionAttributeValues[':fromMonth'] = fromMonth;
                 params.ExpressionAttributeValues[':toMonth'] = toMonth;
             }
-            
-            logger.debug(`[LapseDAL] Fetching lapses for production site: ${pk}`, { fromMonth, toMonth });
             const command = new QueryCommand(params);
             const response = await docClient.send(command);
             return response.Items || [];
@@ -243,7 +220,6 @@ class LapseDAL {
                 ReturnValues: 'ALL_OLD'
             });
             
-            logger.debug(`[LapseDAL] Deleting lapse record: ${pk}, ${sk}`);
             const response = await docClient.send(command);
             return response.Attributes;
         } catch (error) {

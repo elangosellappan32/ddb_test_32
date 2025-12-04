@@ -124,20 +124,17 @@ router.post('/update-site-access', authenticateToken, async (req, res) => {
     // If siteId is in format "companyId_siteId"
     if (typeof siteId === 'string' && siteId.includes('_')) {
       [companyId, siteIdToUse] = siteId.split('_');
-      logger.debug(`[SiteAccess] [${requestId}] Parsed combined siteId`, { companyId, siteId: siteIdToUse });
     } 
     // If companyId is provided separately in the request body
     else if (req.body.companyId) {
       companyId = req.body.companyId;
       siteIdToUse = siteId;
-      logger.debug(`[SiteAccess] [${requestId}] Using separate companyId and siteId`, { companyId, siteId: siteIdToUse });
     } 
     // If we have a proper site object
     else if (typeof siteId === 'object' && siteId.companyId) {
       companyId = siteId.companyId;
       const siteIdKey = siteType === 'production' ? 'productionSiteId' : 'consumptionSiteId';
       siteIdToUse = siteId[siteIdKey] || siteId.siteId;
-      logger.debug(`[SiteAccess] [${requestId}] Using site object`, { companyId, siteId: siteIdToUse });
     }
     else {
       const errorMsg = 'Invalid siteId format. Expected {companyId, productionSiteId/consumptionSiteId}, "companyId_siteId" or separate companyId and siteId';

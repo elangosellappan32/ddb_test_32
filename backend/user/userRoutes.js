@@ -1,8 +1,39 @@
 const express = require('express');
 const router = express.Router();
 const { authenticateToken } = require('../middleware/authorization');
-const { getUserById } = require('./userController');
+const {
+    getUserById,
+    getAllUsers,
+    createUser,
+    updateUser,
+    deleteUser
+} = require('./userController');
 const logger = require('../utils/logger');
+
+/**
+ * @route   GET /api/user/all
+ * @desc    Get all users
+ * @access  Private (Admin only recommended)
+ */
+router.get('/all', authenticateToken, async (req, res) => {
+    try {
+        logger.info('[UserRoutes] Fetching all users');
+        const users = await getAllUsers();
+
+        res.json({
+            success: true,
+            data: users,
+            count: users.length
+        });
+    } catch (error) {
+        logger.error('[UserRoutes] Error fetching all users:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to retrieve users',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+    }
+});
 
 /**
  * @route   GET /api/user/me
@@ -39,6 +70,175 @@ router.get('/me', authenticateToken, async (req, res) => {
 });
 
 /**
+ * @route   GET /api/user/:username
+ * @desc    Get user by username
+ * @access  Private
+ */
+router.get('/:username', authenticateToken, async (req, res) => {
+    try {
+        const user = await getUserById(req.params.username);
+        
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: 'User not found'
+            });
+        }
+
+        // Remove sensitive information
+        const { password, ...userData } = user;
+        
+        res.json({
+            success: true,
+            data: userData
+        });
+    } catch (error) {
+        logger.error('Error fetching user:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to retrieve user'
+        });
+    }
+});
+
+/**
+ * @route   POST /api/user
+ * @desc    Create a new user
+ * @access  Private (Admin only)
+ */
+router.post('/', authenticateToken, async (req, res) => {
+    try {
+        const { username, email, password, roleId, metadata } = req.body;
+
+        // Validation
+        if (!username || !password) {
+            return res.status(400).json({
+                success: false,
+                message: 'Username and password are required'
+            });
+        }
+
+        const userData = {
+            username,
+            email: email || '',
+            password,
+            roleId: roleId || 'USER',
+            metadata: metadata || {}
+        };
+
+        const user = await createUser(userData);
+
+        // Remove sensitive information
+        const { password: _, ...userWithoutPassword } = user;
+
+        res.status(201).json({
+            success: true,
+            message: 'User created successfully',
+            data: userWithoutPassword
+        });
+    } catch (error) {
+        logger.error('Error creating user:', error);
+        
+        if (error.message.includes('already exists')) {
+            return res.status(409).json({
+                success: false,
+                message: error.message
+            });
+        }
+
+        res.status(500).json({
+            success: false,
+            message: 'Failed to create user',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+    }
+});
+
+/**
+ * @route   PUT /api/user/:username
+ * @desc    Update an existing user
+ * @access  Private (Admin only)
+ */
+router.put('/:username', authenticateToken, async (req, res) => {
+    try {
+        const { username } = req.params;
+        const updateData = req.body;
+
+        // Don't allow direct password updates through this endpoint
+        if (updateData.password) {
+            delete updateData.password;
+        }
+
+        const user = await updateUser(username, updateData);
+
+        // Remove sensitive information
+        const { password: _, ...userWithoutPassword } = user;
+
+        res.json({
+            success: true,
+            message: 'User updated successfully',
+            data: userWithoutPassword
+        });
+    } catch (error) {
+        logger.error('Error updating user:', error);
+        
+        // Handle specific error cases
+        if (error.message && error.message.includes('already exists')) {
+            return res.status(409).json({
+                success: false,
+                message: error.message
+            });
+        }
+        
+        if (error.message && error.message.includes('not found')) {
+            return res.status(404).json({
+                success: false,
+                message: error.message
+            });
+        }
+        
+        res.status(500).json({
+            success: false,
+            message: 'Failed to update user',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+    }
+});
+
+/**
+ * @route   DELETE /api/user/:username
+ * @desc    Delete a user
+ * @access  Private (Admin only)
+ */
+router.delete('/:username', authenticateToken, async (req, res) => {
+    try {
+        const { username } = req.params;
+
+        // Prevent deleting the current user
+        if (username === req.user.userId) {
+            return res.status(400).json({
+                success: false,
+                message: 'Cannot delete your own user account'
+            });
+        }
+
+        await deleteUser(username);
+
+        res.json({
+            success: true,
+            message: 'User deleted successfully'
+        });
+    } catch (error) {
+        logger.error('Error deleting user:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to delete user',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+    }
+});
+
+/**
  * @route   GET /api/user/accessible-sites
  * @desc    Get accessible sites for the current user
  * @access  Private
@@ -68,7 +268,6 @@ router.get('/accessible-sites', authenticateToken, async (req, res) => {
         }
         
         const userId = req.user.userId;
-        logger.debug(`[${requestId}] [UserRoutes] Fetching accessible sites for user ${userId}`);
         
         // Get user data with accessible sites
         const user = await getUserById(userId);
@@ -83,10 +282,7 @@ router.get('/accessible-sites', authenticateToken, async (req, res) => {
             });
         }
 
-        logger.debug(`[${requestId}] [UserRoutes] Retrieved user data for ${userId}`, {
-            hasAccessibleSites: !!user.accessibleSites,
-            hasLegacyMetadata: !!user.metadata?.accessibleSites
-        });
+        
 
         // Helper function to normalize site IDs from different formats
         const normalizeSiteIds = (sites) => {
@@ -117,13 +313,12 @@ router.get('/accessible-sites', authenticateToken, async (req, res) => {
 
         // Check for new format first
         if (user.accessibleSites) {
-            logger.debug(`[${requestId}] [UserRoutes] Using new accessibleSites format`);
+           
             productionSites = normalizeSiteIds(user.accessibleSites.productionSites);
             consumptionSites = normalizeSiteIds(user.accessibleSites.consumptionSites);
         } 
         // Fall back to legacy metadata format
         else if (user.metadata?.accessibleSites) {
-            logger.debug(`[${requestId}] [UserRoutes] Using legacy metadata format`);
             const accessibleSites = user.metadata.accessibleSites;
             productionSites = normalizeSiteIds(accessibleSites.productionSites);
             consumptionSites = normalizeSiteIds(accessibleSites.consumptionSites);
@@ -173,7 +368,6 @@ router.get('/accessible-sites', authenticateToken, async (req, res) => {
             timestamp: new Date().toISOString()
         });
     } finally {
-        logger.debug(`[${requestId}] [UserRoutes] Request completed in ${Date.now() - startTime}ms`);
     }
 });
 

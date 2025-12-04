@@ -228,6 +228,47 @@ exports.getCompanyById = async (req, res) => {
     }
 };
 
+// Check if company has sites before deletion
+exports.checkCompanySites = async (req, res) => {
+    try {
+        const { companyId } = req.params;
+        
+        logger.info(`[CheckCompanySites] Checking sites for company ID: ${companyId}`);
+        
+        const productionSiteDAL = require('../productionSite/productionSiteDAL');
+        const consumptionSiteDAL = require('../consumptionSite/consumptionSiteDAL');
+
+        // Get production and consumption sites for this company
+        const productionSites = await productionSiteDAL.getByCompanyId(companyId);
+        const consumptionSites = await consumptionSiteDAL.getByCompanyId(companyId);
+
+        const hasSites = productionSites.length > 0 || consumptionSites.length > 0;
+
+        logger.info(`[CheckCompanySites] Company ${companyId}: Production Sites: ${productionSites.length}, Consumption Sites: ${consumptionSites.length}, HasSites: ${hasSites}`);
+
+        return res.status(200).json({
+            success: true,
+            companyId: String(companyId),
+            hasSites,
+            productionSites: {
+                count: productionSites.length,
+                sites: productionSites
+            },
+            consumptionSites: {
+                count: consumptionSites.length,
+                sites: consumptionSites
+            }
+        });
+    } catch (error) {
+        logger.error('Controller error in checkCompanySites:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error checking company sites',
+            error: error.message
+        });
+    }
+};
+
 // Get companies by type
 exports.getCompaniesByType = async (req, res) => {
     try {

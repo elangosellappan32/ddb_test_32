@@ -51,7 +51,7 @@ import {
 
 const Allocation = () => {
   const { enqueueSnackbar } = useSnackbar();
-  const { hasSiteAccess, user } = useAuth();
+  const { hasSiteAccess, user, hasCompanyAccess } = useAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [captiveData, setCaptiveData] = useState([]);
@@ -1446,7 +1446,8 @@ const Allocation = () => {
             }
             
             // Check if user has access to this site
-            const hasAccess = hasSiteAccess(productionSiteId, 'production');
+            const compositeSiteId = `${companyId}_${productionSiteId}`;
+            const hasAccess = hasSiteAccess(compositeSiteId, 'production');
             if (!hasAccess) {
             }
             
@@ -1512,12 +1513,15 @@ const Allocation = () => {
       // Filter production sites to only those the user has access to
       const accessibleProdSites = prodSites.filter(site => {
         if (!site?.productionSiteId) return false;
-        const hasAccess = hasSiteAccess(String(site.productionSiteId), 'production');
+        // Construct composite site ID in format: companyId_siteId to match accessible sites format
+        const compositeSiteId = `${site.companyId}_${site.productionSiteId}`;
+        const hasAccess = hasSiteAccess(compositeSiteId, 'production');
         if (!hasAccess) {
           console.debug('Skipping production site (no access):', {
             productionSiteId: site.productionSiteId,
             companyId: site.companyId,
-            siteName: site.name
+            siteName: site.name,
+            compositeSiteId: compositeSiteId
           });
         }
         return hasAccess;
@@ -1604,12 +1608,15 @@ const Allocation = () => {
       // Filter consumption sites to only those the user has access to
       const accessibleConsSites = consSites.filter(site => {
         if (!site?.consumptionSiteId) return false;
-        const hasAccess = hasSiteAccess(String(site.consumptionSiteId), 'consumption');
+        // Construct composite site ID in format: companyId_siteId to match accessible sites format
+        const compositeSiteId = `${site.companyId}_${site.consumptionSiteId}`;
+        const hasAccess = hasSiteAccess(compositeSiteId, 'consumption');
         if (!hasAccess) {
           console.debug('Skipping consumption site (no access):', {
             consumptionSiteId: site.consumptionSiteId,
             companyId: site.companyId,
-            siteName: site.name
+            siteName: site.name,
+            compositeSiteId: compositeSiteId
           });
         }
         return hasAccess;
@@ -1756,7 +1763,7 @@ const Allocation = () => {
     } finally {
       setLoading(false);
     }
-  }, [enqueueSnackbar, selectedMonth, selectedYear, companyId, hasSiteAccess]);
+  }, [enqueueSnackbar, selectedMonth, selectedYear, companyId, hasSiteAccess, hasCompanyAccess]);
 
   // Fetch shareholdings on component mount or when companyId changes
   useEffect(() => {
@@ -1777,15 +1784,13 @@ const Allocation = () => {
         const shareholdingsData = await captiveApi.getByGenerator(companyId);
         
         if (shareholdingsData && shareholdingsData.length > 0) {
-          // Filter out invalid entries and check site access
+          // Filter out invalid entries and check company access
           const validShareholdings = shareholdingsData.filter(item => {
             if (!item || !item.shareholderCompanyId || !item.allocationPercentage) return false;
             
-            // Check if user has access to this site
-            const hasAccess = hasSiteAccess(
-              item.generatorCompanyId || item.companyId, 
-              'production'
-            );
+            // Check if user has access to this company's generator
+            const generatorCompanyId = item.generatorCompanyId || item.companyId;
+            const hasAccess = hasCompanyAccess(generatorCompanyId);
             
             return hasAccess && Number(item.allocationPercentage) > 0;
           });
@@ -1851,7 +1856,7 @@ const Allocation = () => {
         autoHideDuration: 5000
       });
     }
-  }, [companyId, hasSiteAccess, enqueueSnackbar]);
+  }, [companyId, hasSiteAccess, hasCompanyAccess, enqueueSnackbar]);
 
   // Update allocations when shareholdings or data changes
   useEffect(() => {

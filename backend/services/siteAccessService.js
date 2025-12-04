@@ -368,7 +368,6 @@ const removeSiteAccess = async (companyId, siteId, siteType) => {
     
     try {
         // 1. First, find all users who have access to this site
-        logger.debug(`[SiteAccess] Scanning for users with access to ${siteType} site: ${siteKey}`);
         
         const scanParams = {
             TableName: TableNames.USERS,
@@ -398,7 +397,6 @@ const removeSiteAccess = async (companyId, siteId, siteType) => {
             lastEvaluatedKey = scanResult.LastEvaluatedKey;
             scanCount++;
             
-            logger.debug(`[SiteAccess] Scan batch ${scanCount} completed, found ${scanResult.Items?.length || 0} users`);
             
         } while (lastEvaluatedKey);
         
@@ -419,7 +417,6 @@ const removeSiteAccess = async (companyId, siteId, siteType) => {
             const batch = users.slice(i, i + BATCH_SIZE);
             const batchPromises = [];
             
-            logger.debug(`[SiteAccess] Processing batch ${Math.floor(i / BATCH_SIZE) + 1} of ${Math.ceil(users.length / BATCH_SIZE)}`);
             
             for (const user of batch) {
                 batchPromises.push(
@@ -501,7 +498,6 @@ async function removeSiteAccessForUser(user, siteKey, siteType) {
             const siteIndex = siteList.findIndex(site => site.S === siteKey);
             
             if (siteIndex === -1) {
-                logger.debug(`[SiteAccess] Site ${siteKey} not found in user ${user.username}'s ${siteType} sites`);
                 return;
             }
             
@@ -545,10 +541,6 @@ async function removeSiteAccessForUser(user, siteKey, siteType) {
             // Execute the update
             await dynamoDB.update(updateParams);
             
-            logger.debug(`[SiteAccess] Successfully removed ${siteType} site access for user ${user.username}`, {
-                siteKey,
-                remainingSites: siteList.length
-            });
             
             return; // Success, exit retry loop
             
@@ -618,9 +610,7 @@ const getAccessibleSitesForUser = async (username, userRole) => {
         logger.info(`[SiteAccessService] Getting accessible sites for user: ${username}, role: ${userRole}`);
         
         // If user is admin, return all sites
-        if (userRole === 'admin') {
-            logger.debug('[SiteAccessService] User is admin, returning all sites');
-            
+        if (userRole === 'admin') {            
             const [productionSites, consumptionSites] = await Promise.all([
                 this.getAllSites('production'),
                 this.getAllSites('consumption')

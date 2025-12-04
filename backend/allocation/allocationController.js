@@ -48,16 +48,6 @@ const createAllocation = async (req, res, next) => {
             userCompanyId = req.user.companyIds[0];
         }
         
-        // Log company ID extraction for debugging
-        logger.debug('Company ID extraction for user:', {
-            userId: req.user?.userId,
-            directCompanyId: req.user?.companyId,
-            metadataCompanyId: req.user?.metadata?.companyId,
-            accessibleSitesCompanyId: req.user?.metadata?.accessibleSites?.companyId,
-            companyIds: req.user?.companyIds,
-            extractedCompanyId: userCompanyId,
-            userKeys: req.user ? Object.keys(req.user) : []
-        });
         
         if (!userCompanyId) {
             logger.error('No company ID found in user session', { 
@@ -268,13 +258,6 @@ const createAllocation = async (req, res, next) => {
                         // Save updated banking record
                         try {
                             await bankingDAL.putItem(bankingRecord);
-                            logger.debug(`Updated banking record`, {
-                                pk: bankingRecord.pk,
-                                sk: bankingRecord.sk,
-                                period,
-                                delta,
-                                newValue: bankingRecord[period]
-                            });
                         } catch (error) {
                             logger.error('Error updating banking record', {
                                 error: error.message,

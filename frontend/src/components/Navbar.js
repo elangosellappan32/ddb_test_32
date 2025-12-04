@@ -32,7 +32,8 @@ import {
   Receipt as ReceiptIcon,
   SyncAlt as SyncAltIcon,
   Apartment as CompanyIcon,
-  People as PeopleIcon
+  People as PeopleIcon,
+  AdminPanelSettings as AdminPanelSettingsIcon
 } from '@mui/icons-material';
 import { useAuth } from '../context/AuthContext';
 import { useNavigation } from '../context/NavigationContext';
@@ -65,6 +66,14 @@ const Navbar = () => {
       path: '/',
       resource: 'dashboard'
     },
+    // Show superadmin dashboard only for superadmin users
+    ...(user?.isSuperAdmin || user?.roleName === 'SUPERADMIN' ? [{
+      icon: <AdminPanelSettingsIcon />, 
+      label: 'Superadmin Dashboard', 
+      path: '/superadmin',
+      resource: 'superadmin',
+      requiresSuperAdmin: true
+    }] : []),
     {
       icon: <CompanyIcon />,
       label: 'Companies',
@@ -122,7 +131,7 @@ const Navbar = () => {
       path: '/users',
       resource: 'users'
     }] : [])
-  ].filter(Boolean), [user?.roleId]);
+  ].filter(Boolean), [user?.roleId, user?.isSuperAdmin, user?.roleName]);
 
 
   const handleNavigation = (path) => {

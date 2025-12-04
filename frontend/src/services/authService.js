@@ -77,12 +77,17 @@ const authService = {    login: async (username, password) => {
                     }
                 }
 
+                // Use roleName from response if available, otherwise use role
+                const roleName = user.roleName || (user.role ? user.role.toUpperCase() : 'USER');
+
                 const userData = {
                     username: user.username,
-                    email: user.email,
+                    email: user.email || user.emailId,
                     roleId: user.roleId,
-                    roleName: user.roleName,
-                    role: user.roleName?.toLowerCase(),
+                    role: user.role, // Keep original role for backward compatibility
+                    roleName: roleName, // Store normalized role name for permission checking
+                    isSuperAdmin: roleName === 'SUPERADMIN',
+                    isAdmin: roleName === 'ADMIN' || roleName === 'SUPERADMIN',
                     permissions: user.permissions || {},
                     metadata: user.metadata,
                     accessibleSites: accessibleSites,
@@ -92,6 +97,13 @@ const authService = {    login: async (username, password) => {
                 if (!userData.companyId) {
                     console.warn('No companyId found for user. This user may not be able to perform company-specific operations.');
                 }
+
+                console.info('User data prepared:', {
+                    username: userData.username,
+                    roleName: userData.roleName,
+                    role: userData.role,
+                    isAdmin: userData.isAdmin
+                });
 
                 localStorage.setItem(TOKEN_KEY, token);
                 localStorage.setItem(USER_KEY, JSON.stringify(userData));
@@ -134,7 +146,13 @@ const authService = {    login: async (username, password) => {
 
     isAdmin: () => {
         const user = authService.getCurrentUser();
-        return user?.role?.toUpperCase() === 'ADMIN';
+        const roleUpper = user?.role?.toUpperCase();
+        return roleUpper === 'ADMIN' || roleUpper === 'SUPERADMIN' || user?.isAdmin === true;
+    },
+
+    isSuperAdmin: () => {
+        const user = authService.getCurrentUser();
+        return user?.roleName?.toUpperCase() === 'SUPERADMIN' || user?.isSuperAdmin === true;
     },
 
     hasRole: (role) => {
@@ -144,9 +162,25 @@ const authService = {    login: async (username, password) => {
 
     hasPermission: (resource, action) => {
         const user = authService.getCurrentUser();
-        if (!user || !user.role) {
+        if (!user) {
+            console.warn('[AuthService] No user found when checking permission');
             return false;
         }
+        
+        // Use roleName if available (from login response), otherwise use role field
+        const roleToCheck = user.roleName || user.role;
+        if (!roleToCheck) {
+            console.warn('[AuthService] No role found in user object:', { username: user.username });
+            return false;
+        }
+        
+        console.debug('[AuthService] Checking permission:', {
+            username: user.username,
+            role: roleToCheck,
+            resource,
+            action
+        });
+        
         return hasPermission(user, resource, action);
     },
 

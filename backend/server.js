@@ -6,6 +6,7 @@ const bodyParser = require('body-parser');
 const logger = require('./utils/logger');
 const requestLogger = require('./middleware/requestLogger');
 const errorHandler = require('./middleware/errorHandler');
+const { testConnection } = require('./config/aws-config');
 
 // Import routes
 const authRoutes = require('./auth/authRoutes');
@@ -106,9 +107,12 @@ app.use((req, res) => {
 
 const startServer = async () => {
     try {
+        // Test DynamoDB connection before starting the server
+        await testConnection();
+        logger.info('DynamoDB connection successful!');
+
         const server = app.listen(PORT, () => {
             logger.info(`Server running on port ${PORT}`);
-            logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
         });
 
         // Graceful shutdown

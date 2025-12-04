@@ -100,8 +100,6 @@ const validateDecimal = (value, fieldName) => {
 // CRUD Operations
 const createProductionSite = async (req, res) => {
     try {
-        logger.info('[REQUEST] Create Production Site');
-        logger.debug('[REQUEST BODY]', req.body);
 
         // Validate required fields
         const fieldsValidation = validateRequiredFields(req.body);
@@ -206,12 +204,19 @@ const createProductionSite = async (req, res) => {
             data: result
         });
     } catch (error) {
-        logger.error('[ProductionSiteController] Create Error:', error);
+        logger.error('[ProductionSiteController] Create Error:', {
+            message: error.message,
+            code: error.code,
+            name: error.name,
+            stack: error.stack,
+            fullError: error
+        });
+        
         res.status(500).json({
             success: false,
-            message: 'Failed to create production site',
-            error: error.message,
-            code: 'CREATE_ERROR'
+            message: error.message || 'Failed to create production site',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined,
+            code: error.code || 'CREATE_ERROR'
         });
     }
 };
@@ -497,13 +502,9 @@ const deleteProductionSite = async (req, res) => {
 
 const getAllProductionSites = async (req, res) => {
     try {
-        logger.info('[ProductionSiteController] Fetching all production sites');
         
         // Get all production sites
         let items = await productionSiteDAL.getAllProductionSites();
-        
-        // Log raw items for debugging
-        logger.debug(`[ProductionSiteController] Raw production sites data:`, items);
         
         // Filter items based on user's accessible sites
         if (req.user && req.user.accessibleSites) {
@@ -512,11 +513,9 @@ const getAllProductionSites = async (req, res) => {
                 const siteId = `${item.companyId}_${item.productionSiteId}`;
                 return accessibleSiteIds.includes(siteId);
             });
-            logger.debug(`[ProductionSiteController] Filtered to ${items.length} accessible sites`);
         }
 
         if (!items || items.length === 0) {
-            logger.info('[ProductionSiteController] No production sites found');
             return res.status(200).json({
                 success: true,
                 message: 'No production sites found',
@@ -527,17 +526,14 @@ const getAllProductionSites = async (req, res) => {
         // Get unique company IDs and log them
         const companyIds = [...new Set(items.map(item => {
             const id = item.companyId;
-            logger.debug(`[ProductionSiteController] Found company ID: ${id} (type: ${typeof id})`);
             return id;
         }))];
         
-        logger.info(`[ProductionSiteController] Fetching details for company IDs:`, companyIds);
         
         // Fetch company details for all unique company IDs with better error handling
         const companies = await Promise.all(
             companyIds.map(async (companyId) => {
                 try {
-                    logger.debug(`[ProductionSiteController] Fetching company with ID: ${companyId}`);
                     const company = await companyDAL.getCompanyById(companyId);
                     
                     if (!company) {
@@ -545,10 +541,6 @@ const getAllProductionSites = async (req, res) => {
                         return null;
                     }
                     
-                    logger.debug(`[ProductionSiteController] Fetched company:`, {
-                        companyId: company.companyId,
-                        companyName: company.companyName
-                    });
                     
                     return company;
                 } catch (error) {
@@ -558,7 +550,7 @@ const getAllProductionSites = async (req, res) => {
             })
         );
 
-        logger.debug('[ProductionSiteController] Fetched companies:', companies);
+        
 
         // Create a map of companyId to companyName with type handling
         const companyMap = {};
@@ -568,7 +560,6 @@ const getAllProductionSites = async (req, res) => {
                 const id = company.companyId;
                 companyMap[String(id)] = company.companyName;
                 companyMap[Number(id)] = company.companyName;
-                logger.debug(`[ProductionSiteController] Mapped company ID ${id} to name: ${company.companyName}`);
             }
         });
 
@@ -579,7 +570,6 @@ const getAllProductionSites = async (req, res) => {
                               companyMap[Number(item.companyId)] || 
                               'Unknown Company';
             
-            logger.debug(`[ProductionSiteController] Site ${item.productionSiteId} (${item.name}) has company ID: ${item.companyId} (type: ${typeof item.companyId}), mapped to name: ${companyName}`);
             
             return {
                 ...item,
@@ -587,7 +577,6 @@ const getAllProductionSites = async (req, res) => {
             };
         });
 
-        logger.info(`[ProductionSiteController] Successfully processed ${itemsWithCompanyNames.length} production sites`);
 
         return res.status(200).json({
             success: true,

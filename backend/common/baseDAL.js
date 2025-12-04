@@ -106,7 +106,6 @@ class BaseDAL {
                 ReturnValues: 'ALL_NEW'
             };
 
-            logger.debug(`[BaseDAL] Updating item:`, params);
             const command = new UpdateCommand(params);
             const response = await this.docClient.send(command);
 
@@ -125,7 +124,6 @@ class BaseDAL {
                 ReturnValues: 'ALL_OLD'
             };
 
-            logger.debug(`[BaseDAL] Deleting item with key:`, key);
             const command = new DeleteCommand(params);
             const response = await this.docClient.send(command);
 
@@ -153,7 +151,6 @@ class BaseDAL {
                 };
             }
 
-            logger.debug(`[BaseDAL] Querying items:`, params);
             const command = new QueryCommand(params);
             const response = await this.docClient.send(command);
 

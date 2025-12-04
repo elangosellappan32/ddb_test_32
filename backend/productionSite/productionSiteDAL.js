@@ -39,7 +39,6 @@ const getLastProductionSiteId = async () => {
             return 0;
         }
 
-        logger.debug(`[ProductionSiteDAL] Last global production site ID: ${highestId}`);
         return highestId;
     } catch (error) {
         logger.error('[ProductionSiteDAL] Get Last ProductionSiteId Error:', error);
@@ -57,9 +56,6 @@ const create = async (item) => {
             const now = new Date().toISOString();
             const lastId = await getLastProductionSiteId();
             const newId = lastId + 1;
-            
-            // Log the ID generation for debugging
-            logger.debug(`[ProductionSiteDAL] Generating new production site ID. Last global ID: ${lastId}, New ID: ${newId} for company ${item.companyId}`);
             
             // Add a small delay to help prevent race conditions
             if (retryCount > 0) {
@@ -90,8 +86,8 @@ const create = async (item) => {
             }
 
             const newItem = {
-                companyId: String(item.companyId),
-                productionSiteId: String(newId),
+                companyId: Number(item.companyId),
+                productionSiteId: Number(newId),
                 name: item.name,
                 location: item.location,
                 type: item.type,
@@ -122,6 +118,13 @@ const create = async (item) => {
             };
         } catch (error) {
             lastError = error;
+            logger.error(`[ProductionSiteDAL] Error on attempt ${retryCount + 1}:`, {
+                message: error.message,
+                code: error.code,
+                name: error.name,
+                stack: error.stack
+            });
+            
             if (error.name === 'ConditionalCheckFailedException' && retryCount < maxRetries - 1) {
                 // Another process might have created a record with the same ID, retry
                 retryCount++;
@@ -141,76 +144,32 @@ const create = async (item) => {
 
 const getItem = async (companyId, productionSiteId) => {
     try {
-        // Normalize inputs: trim strings and keep original as fallback
-        const companyIdStr = companyId !== undefined && companyId !== null ? String(companyId).trim() : companyId;
-        const productionSiteIdStr = productionSiteId !== undefined && productionSiteId !== null ? String(productionSiteId).trim() : productionSiteId;
+        // Convert to numbers (since table schema uses 'N' type for keys)
+        const companyIdNum = Number(companyId);
+        const productionSiteIdNum = Number(productionSiteId);
 
-        // Build candidate key formats to try for Get calls
-        const keysToTry = [];
-
-        // Prefer string keys (most common in this codebase after normalization)
-        keysToTry.push({ companyId: companyIdStr, productionSiteId: productionSiteIdStr });
-
-        // If numeric values are possible, try number typed keys as well
-        const companyIdNum = Number(companyIdStr);
-        const productionSiteIdNum = Number(productionSiteIdStr);
-        if (!isNaN(companyIdNum) && !isNaN(productionSiteIdNum)) {
-            keysToTry.push({ companyId: companyIdNum, productionSiteId: productionSiteIdNum });
+        // Validate numbers
+        if (isNaN(companyIdNum) || isNaN(productionSiteIdNum)) {
+            logger.warn('[ProductionSiteDAL] Invalid numeric keys provided', { companyId, productionSiteId });
+            return null;
         }
 
-        // Also try the raw originals as a last resort
-        keysToTry.push({ companyId, productionSiteId });
+        // Build key with numeric values (required by table schema)
+        const key = { 
+            companyId: companyIdNum, 
+            productionSiteId: productionSiteIdNum 
+        };
 
-        logger.debug('[ProductionSiteDAL] getItem trying key formats', { keys: keysToTry });
 
-        for (const keySet of keysToTry) {
-            try {
-                const { Item } = await docClient.send(new GetCommand({
-                    TableName,
-                    Key: keySet
-                }));
-                if (Item) return Item;
-            } catch (err) {
-                logger.debug('[ProductionSiteDAL] getItem GetCommand failed for key set', { keySet, err: err?.message });
-                // Continue to next key set
-                continue;
-            }
-        }
+        const { Item } = await docClient.send(new GetCommand({
+            TableName,
+            Key: key
+        }));
+        
+        if (Item) return Item;
 
-        // As a fallback, try a Scan for items that match companyId and productionSiteId string value.
-        // This is slower but helps in environments where key types/formatting differ.
-        try {
-            logger.debug('[ProductionSiteDAL] getItem falling back to Scan to locate site by productionSiteId');
-            const productionIdToMatch = productionSiteIdStr || productionSiteId;
-            const companyIdToMatch = companyIdStr || companyId;
-
-            const filterExpressionParts = [];
-            const expressionAttributeValues = {};
-
-            if (companyIdToMatch !== undefined && companyIdToMatch !== null) {
-                filterExpressionParts.push('companyId = :companyId');
-                expressionAttributeValues[':companyId'] = companyIdToMatch;
-            }
-            if (productionIdToMatch !== undefined && productionIdToMatch !== null) {
-                filterExpressionParts.push('productionSiteId = :productionSiteId');
-                expressionAttributeValues[':productionSiteId'] = productionIdToMatch;
-            }
-
-            if (filterExpressionParts.length > 0) {
-                const FilterExpression = filterExpressionParts.join(' AND ');
-                const { Items } = await docClient.send(new ScanCommand({
-                    TableName,
-                    FilterExpression,
-                    ExpressionAttributeValues: expressionAttributeValues,
-                    Limit: 1
-                }));
-                if (Items && Items.length) return Items[0];
-            }
-        } catch (scanErr) {
-            logger.debug('[ProductionSiteDAL] getItem Scan fallback failed', { err: scanErr?.message });
-        }
-
-        return null; // No item found with any key combination
+        // Item not found
+        return null;
     } catch (error) {
         logger.error('[ProductionSiteDAL] Get Item Error:', error);
         throw error;
@@ -235,6 +194,12 @@ const updateItem = async (companyId, productionSiteId, updates) => {
 
         if (existing.version !== updates.version) {
             throw new Error('Version mismatch');
+        }
+
+        // Prevent companyId changes (it's part of the primary key)
+        if (updates.companyId && Number(updates.companyId) !== companyIdNum) {
+            logger.warn('[ProductionSiteDAL] Attempt to change companyId during update prevented');
+            throw new Error('Company cannot be changed for an existing production site');
         }
 
         // Handle annualProduction field consistently
@@ -322,75 +287,50 @@ const deleteItem = async (companyId, productionSiteId) => {
     let cleanupResult = null;
     
     try {
-        // Ensure IDs are strings for consistent comparison
-        const companyIdStr = String(companyId);
-        const productionSiteIdStr = String(productionSiteId);
+        // Convert to numbers for consistent access (matching table schema)
+        const companyIdNum = Number(companyId);
+        const productionSiteIdNum = Number(productionSiteId);
         
-        logger.info(`[ProductionSiteDAL] Starting deletion for site ${companyIdStr}/${productionSiteIdStr}`);
+        if (isNaN(companyIdNum) || isNaN(productionSiteIdNum)) {
+            throw new Error('Invalid companyId or productionSiteId');
+        }
+        
+        logger.info(`[ProductionSiteDAL] Starting deletion for site ${companyIdNum}/${productionSiteIdNum}`);
         
         // 1. Check if site exists
-        const existingSite = await getItem(companyIdStr, productionSiteIdStr);
+        const existingSite = await getItem(companyIdNum, productionSiteIdNum);
         if (!existingSite) {
-            throw new Error(`Production site not found: ${companyIdStr}/${productionSiteIdStr}`);
+            throw new Error(`Production site not found: ${companyIdNum}/${productionSiteIdNum}`);
         }
 
         // 2. Clean up related data
         try {
-            cleanupResult = await cleanupRelatedData(companyIdStr, productionSiteIdStr);
-            logger.info(`[ProductionSiteDAL] Cleanup completed for site ${companyIdStr}/${productionSiteIdStr}`, cleanupResult);
+            cleanupResult = await cleanupRelatedData(companyIdNum, productionSiteIdNum);
+            logger.info(`[ProductionSiteDAL] Cleanup completed for site ${companyIdNum}/${productionSiteIdNum}`, cleanupResult);
         } catch (cleanupError) {
-            logger.error(`[ProductionSiteDAL] Error during cleanup for site ${companyIdStr}/${productionSiteIdStr}:`, cleanupError);
+            logger.error(`[ProductionSiteDAL] Error during cleanup for site ${companyIdNum}/${productionSiteIdNum}:`, cleanupError);
             // Continue with deletion even if cleanup fails
         }
         
-        // 3. Delete the site itself - try multiple key formats
-        let deletedItem = null;
-        const keysToTry = [
-            // Try with string types first (most common)
-            { companyId: companyIdStr, productionSiteId: productionSiteIdStr },
-            // Try with number types if they can be converted
-            !isNaN(Number(companyIdStr)) && !isNaN(Number(productionSiteIdStr)) 
-                ? { 
-                    companyId: Number(companyIdStr), 
-                    productionSiteId: Number(productionSiteIdStr) 
-                  } 
-                : null,
-            // Try with original types as fallback
-            { companyId, productionSiteId }
-        ].filter(Boolean);
-
-        logger.debug(`[ProductionSiteDAL] Trying key formats for deletion:`, keysToTry);
+        // 3. Delete the site itself using numeric keys
         
-        for (const keySet of keysToTry) {
-            try {
-                logger.debug(`[ProductionSiteDAL] Trying delete with key set:`, keySet);
-                const { Attributes } = await docClient.send(new DeleteCommand({
-                    TableName,
-                    Key: keySet,
-                    ReturnValues: 'ALL_OLD',
-                    ConditionExpression: 'attribute_exists(companyId) AND attribute_exists(productionSiteId)'
-                }));
-                
-                if (Attributes) {
-                    deletedItem = Attributes;
-                    logger.info(`[ProductionSiteDAL] Successfully deleted item with keys:`, keySet);
-                    break;
-                }
-            } catch (err) {
-                logger.debug(`[ProductionSiteDAL] Delete attempt failed with key set ${JSON.stringify(keySet)}:`, err.message);
-                // Continue to next key set
-                continue;
-            }
+        const { Attributes } = await docClient.send(new DeleteCommand({
+            TableName,
+            Key: { companyId: companyIdNum, productionSiteId: productionSiteIdNum },
+            ReturnValues: 'ALL_OLD',
+            ConditionExpression: 'attribute_exists(companyId) AND attribute_exists(productionSiteId)'
+        }));
+        
+        if (!Attributes) {
+            throw new Error(`Failed to delete production site - no matching item found for ${companyIdNum}/${productionSiteIdNum}`);
         }
 
-        if (!deletedItem) {
-            throw new Error(`Failed to delete production site - no matching item found for ${companyIdStr}/${productionSiteIdStr}`);
-        }
-
+        logger.info(`[ProductionSiteDAL] Successfully deleted item:`, { companyId: companyIdNum, productionSiteId: productionSiteIdNum });
+        
         timer.end('Production site deletion completed');
         
         return {
-            ...deletedItem,
+            ...Attributes,
             relatedDataCleanup: cleanupResult || { deletedUnits: 0, deletedCharges: 0 }
         };
         
@@ -463,11 +403,46 @@ const getAllProductionSites = async () => {
     }
 };
 
+const getByCompanyId = async (companyId) => {
+    try {
+        logger.info(`[ProductionSiteDAL] Fetching production sites for company: ${companyId}`);
+        
+        // Convert to number for comparison since companyId is stored as number in this table
+        const companyIdNum = Number(companyId);
+        
+        const { Items } = await docClient.send(new ScanCommand({
+            TableName,
+            FilterExpression: 'companyId = :companyId',
+            ExpressionAttributeValues: {
+                ':companyId': companyIdNum
+            }
+        }));
+
+        if (!Items || Items.length === 0) {
+            logger.info(`[ProductionSiteDAL] No production sites found for company ${companyId}`);
+            return [];
+        }
+
+        logger.info(`[ProductionSiteDAL] Found ${Items.length} production sites for company ${companyId}`);
+        return Items.map(item => ({
+            companyId: String(item.companyId || '1'),
+            productionSiteId: String(item.productionSiteId),
+            name: item.name || 'Unnamed Site',
+            type: (item.type || 'unknown').toLowerCase(),
+            location: item.location || 'Unknown Location'
+        }));
+    } catch (error) {
+        logger.error(`[ProductionSiteDAL] GetByCompanyId Error for company ${companyId}:`, error);
+        throw error;
+    }
+};
+
 module.exports = {
     create,
     getItem,
     updateItem,
     deleteItem,
     getAllProductionSites,
-    getLastProductionSiteId
+    getLastProductionSiteId,
+    getByCompanyId
 };
