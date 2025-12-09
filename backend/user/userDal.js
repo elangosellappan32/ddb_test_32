@@ -19,9 +19,10 @@ class UserDAL {
             
             const command = new ScanCommand({
                 TableName: this.userTable,
-                ProjectionExpression: 'username, email, roleId, createdAt, updatedAt, isActive, #version',
+                ProjectionExpression: 'username, email, roleId, createdAt, updatedAt, isActive, #version, #metadata',
                 ExpressionAttributeNames: {
-                    '#version': 'version'
+                    '#version': 'version',
+                    '#metadata': 'metadata'
                 }
             });
 

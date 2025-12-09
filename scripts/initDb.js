@@ -1,7 +1,9 @@
 const { DynamoDBClient, CreateTableCommand, DescribeTableCommand } = require("@aws-sdk/client-dynamodb");
 const { 
     DynamoDBDocumentClient, 
-    PutCommand 
+    PutCommand,
+    ScanCommand,
+    DeleteCommand
 } = require("@aws-sdk/lib-dynamodb");
 const TableNames = require('../backend/constants/tableNames');
 
@@ -1055,7 +1057,7 @@ const createDefaultCompanies = async () => {
 };
 
 const createCaptiveTable = async () => {
-    const tableName = 'Captive';
+    const tableName = TableNames.CAPTIVE;
     const params = {
         TableName: tableName,
         KeySchema: [
@@ -1406,6 +1408,7 @@ const generateCaptiveData = () => {
             shareholderCompanyId: 3, // Primary range key
             generatorCompanyName: 'STRIO KAIZEN',
             shareholderCompanyName: 'PEL TEXTILES',
+            consumptionSiteName: 'PEL TEXTILES Unit 1',
             allocationPercentage: 10,  // Adjusted allocation
             allocationStatus: 'active',
             createdAt: timestamp,
@@ -1417,6 +1420,7 @@ const generateCaptiveData = () => {
             shareholderCompanyId: 4, // Primary range key
             generatorCompanyName: 'STRIO KAIZEN',
             shareholderCompanyName: 'RAMAR & SONS',
+            consumptionSiteName: 'RAMAR & SONS Factory',
             allocationPercentage: 9,  // Part of 27% total
             allocationStatus: 'active',
             createdAt: timestamp,
@@ -1429,6 +1433,7 @@ const generateCaptiveData = () => {
             shareholderCompanyId: 2, // Primary range key
             generatorCompanyName: 'STRIO KAIZEN',
             shareholderCompanyName: 'POLYSPIN EXPORTS LTD',
+            consumptionSiteName: 'POLYSPIN Manufacturing',
             allocationPercentage: 8,  // Part of 27% total
             allocationStatus: 'active',
             createdAt: timestamp,
@@ -1441,6 +1446,7 @@ const generateCaptiveData = () => {
             shareholderCompanyId: 3, // Primary range key
             generatorCompanyName: 'SMR ENERGY',
             shareholderCompanyName: 'PEL TEXTILES',
+            consumptionSiteName: 'PEL TEXTILES Unit 1',
             allocationPercentage: 9,  // Part of 24% total
             allocationStatus: 'active',
             createdAt: timestamp,
@@ -1453,6 +1459,7 @@ const generateCaptiveData = () => {
             shareholderCompanyId: 4, // Primary range key
             generatorCompanyName: 'SMR ENERGY',
             shareholderCompanyName: 'RAMAR & SONS',
+            consumptionSiteName: 'RAMAR & SONS Factory',
             allocationPercentage: 8,  // Part of 24% total
             allocationStatus: 'active',
             createdAt: timestamp,
@@ -1564,20 +1571,58 @@ const init = async () => {
         const captiveData = generateCaptiveData();
         console.log(`Generated ${captiveData.length} captive data entries`);
         
-        // Insert captive data in batches
+        // First, delete existing captive data if any
+        try {
+            const { Items: existingItems } = await docClient.send(new ScanCommand({
+                TableName: TableNames.CAPTIVE
+            }));
+            
+            if (existingItems && existingItems.length > 0) {
+                console.log(`Found ${existingItems.length} existing captive records, deleting...`);
+                await Promise.all(existingItems.map(async (item) => {
+                    await docClient.send(new DeleteCommand({
+                        TableName: TableNames.CAPTIVE,
+                        Key: {
+                            generatorCompanyId: item.generatorCompanyId,
+                            shareholderCompanyId: item.shareholderCompanyId
+                        }
+                    }));
+                }));
+                console.log('Deleted all existing captive records');
+            }
+        } catch (error) {
+            if (error.name !== 'ResourceNotFoundException') {
+                console.error('Error clearing existing captive data:', error);
+                throw error;
+            }
+        }
+
+        // Insert new captive data in batches
         const batchSize = 10;
         for (let i = 0; i < captiveData.length; i += batchSize) {
             const batch = captiveData.slice(i, i + batchSize);
             await Promise.all(batch.map(async (item) => {
                 const params = {
                     TableName: TableNames.CAPTIVE,
-                    Item: item
+                    Item: {
+                        ...item,
+                        generatorCompanyId: Number(item.generatorCompanyId),
+                        shareholderCompanyId: Number(item.shareholderCompanyId),
+                        allocationPercentage: Number(item.allocationPercentage),
+                        createdAt: new Date().toISOString(),
+                        updatedAt: new Date().toISOString()
+                    }
                 };
                 try {
                     await docClient.send(new PutCommand(params));
-                    console.log(`Inserted captive data for Generator ${item.generatorCompanyId} and Shareholder ${item.shareholderCompanyId}`);
+                    console.log(`Inserted captive data for Generator ${item.generatorCompanyId} and Shareholder ${item.shareholderCompanyId} (${item.allocationPercentage}%)`);
                 } catch (error) {
-                    console.error('Error inserting captive data:', error);
+                    console.error('Error inserting captive data:', {
+                        error: error.message,
+                        item,
+                        stack: error.stack
+                    });
+                    throw error;
                 }
             }));
         }

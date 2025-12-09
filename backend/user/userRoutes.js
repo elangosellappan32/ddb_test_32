@@ -371,4 +371,64 @@ router.get('/accessible-sites', authenticateToken, async (req, res) => {
     }
 });
 
+/**
+ * @route   GET /api/user/companies/accessible
+ * @desc    Get all companies accessible to the current user with full details
+ * @access  Private
+ */
+router.get('/companies/accessible', authenticateToken, async (req, res) => {
+    try {
+        const user = await getUserById(req.user.userId);
+        
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: 'User not found',
+                code: 'USER_NOT_FOUND'
+            });
+        }
+
+        // Extract accessible company IDs from user metadata
+        const accessibleCompanyIds = user.accessibleSites?.companies || [];
+        
+        if (!accessibleCompanyIds || accessibleCompanyIds.length === 0) {
+            return res.json({
+                success: true,
+                data: [],
+                message: 'No companies accessible to this user'
+            });
+        }
+
+        // Fetch company details for each accessible company
+        const companyDAL = require('../company/companyDAL');
+        const companies = [];
+        
+        for (const companyId of accessibleCompanyIds) {
+            try {
+                const company = await companyDAL.getCompanyById(companyId);
+                if (company) {
+                    // Remove sensitive information
+                    const { ...companyData } = company;
+                    companies.push(companyData);
+                }
+            } catch (error) {
+                logger.warn(`Could not fetch company ${companyId}:`, error.message);
+            }
+        }
+
+        res.json({
+            success: true,
+            data: companies,
+            count: companies.length
+        });
+    } catch (error) {
+        logger.error('[UserRoutes] Error fetching accessible companies:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to retrieve accessible companies',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+    }
+});
+
 module.exports = router;

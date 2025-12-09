@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { useSnackbar } from 'notistack';
 import {
   Box,
@@ -10,14 +10,13 @@ import {
 } from '@mui/material';
 import { DesktopDatePicker } from '@mui/x-date-pickers';
 import { format } from 'date-fns';
-import { validateProductionData, validateProductionFields } from '../../utils/productionValidation';
 import { useAuth } from '../../context/AuthContext';
 import { hasPermission } from '../../utils/permissions';
 
 const ProductionSiteDataForm = ({ 
   type = 'unit', 
   initialData = null, 
-  copiedData = null, // New prop for copied data
+  copiedData = null,
   onSubmit, 
   onCancel, 
   loading = false,
@@ -28,15 +27,12 @@ const ProductionSiteDataForm = ({
   const { enqueueSnackbar } = useSnackbar();
   const { user } = useAuth();
   
-  // Update permission check to use correct module name
   const canEdit = useMemo(() => {
     const moduleType = type === 'unit' ? 'production-units' : 'production-charges';
     const action = initialData ? 'UPDATE' : 'CREATE';
     return hasPermission(user, moduleType, action);
   }, [user, type, initialData]);
 
-
-  // Update the generateSK function to handle dates properly
   const generateSK = (date) => {
     if (!date || !(date instanceof Date) || isNaN(date.getTime())) {
       return null;
@@ -44,14 +40,6 @@ const ProductionSiteDataForm = ({
     const month = String(date.getMonth() + 1).padStart(2, '0');
     const year = date.getFullYear();
     return `${month}${year}`;
-  };
-
-  // Function to parse sk (mmyyyy) into a Date object
-  const parseSKToDate = (sk) => {
-    if (!sk || sk.length !== 6) return null;
-    const month = parseInt(sk.slice(0, 2), 10) - 1; // Convert to zero-based month
-    const year = parseInt(sk.slice(2), 10);
-    return new Date(year, month);
   };
 
   const handleDateChange = (newDate) => {
@@ -67,68 +55,38 @@ const ProductionSiteDataForm = ({
     setErrors((prev) => ({ ...prev, date: undefined }));
   };
 
-  // Helper function to get next month's date
-  const getNextMonthDate = (currentDate) => {
-    const nextMonth = new Date(currentDate);
-    nextMonth.setMonth(nextMonth.getMonth() + 1);
-    return nextMonth;
-  };
-
-  const formatDateForDisplay = (date) => {
-    if (!date || isNaN(date.getTime())) {
-      return '';
-    }
-    return format(date, 'MMMM yyyy'); // Display as "March 2024"
-  };
-
-  // Generate initial values based on type
   function generateInitialValues(type, data) {
     if (type === 'unit') {
-      // For new data, initialize with empty strings for better UX
       const emptyIfNew = (value) => data ? (value ?? '0').toString() : '';
       
       return {
-        // Import C values
         import_c1: emptyIfNew(data?.import_c1),
         import_c2: emptyIfNew(data?.import_c2),
         import_c3: emptyIfNew(data?.import_c3),
         import_c4: emptyIfNew(data?.import_c4),
         import_c5: emptyIfNew(data?.import_c5),
         
-        // Export C values
         export_c1: emptyIfNew(data?.export_c1),
         export_c2: emptyIfNew(data?.export_c2),
         export_c3: emptyIfNew(data?.export_c3),
         export_c4: emptyIfNew(data?.export_c4),
         export_c5: emptyIfNew(data?.export_c5),
         
-        // Net Export C values (calculated, not directly editable)
         net_export_c1: '0',
         net_export_c2: '0',
         net_export_c3: '0',
         net_export_c4: '0',
-        net_export_c5: '0',
-        
-        // Backward compatibility with old data
-        ...(data?.c1 && { c1: emptyIfNew(data.c1) }),
-        ...(data?.c2 && { c2: emptyIfNew(data.c2) }),
-        ...(data?.c3 && { c3: emptyIfNew(data.c3) }),
-        ...(data?.c4 && { c4: emptyIfNew(data.c4) }),
-        ...(data?.c5 && { c5: emptyIfNew(data.c5) }),
-        ...(data?.import && { import: emptyIfNew(data.import) })
+        net_export_c5: '0'
       };
     }
     
-    // For non-unit types, keep the existing behavior
-    return Array.from({ length: 11 }, (_, i) => {
-      const key = `c${String(i + 1).padStart(3, '0')}`;
-      return { [key]: (data?.[key] ?? '0').toString() };
-    }).reduce((acc, curr) => ({ ...acc, ...curr }), {});
+    return Array.from({ length: 11 }, (_, i) => ({
+      id: `c${String(i + 1).padStart(3, '0')}`,
+      label: `C${String(i + 1).padStart(3, '0')} Value`
+    }));
   }
 
-  // Initialize form data with default values or existing data
   const [formData, setFormData] = useState(() => {
-    // Calculate previous month
     const prevMonthDate = new Date();
     prevMonthDate.setMonth(prevMonthDate.getMonth() - 1);
     
@@ -139,7 +97,6 @@ const ProductionSiteDataForm = ({
       };
     }
     
-    // For new entries or copied data, use the previous month
     const defaultData = {
       date: prevMonthDate,
       ...generateInitialValues(type, copiedData || null),
@@ -157,27 +114,54 @@ const ProductionSiteDataForm = ({
     return defaultData;
   });
 
-  // Initialize with empty errors
   const [errors, setErrors] = useState({});
+  
+  const fieldRefs = useRef({});
+  
+  const handleKeyDown = (e, currentFieldId) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      
+      const fields = getFields();
+      const currentIndex = fields.findIndex(field => field.id === currentFieldId);
+      
+      // Find next editable field
+      let nextIndex = currentIndex + 1;
+      while (nextIndex < fields.length) {
+        const nextField = fields[nextIndex];
+        if (!nextField.readOnly && canEdit) {
+          const nextFieldRef = fieldRefs.current[nextField.id];
+          if (nextFieldRef) {
+            nextFieldRef.focus();
+            nextFieldRef.select();
+            break;
+          }
+        }
+        nextIndex++;
+      }
+      
+      // If we're at the last field, submit the form
+      if (nextIndex >= fields.length) {
+        handleSubmit(e);
+      }
+    }
+  };
 
   const getFields = () => {
     if (type === 'unit') {
       return [
-        // Import C values
         { id: 'import_c1', label: 'Import C1', group: 'import' },
         { id: 'import_c2', label: 'Import C2', group: 'import' },
         { id: 'import_c3', label: 'Import C3', group: 'import' },
         { id: 'import_c4', label: 'Import C4', group: 'import' },
         { id: 'import_c5', label: 'Import C5', group: 'import' },
         
-        // Export C values
         { id: 'export_c1', label: 'Export C1', group: 'export' },
         { id: 'export_c2', label: 'Export C2', group: 'export' },
         { id: 'export_c3', label: 'Export C3', group: 'export' },
         { id: 'export_c4', label: 'Export C4', group: 'export' },
         { id: 'export_c5', label: 'Export C5', group: 'export' },
         
-        // Net Export C values (readonly)
         { id: 'net_export_c1', label: 'Net Export C1', group: 'net_export', readOnly: true },
         { id: 'net_export_c2', label: 'Net Export C2', group: 'net_export', readOnly: true },
         { id: 'net_export_c3', label: 'Net Export C3', group: 'net_export', readOnly: true },
@@ -186,7 +170,6 @@ const ProductionSiteDataForm = ({
       ];
     }
 
-    // For non-unit types, keep the existing behavior
     return Array.from({ length: 11 }, (_, i) => ({
       id: `c${String(i + 1).padStart(3, '0')}`,
       label: `C${String(i + 1).padStart(3, '0')} Value`
@@ -200,7 +183,6 @@ const ProductionSiteDataForm = ({
       newErrors.date = 'Valid date is required';
     }
 
-    // Validate fields based on type
     getFields().forEach(field => {
       const value = parseFloat(formData[field.id]);
       if (isNaN(value)) {
@@ -218,36 +200,13 @@ const ProductionSiteDataForm = ({
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    // Validate all fields before submission
-    const newErrors = {};
-    
-    if (!formData.date || isNaN(formData.date.getTime())) {
-      newErrors.date = 'Valid date is required';
-    }
-
-    getFields().forEach(field => {
-      const value = parseFloat(formData[field.id]);
-      if (isNaN(value)) {
-        newErrors[field.id] = 'Must be a valid number';
-      }
-      if (value < 0) {
-        newErrors[field.id] = 'Must be non-negative';
-      }
-    });
-
-    setErrors(newErrors);
-    
-    if (Object.keys(newErrors).length > 0) {
-      enqueueSnackbar('Please correct the errors before submitting', { 
-        variant: 'error' 
-      });
+    if (!validateForm()) {
       return;
     }
 
     try {
       const sk = generateSK(formData.date);
 
-      // Recalculate and clamp net export values to be non-negative before submit
       const netExportUpdates = {};
       ['c1','c2','c3','c4','c5'].forEach((c) => {
         const importVal = parseFloat(formData[`import_${c}`] || '0');
@@ -268,7 +227,7 @@ const ProductionSiteDataForm = ({
           ...acc,
           [field.id]: parseFloat(formData[field.id]) || 0
         }), {}),
-        ...netExportUpdates, // ensure net export values are non-negative
+        ...netExportUpdates,
         version: parseInt(formData.version) || 1
       };
 
@@ -281,43 +240,36 @@ const ProductionSiteDataForm = ({
     }
   };
 
-  // Update handleChange to properly handle numeric inputs and calculate net values
   const handleChange = (field, value) => {
     const inputValue = value?.target?.value ?? value;
     
-    // Allow empty string and numeric values (including decimals)
     if (inputValue === '' || /^-?\d*\.?\d*$/.test(inputValue)) {
-      // Convert the input value to a number and handle zero properly
       let processedValue;
       if (inputValue === '') {
         processedValue = '';
       } else if (parseFloat(inputValue) === 0) {
         processedValue = '0';
       } else {
-        // Remove leading zeros and convert to string
         processedValue = String(parseFloat(inputValue));
       }
 
-      // Update the form data with the new value
       const newFormData = {
         ...formData,
         [field]: processedValue
       };
 
-      // If this is an import or export field, calculate the net export
       if (field.startsWith('import_') || field.startsWith('export_')) {
-        const cNum = field.split('_').pop(); // Get the C number (c1, c2, etc.)
+        const cNum = field.split('_').pop();
         const importValue = parseFloat(newFormData[`import_${cNum}`] || '0');
         const exportValue = parseFloat(newFormData[`export_${cNum}`] || '0');
         const netExport = exportValue - importValue;
-        const clampedNetExport = Math.max(0, netExport); // enforce non-negative
+        const clampedNetExport = Math.max(0, netExport);
         
         newFormData[`net_export_${cNum}`] = clampedNetExport.toString();
       }
 
       setFormData(newFormData);
       
-      // Clear any existing error for this field
       if (errors[field]) {
         setErrors(prev => ({
           ...prev,
@@ -327,7 +279,6 @@ const ProductionSiteDataForm = ({
     }
   };
 
-  // Group fields by their group property
   const groupFields = (fields) => {
     const groups = {};
     fields.forEach(field => {
@@ -340,7 +291,6 @@ const ProductionSiteDataForm = ({
     return groups;
   };
 
-  // Render a group of fields with a styled header
   const renderFieldGroup = (groupName, fields) => {
     const groupConfigs = {
       'import': {
@@ -406,19 +356,16 @@ const ProductionSiteDataForm = ({
     );
   };
 
-  // Render a single field with enhanced styling
   const renderField = (field) => {
     const isNetExport = field.id.startsWith('net_export_');
     const fieldValue = formData[field.id] || '';
     const isNegative = isNetExport && parseFloat(fieldValue) < 0;
     const isReadOnly = field.readOnly || !canEdit;
 
-    // Get field group for styling
     const group = field.group || 'other';
     const isImport = group === 'import';
     const isExport = group === 'export';
 
-    // Determine field styling based on group and state
     const getFieldStyles = () => {
       const baseStyles = {
         '& .MuiOutlinedInput-root': {
@@ -499,6 +446,12 @@ const ProductionSiteDataForm = ({
           name={field.id}
           value={fieldValue}
           onChange={(e) => handleChange(field.id, e.target.value)}
+          onKeyDown={(e) => handleKeyDown(e, field.id)}
+          inputRef={(el) => {
+            if (el && !field.readOnly) {
+              fieldRefs.current[field.id] = el;
+            }
+          }}
           onBlur={(e) => {
             const value = e.target.value;
             if (value === '' || isNaN(parseFloat(value))) {
@@ -516,9 +469,7 @@ const ProductionSiteDataForm = ({
               fontWeight: isNetExport ? '600' : 'normal',
             },
           }}
-          InputProps={{
-            // Removed kWh unit from input adornment
-          }}
+          InputProps={{}}
           error={!!errors[field.id]}
           helperText={errors[field.id]}
           disabled={isReadOnly}
@@ -541,7 +492,6 @@ const ProductionSiteDataForm = ({
 
   return (
     <Box component="form" onSubmit={handleSubmit}>
-      {/* Form Header */}
       <Box 
         sx={{
           backgroundColor: 'primary.main',
@@ -561,8 +511,6 @@ const ProductionSiteDataForm = ({
       </Box>
 
       <Grid container spacing={3}>
-        {/* Date Picker */}
-
         <Grid item xs={12} md={4}>
           <DesktopDatePicker
             label="Period"

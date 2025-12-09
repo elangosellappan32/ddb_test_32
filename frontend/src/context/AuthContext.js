@@ -180,7 +180,10 @@ export const AuthProvider = ({ children }) => {
             checkPermission,
             checkAnyPermission,
             isAdmin: () => authService.isAdmin(user),
-            isSuperAdmin: () => authService.isSuperAdmin(user),
+            isSuperAdmin: () => {
+                const user = authService.getCurrentUser();
+                return authService.isSuperAdmin(user);
+            },
             hasRole: (role) => user?.role === role || user?.roleName === role,
             hasPermission: authService.hasPermission,
             canCreate: authService.canCreate,

@@ -206,12 +206,29 @@ export const API_MESSAGES = {
 };
 
 export const ROLES = {
+    SUPERADMIN: 'superadmin',
     ADMIN: 'admin',
     USER: 'user',
     VIEWER: 'viewer'
 };
 
 export const ROLE_PERMISSIONS = {
+    [ROLES.SUPERADMIN]: {
+        roleId: 'ROLE-0',
+        permissions: {
+            production: ['CREATE', 'READ', 'UPDATE', 'DELETE'],
+            'production-units': ['CREATE', 'READ', 'UPDATE', 'DELETE'],
+            'production-charges': ['CREATE', 'READ', 'UPDATE', 'DELETE'],
+            'consumption': ['CREATE', 'READ', 'UPDATE', 'DELETE'],
+            'consumption-units': ['CREATE', 'READ', 'UPDATE', 'DELETE'],
+            users: ['CREATE', 'READ', 'UPDATE', 'DELETE'],
+            roles: ['CREATE', 'READ', 'UPDATE', 'DELETE']
+        },
+        metadata: {
+            accessLevel: 'Full',
+            isSystemRole: true
+        }
+    },
     [ROLES.ADMIN]: {
         roleId: 'ROLE-1',
         permissions: {

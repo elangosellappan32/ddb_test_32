@@ -399,14 +399,19 @@ const deleteProductionSite = async (req, res) => {
 
         // If user has restricted access, validate they can access this site
         if (req.user?.accessibleSites?.productionSites) {
-            const accessibleSiteIds = req.user.accessibleSites.productionSites.L.map(site => site.S);
-            const siteId = `${companyId}_${productionSiteId}`;
-            if (!accessibleSiteIds.includes(siteId)) {
-                return res.status(403).json({
-                    success: false,
-                    message: 'You do not have permission to delete this site',
-                    code: 'ACCESS_DENIED'
-                });
+            try {
+                const accessibleSiteIds = req.user.accessibleSites.productionSites.L?.map(site => site.S) || [];
+                const siteId = `${companyId}_${productionSiteId}`;
+                if (!accessibleSiteIds.includes(siteId)) {
+                    return res.status(403).json({
+                        success: false,
+                        message: 'You do not have permission to delete this site',
+                        code: 'ACCESS_DENIED'
+                    });
+                }
+            } catch (accessError) {
+                logger.warn('[ProductionSiteController] Error checking site access:', accessError);
+                // If access check fails, allow operation to continue with permission check based on role
             }
         }
 
@@ -507,12 +512,20 @@ const getAllProductionSites = async (req, res) => {
         let items = await productionSiteDAL.getAllProductionSites();
         
         // Filter items based on user's accessible sites
-        if (req.user && req.user.accessibleSites) {
-            const accessibleSiteIds = req.user.accessibleSites.productionSites.L.map(site => site.S);
-            items = items.filter(item => {
-                const siteId = `${item.companyId}_${item.productionSiteId}`;
-                return accessibleSiteIds.includes(siteId);
-            });
+        if (req.user && req.user.accessibleSites && req.user.accessibleSites.productionSites) {
+            try {
+                const accessibleSiteIds = req.user.accessibleSites.productionSites.L?.map(site => site.S) || [];
+                items = items.filter(item => {
+                    const siteId = `${item.companyId}_${item.productionSiteId}`;
+                    return accessibleSiteIds.includes(siteId);
+                });
+            } catch (filterError) {
+                logger.warn('[ProductionSiteController] Error filtering sites by accessibility:', filterError);
+                // If filtering fails, return all sites for the user's company
+                if (req.user.companyId) {
+                    items = items.filter(item => item.companyId === String(req.user.companyId));
+                }
+            }
         }
 
         if (!items || items.length === 0) {

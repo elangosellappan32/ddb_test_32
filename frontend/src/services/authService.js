@@ -152,7 +152,19 @@ const authService = {    login: async (username, password) => {
 
     isSuperAdmin: () => {
         const user = authService.getCurrentUser();
-        return user?.roleName?.toUpperCase() === 'SUPERADMIN' || user?.isSuperAdmin === true;
+        if (!user) return false;
+        
+        const roleChecks = [
+            user?.roleName,
+            user?.role,
+            user?.roleId,
+            user?.permissions?.role
+        ].filter(Boolean);
+        
+        return roleChecks.some(role => {
+            const roleStr = String(role).toUpperCase().trim();
+            return roleStr === 'SUPERADMIN' || roleStr === 'SUPER_ADMIN';
+        }) || user?.isSuperAdmin === true;
     },
 
     hasRole: (role) => {

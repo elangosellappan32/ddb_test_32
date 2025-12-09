@@ -91,6 +91,54 @@ class UserApi {
   }
 
   /**
+   * Get all companies
+   * @returns {Promise} Response containing all companies
+   */
+  async getCompanies() {
+    try {
+      console.log('Fetching companies from /api/company');
+      const response = await api.get('/company');
+      console.log('Companies API response status:', response.status);
+      console.log('Companies API response data:', response.data);
+      console.log('Companies API response success:', response.data?.success);
+      console.log('Companies API response data array:', response.data?.data);
+      
+      // Log each company if we have them
+      if (response.data?.data && Array.isArray(response.data.data)) {
+        console.log('Number of companies received:', response.data.data.length);
+        response.data.data.forEach((company, index) => {
+          console.log(`Company ${index + 1}: ID=${company.companyId}, Name=${company.companyName}`);
+        });
+      }
+      
+      return response.data;
+    } catch (error) {
+      console.error('[UserApi] Error fetching companies:', error.response?.status, error.response?.data);
+      // If authentication fails, try to get companies from user data
+      if (error.response?.status === 401 || error.response?.status === 403) {
+        console.log('Authentication failed, using fallback method');
+        // Return empty array, will be handled by frontend
+        return { data: [] };
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Get all roles
+   * @returns {Promise} Response containing all roles
+   */
+  async getRoles() {
+    try {
+      const response = await api.get('/roles/all');
+      return response.data;
+    } catch (error) {
+      console.error('[UserApi] Error fetching roles:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Get accessible sites for current user
    * @returns {Promise} Response containing accessible sites
    */

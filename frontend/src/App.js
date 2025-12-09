@@ -10,7 +10,6 @@ import { StyledEngineProvider } from '@mui/material/styles';
 import { AuthProvider } from './context/AuthContext';
 import { NavigationProvider } from './context/NavigationContext';
 import PrivateRoute from './components/PrivateRoute';
-import { SuperAdminRoute } from './components/ProtectedRoute';
 import Login from './components/Login';
 import Layout from "./Layout";
 import ErrorBoundary from "./components/ErrorBoundary";
@@ -28,7 +27,6 @@ const GraphicalReport = lazy(() => import("./components/GraphicalReport/Graphica
 const ConsumptionAllocation = lazy(() => import("./components/ConsumptionAllocation/ConsumptionAllocation"));
 const CompanyPage = lazy(() => import("./components/Company/CompanyPage"));
 const UserPage = lazy(() => import("./pages/UserPage"));
-const SuperAdminDashboard = lazy(() => import("./pages/SuperAdminDashboard"));
 // Loading component for suspense fallback
 const LoadingFallback = () => (
   <Box display="flex" justifyContent="center" alignItems="center" minHeight="100vh">
@@ -42,13 +40,6 @@ const AppRoutes = () => {
     <Suspense fallback={<LoadingFallback />}>
       <Routes>
         <Route path="/login" element={<Login />} />
-        <Route path="/superadmin" element={
-          <SuperAdminRoute>
-            <Suspense fallback={<LoadingFallback />}>
-              <SuperAdminDashboard />
-            </Suspense>
-          </SuperAdminRoute>
-        } />
         <Route element={
           <PrivateRoute>
             <Layout />

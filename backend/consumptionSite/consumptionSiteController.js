@@ -512,15 +512,20 @@ const deleteConsumptionSite = async (req, res) => {
 
         // If user has restricted access, validate they can access this site
         if (req.user?.accessibleSites?.consumptionSites) {
-            const accessibleSiteIds = req.user.accessibleSites.consumptionSites.L.map(site => site.S);
-            const siteId = `${companyId}_${consumptionSiteId}`;
-            if (!accessibleSiteIds.includes(siteId)) {
-                logger.error(`[ConsumptionSiteController] User ${req.user.username} attempted to delete inaccessible site ${siteId}`);
-                return res.status(403).json({
-                    success: false,
-                    message: 'You do not have permission to delete this site',
-                    code: 'ACCESS_DENIED'
-                });
+            try {
+                const accessibleSiteIds = req.user.accessibleSites.consumptionSites.L?.map(site => site.S) || [];
+                const siteId = `${companyId}_${consumptionSiteId}`;
+                if (!accessibleSiteIds.includes(siteId)) {
+                    logger.error(`[ConsumptionSiteController] User ${req.user.username} attempted to delete inaccessible site ${siteId}`);
+                    return res.status(403).json({
+                        success: false,
+                        message: 'You do not have permission to delete this site',
+                        code: 'ACCESS_DENIED'
+                    });
+                }
+            } catch (accessError) {
+                logger.warn('[ConsumptionSiteController] Error checking site access:', accessError);
+                // If access check fails, allow operation to continue with permission check based on role
             }
         }
 

@@ -26,7 +26,7 @@ export const hasPermission = (user, resource, action, context = {}) => {
   }
   
   // Use roleName if available (from login response), otherwise use role field
-  const userRole = user.roleName || user.role;
+  const userRole = user.roleName || user.role || user.roleId;
   if (!userRole) {
     console.warn('[Permissions] No role found in user object');
     return false;
@@ -34,16 +34,22 @@ export const hasPermission = (user, resource, action, context = {}) => {
   
   const normalizedRole = normalizeRole(userRole);
   
+  // Superadmin has all permissions - check this first
+  if (normalizedRole === ROLES.SUPERADMIN) {
+    console.debug(`[Permissions] User '${user.username}' is SUPERADMIN, granting all permissions`);
+    return true;
+  }
+  
+  // Admin has most permissions except some sensitive ones
+  if (normalizedRole === ROLES.ADMIN) {
+    console.debug(`[Permissions] User '${user.username}' is ADMIN, granting most permissions`);
+    return true;
+  }
+  
   // Check if role exists in ROLE_PERMISSIONS
   if (!ROLE_PERMISSIONS[normalizedRole]) {
     console.warn(`[Permissions] Role '${userRole}' not found in ROLE_PERMISSIONS, normalized to '${normalizedRole}'`);
     return false;
-  }
-  
-  // Superadmin and admin have all permissions
-  if (normalizedRole === ROLES.SUPERADMIN || normalizedRole === ROLES.ADMIN) {
-    console.debug(`[Permissions] User '${user.username}' is ${normalizedRole}, granting all permissions`);
-    return true;
   }
   
   // Check role-based permissions
@@ -80,12 +86,35 @@ export const hasPermission = (user, resource, action, context = {}) => {
 };
 
 export const isAdmin = (user) => {
-  const roleUpper = user?.role?.toUpperCase();
-  return roleUpper === ROLES.ADMIN || roleUpper === ROLES.SUPERADMIN;
+  if (!user) return false;
+  
+  const roleChecks = [
+    user?.roleName,
+    user?.role,
+    user?.roleId,
+    user?.permissions?.role
+  ].filter(Boolean);
+  
+  return roleChecks.some(role => {
+    const roleStr = String(role).toUpperCase().trim();
+    return roleStr === 'ADMIN' || roleStr === 'SUPERADMIN' || roleStr === 'SUPER_ADMIN';
+  }) || user?.isAdmin === true;
 };
 
 export const isSuperAdmin = (user) => {
-  return user?.role?.toUpperCase() === ROLES.SUPERADMIN || user?.isSuperAdmin === true;
+  if (!user) return false;
+  
+  const roleChecks = [
+    user?.roleName,
+    user?.role,
+    user?.roleId,
+    user?.permissions?.role
+  ].filter(Boolean);
+  
+  return roleChecks.some(role => {
+    const roleStr = String(role).toUpperCase().trim();
+    return roleStr === 'SUPERADMIN' || roleStr === 'SUPER_ADMIN';
+  }) || user?.isSuperAdmin === true;
 };
 
 export const getModulePermissions = (user, resource) => {

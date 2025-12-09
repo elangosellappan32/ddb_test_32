@@ -21,25 +21,61 @@ const getUserById = async (userId) => {
         // Extract accessibleSites from metadata if it exists
         let accessibleSites = {
             productionSites: [],
-            consumptionSites: []
+            consumptionSites: [],
+            companies: []
         };
         
         // Check if accessibleSites exists in metadata
         if (user.metadata?.accessibleSites) {
             const siteData = user.metadata.accessibleSites;
             
-            // Process production sites
-            if (siteData.productionSites?.L) {
-                accessibleSites.productionSites = siteData.productionSites.L
-                    .map(item => item.S || '')
-                    .filter(Boolean);
+            // Process production sites (convert to DynamoDB list format for consistency)
+            if (siteData.productionSites) {
+                if (Array.isArray(siteData.productionSites)) {
+                    // New format: direct array - convert to DynamoDB format
+                    accessibleSites.productionSites = {
+                        L: siteData.productionSites.map(item => ({ S: String(item) }))
+                    };
+                } else if (siteData.productionSites?.L) {
+                    // Already in DynamoDB format
+                    accessibleSites.productionSites = siteData.productionSites;
+                }
             }
             
-            // Process consumption sites
-            if (siteData.consumptionSites?.L) {
-                accessibleSites.consumptionSites = siteData.consumptionSites.L
-                    .map(item => item.S || '')
-                    .filter(Boolean);
+            // Process consumption sites (convert to DynamoDB list format for consistency)
+            if (siteData.consumptionSites) {
+                if (Array.isArray(siteData.consumptionSites)) {
+                    // New format: direct array - convert to DynamoDB format
+                    accessibleSites.consumptionSites = {
+                        L: siteData.consumptionSites.map(item => ({ S: String(item) }))
+                    };
+                } else if (siteData.consumptionSites?.L) {
+                    // Already in DynamoDB format
+                    accessibleSites.consumptionSites = siteData.consumptionSites;
+                }
+            }
+            
+            // Process companies (convert to DynamoDB list format for consistency)
+            if (siteData.companies) {
+                if (Array.isArray(siteData.companies)) {
+                    // New format: direct array - convert to DynamoDB format
+                    accessibleSites.companies = {
+                        L: siteData.companies.map(item => ({ S: String(item) }))
+                    };
+                } else if (siteData.companies?.L) {
+                    // Already in DynamoDB format
+                    accessibleSites.companies = siteData.companies;
+                }
+            } else if (siteData.company) {
+                // Legacy 'company' field (DynamoDB format) - this is what initDb actually uses
+                if (Array.isArray(siteData.company)) {
+                    accessibleSites.companies = {
+                        L: siteData.company.map(item => ({ S: String(item) }))
+                    };
+                } else if (siteData.company?.L) {
+                    // This is the actual format from initDb.js: { L: [{ S: '1' }, { S: '5' }] }
+                    accessibleSites.companies = siteData.company;
+                }
             }
         }
         
@@ -66,8 +102,81 @@ const getAllUsers = async () => {
     try {
         logger.info('[UserController] Fetching all users');
         const users = await userDal.getAllUsers();
-        // Transform roleIds to frontend-friendly names
-        return transformUsersRoles(users);
+        
+        // Apply the same transformation as getUserById to each user
+        const transformedUsers = users.map(user => {
+            // Extract accessibleSites from metadata if it exists
+            let accessibleSites = {
+                productionSites: [],
+                consumptionSites: [],
+                companies: []
+            };
+            
+            // Check if accessibleSites exists in metadata
+            if (user.metadata?.accessibleSites) {
+                const siteData = user.metadata.accessibleSites;
+                
+                // Process production sites (convert to DynamoDB list format for consistency)
+                if (siteData.productionSites) {
+                    if (Array.isArray(siteData.productionSites)) {
+                        // New format: direct array - convert to DynamoDB format
+                        accessibleSites.productionSites = {
+                            L: siteData.productionSites.map(item => ({ S: String(item) }))
+                        };
+                    } else if (siteData.productionSites?.L) {
+                        // Already in DynamoDB format
+                        accessibleSites.productionSites = siteData.productionSites;
+                    }
+                }
+                
+                // Process consumption sites (convert to DynamoDB list format for consistency)
+                if (siteData.consumptionSites) {
+                    if (Array.isArray(siteData.consumptionSites)) {
+                        // New format: direct array - convert to DynamoDB format
+                        accessibleSites.consumptionSites = {
+                            L: siteData.consumptionSites.map(item => ({ S: String(item) }))
+                        };
+                    } else if (siteData.consumptionSites?.L) {
+                        // Already in DynamoDB format
+                        accessibleSites.consumptionSites = siteData.consumptionSites;
+                    }
+                }
+                
+                // Process companies (convert to DynamoDB list format for consistency)
+                if (siteData.companies) {
+                    if (Array.isArray(siteData.companies)) {
+                        // New format: direct array - convert to DynamoDB format
+                        accessibleSites.companies = {
+                            L: siteData.companies.map(item => ({ S: String(item) }))
+                        };
+                    } else if (siteData.companies?.L) {
+                        // Already in DynamoDB format
+                        accessibleSites.companies = siteData.companies;
+                    }
+                } else if (siteData.company) {
+                    // Legacy 'company' field (DynamoDB format) - this is what initDb actually uses
+                    if (Array.isArray(siteData.company)) {
+                        accessibleSites.companies = {
+                            L: siteData.company.map(item => ({ S: String(item) }))
+                        };
+                    } else if (siteData.company?.L) {
+                        // This is the actual format from initDb.js: { L: [{ S: '1' }, { S: '5' }] }
+                        accessibleSites.companies = siteData.company;
+                    }
+                }
+            }
+            
+            // Add accessibleSites to the user object
+            const userWithSites = {
+                ...user,
+                accessibleSites
+            };
+            
+            // Transform roleId to frontend-friendly name
+            return transformUserRole(userWithSites);
+        });
+        
+        return transformedUsers;
     } catch (error) {
         logger.error('[UserController] Error getting all users:', error);
         throw error;
