@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Box,
   Typography,
@@ -22,6 +22,21 @@ import {
 import { styled } from '@mui/material/styles';
 import { Print as PrintIcon, Download as DownloadIcon } from '@mui/icons-material';
 import useInvoiceCalculator from './InvoiceCalculator';
+
+// Format bill month from YYYY-MM to MMM-YYYY
+const formatBillMonth = (billMonth) => {
+  if (!billMonth || !billMonth.includes('-')) return billMonth || 'Not Specified';
+  
+  const [year, month] = billMonth.split('-');
+  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const monthIndex = parseInt(month) - 1;
+  
+  if (monthIndex >= 0 && monthIndex < 12) {
+    return `${monthNames[monthIndex]}-${year}`;
+  }
+  
+  return billMonth;
+};
 
 // Styled components for consistent visuals
 const StyledPaper = styled(Paper)(({ theme }) => ({
@@ -74,6 +89,11 @@ const InvoiceTemplate = ({
   siteError = null,
   invoiceData = {}
 }) => {
+  const [expandedCharges, setExpandedCharges] = useState(false);
+  
+  const toggleCharges = () => {
+    setExpandedCharges(!expandedCharges);
+  };
   // Use the invoice calculator hook to get all the data and utilities
   const {
     companyName,
@@ -107,8 +127,7 @@ const InvoiceTemplate = ({
               {isLoading ? 'Loading...' : companyName || 'Invoice'}
             </Typography>
             <Typography variant="subtitle1">
-              Bill Month: <b>{billMonth || 'Not Specified'}</b>
-              {invoiceNumber && ` | Invoice #: ${invoiceNumber}`}
+              Bill Month: <b>{formatBillMonth(billMonth)}</b>
             </Typography>
           </Grid>
           <Grid item xs={12} md={6}>
@@ -185,7 +204,7 @@ const InvoiceTemplate = ({
                 <TableCell>{row.description || 'N/A'}</TableCell>
                 {row.values?.map((val, colIdx) => (
                   <TableCell key={colIdx} align="right">
-                    {typeof val === 'number' ? formatNumber(val) : val || '0'}
+                    {typeof val === 'number' ? formatNumber(val) : (val === '' ? '' : val || '0')}
                   </TableCell>
                 ))}
               </TableRow>
@@ -233,17 +252,43 @@ const InvoiceTemplate = ({
               </TableCell>
             </TableRow>
           ) : chargesData?.length > 0 ? (
-            chargesData.map((row, idx) => (
-              <TableRow key={`charge-${idx}`}>
-                <TableCell>{row.slNo || idx + 1}</TableCell>
-                <TableCell>{row.description || 'N/A'}</TableCell>
-                {row.values?.map((val, colIdx) => (
-                  <TableCell key={`charge-val-${colIdx}`} align="right">
-                    {val !== undefined && val !== null ? formatCurrency(val) : '-'}
-                  </TableCell>
-                ))}
-              </TableRow>
-            ))
+            <>
+              {chargesData.map((row, idx) => (
+                <React.Fragment key={`charge-${idx}`}>
+                  <TableRow 
+                    onClick={row.details ? toggleCharges : undefined}
+                    sx={row.details ? { cursor: 'pointer', '&:hover': { backgroundColor: 'action.hover' } } : {}}
+                  >
+                    <TableCell>{row.slNo || idx + 1}</TableCell>
+                    <TableCell>
+                      {row.details ? (
+                        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                          {expandedCharges ? '▼' : '▶'} {row.description}
+                        </Box>
+                      ) : row.description || 'N/A'}
+                    </TableCell>
+                    {row.values?.map((val, colIdx) => (
+                      <TableCell key={`charge-val-${colIdx}`} align="right">
+                        {val !== undefined && val !== null ? formatCurrency(val) : '-'}
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                  
+                  {/* Detailed breakdown */}
+                  {expandedCharges && row.details && row.details.map((detail, detailIdx) => (
+                    <TableRow key={`detail-${idx}-${detailIdx}`} sx={{ backgroundColor: 'background.default' }}>
+                      <TableCell></TableCell>
+                      <TableCell sx={{ pl: 4, fontStyle: 'italic' }}>
+                        {detail.code} - {detail.description}
+                      </TableCell>
+                      <TableCell colSpan={1 + consumptionSites.length} align="right">
+                        {formatCurrency(detail.amount || 0)}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </React.Fragment>
+              ))}
+            </>
           ) : (
             <TableRow>
               <TableCell colSpan={3 + consumptionSites.length} align="center">

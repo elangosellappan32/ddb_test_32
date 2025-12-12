@@ -30,7 +30,7 @@ import {
   Email as EmailIcon,
   PictureAsPdf as PdfIcon,
 } from '@mui/icons-material';
-import { startOfMonth, format, parseISO, isValid } from 'date-fns';
+import { startOfMonth, format, parseISO, isValid, subMonths } from 'date-fns';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useReactToPrint } from 'react-to-print';
 import { saveAs } from 'file-saver';
@@ -99,7 +99,7 @@ const InvoicePage = () => {
   const [emailDialogOpen, setEmailDialogOpen] = useState(false);
   const [emailData, setEmailData] = useState({ email: '', subject: '', message: '' });
 
-  const [selectedDate, setSelectedDate] = useState(startOfMonth(new Date()));
+  const [selectedDate, setSelectedDate] = useState(startOfMonth(new Date(new Date().getFullYear(), new Date().getMonth() - 1, 1)));
   const [invoice, setInvoice] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -342,13 +342,12 @@ const InvoicePage = () => {
                   maxDate={new Date()}
                   value={selectedDate}
                   onChange={handleDateChange}
-                  renderInput={(params) => (
-                    <TextField 
-                      {...params} 
-                      helperText={null} 
-                      sx={{ minWidth: 200 }}
-                    />
-                  )}
+                  slotProps={{
+                    textField: {
+                      helperText: null,
+                      sx: { minWidth: 200 }
+                    }
+                  }}
                 />
               </LocalizationProvider>
             </Box>

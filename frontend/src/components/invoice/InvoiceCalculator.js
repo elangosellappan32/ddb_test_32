@@ -236,14 +236,50 @@ const useInvoiceCalculator = (billMonth, selectedSite, siteType, consumptionSite
       });
       // Extract values from production data
       const slots = ['c1', 'c2', 'c3', 'c4', 'c5'];
+      const importSlots = ['import_c1', 'import_c2', 'import_c3', 'import_c4', 'import_c5'];
+      const exportSlots = ['export_c1', 'export_c2', 'export_c3', 'export_c4', 'export_c5'];
+      const netExportSlots = ['net_export_c1', 'net_export_c2', 'net_export_c3', 'net_export_c4', 'net_export_c5'];
+      
+      // Calculate production values from c1-c5 slots
       const productionValues = slots.reduce((acc, slot) => {
         acc[slot] = Number(unitData[slot] || 0);
         return acc;
       }, {});
-      const exportValue = Object.values(productionValues).reduce((sum, value) => sum + value, 0);
-      const importValue = Number(unitData.import || 0);
+      
+      // Calculate import values from import_c1-import_c5 slots
+      const importValues = importSlots.reduce((acc, slot) => {
+        acc[slot] = Number(unitData[slot] || 0);
+        return acc;
+      }, {});
+      
+      // Calculate export values from export_c1-export_c5 slots
+      const exportValues = exportSlots.reduce((acc, slot) => {
+        acc[slot] = Number(unitData[slot] || 0);
+        return acc;
+      }, {});
+      
+      // Calculate net export values from net_export_c1-net_export_c5 slots
+      const netExportValues = netExportSlots.reduce((acc, slot) => {
+        acc[slot] = Number(unitData[slot] || 0);
+        return acc;
+      }, {});
+      
+      // Calculate export (total from export_c1 to export_c5)
+      const exportValue = Object.values(exportValues).reduce((sum, value) => sum + value, 0);
+      
+      // Calculate import (total from import_c1 to import_c5)
+      const importValue = Object.values(importValues).reduce((sum, value) => sum + value, 0);
+      
+      // Calculate banking units
       const bankingUnits = Number(siteBankingData?.totalBanking || 0);
+      
+      // Calculate total export (export minus import, cannot be negative)
       const totalExport = Math.max(0, exportValue - importValue);
+      
+      // Net export should be total from net_export_c1 to net_export_c5, or calculated as total export minus banking
+      const calculatedNetExport = Object.values(netExportValues).reduce((sum, value) => sum + value, 0);
+      const netExport = calculatedNetExport > 0 ? calculatedNetExport : Math.max(0, totalExport - bankingUnits);
+      
       // Filter allocation records for the selected production site and month
       const allocationArray = Array.isArray(allocationData) ? allocationData :
         Array.isArray(allocationData?.data) ? allocationData.data : [];
@@ -261,10 +297,15 @@ const useInvoiceCalculator = (billMonth, selectedSite, siteType, consumptionSite
         );
         return sum + allocatedToSite;
       }, 0);
+      
+      // Ensure allocated units doesn't exceed net export (what's actually available for allocation)
+      const actualAllocatedUnits = Math.min(allocatedUnits, netExport);
+      
       // Calculations
       const tdLossPercent = 0.0658;
       const revenuePerKWH = 3.0;
       const tnebChargesPerKWH = 0.5;
+      
       // Helper: allocation value for given consumption site
       const getSiteAllocation = (site) => {
         // Find all allocations for this consumption site and month
@@ -275,7 +316,7 @@ const useInvoiceCalculator = (billMonth, selectedSite, siteType, consumptionSite
         );
         
         // Sum up all allocations for this consumption site from the selected production site
-        return siteAllocations.reduce((total, allocation) => {
+        const totalAllocation = siteAllocations.reduce((total, allocation) => {
           if (allocation.allocated) {
             // Try to get the allocation for this specific site
             const value = allocation.allocated[site.id] || 
@@ -285,31 +326,69 @@ const useInvoiceCalculator = (billMonth, selectedSite, siteType, consumptionSite
           }
           return total + (Number(allocation.allocation) || 0);
         }, 0);
+        
+        // Ensure individual site allocation doesn't exceed what's available
+        // Scale down if total allocations exceed net export
+        if (allocatedUnits > netExport && allocatedUnits > 0) {
+          return Math.round(totalAllocation * (netExport / allocatedUnits));
+        }
+        return totalAllocation;
       };
-      const tdLoss = Math.round(allocatedUnits * tdLossPercent);
-      const netExportAfterLoss = Math.round(allocatedUnits * (1 - tdLossPercent));
+      
+      const tdLoss = Math.round(actualAllocatedUnits * tdLossPercent);
+      const netExportAfterLoss = Math.round(actualAllocatedUnits * (1 - tdLossPercent));
       const revenueTotal = Math.round(netExportAfterLoss * revenuePerKWH);
       const tnebCharges = Math.round(netExportAfterLoss * tnebChargesPerKWH);
       const netAmount = revenueTotal - tnebCharges;
+      
       // Create table headers and wind data
       const headers = [
         `${selectedProdSite.name.toUpperCase()} (${selectedProdSite.type.toUpperCase()})`,
         ...consumptionSites.map(site => `${site.name.toUpperCase()} (${site.type.toUpperCase()})`),
       ];
+      
+      // Create conditional windData based on banking availability
+      const createWindData = () => {
+        const hasBanking = bankingUnits > 0 || siteBankingData;
+        
+        if (hasBanking) {
+          // With Banking - exact ordering as specified with banking units at 4th position
+          return [
+            { slNo: 1, description: "Export", values: [exportValue, ...consumptionSites.map(() => '')] },
+            { slNo: 2, description: "Import", values: [importValue, ...consumptionSites.map(() => '')] },
+            { slNo: 3, description: "total Export", values: [totalExport, ...consumptionSites.map(() => '')] },
+            { slNo: 4, description: "banking Units", values: [bankingUnits, ...consumptionSites.map(() => '')] },
+            { slNo: 5, description: "net export", values: [netExport, ...consumptionSites.map(() => '')] },
+            { slNo: 6, description: "Total Alloted", values: [totalExport, ...consumptionSites.map(site => getSiteAllocation(site))] },
+            { slNo: 7, description: "Less: T&D loss 6.58%", values: [tdLoss, ...consumptionSites.map(site => Math.round(getSiteAllocation(site) * tdLossPercent))] },
+            { slNo: 8, description: "Net Export (after loss)", values: [netExportAfterLoss, ...consumptionSites.map(site => Math.round(getSiteAllocation(site) * (1 - tdLossPercent)))] },
+            { slNo: 9, description: "Adjusted", values: [0, ...consumptionSites.map(() => 0)] },
+            { slNo: 10, description: "Banking", values: [bankingUnits, ...consumptionSites.map(() => '')] },
+            { slNo: 11, description: "Revenue @ 3.0 per KWH", values: [revenueTotal, ...consumptionSites.map(site => Math.round(getSiteAllocation(site) * (1 - tdLossPercent) * revenuePerKWH))] },
+            { slNo: 12, description: "Less: TNEB Open Access Charges", values: [tnebCharges, ...consumptionSites.map(site => Math.round(getSiteAllocation(site) * (1 - tdLossPercent) * tnebChargesPerKWH))] },
+            { slNo: 13, description: "Nett Amount", values: [netAmount, ...consumptionSites.map(site => Math.round(getSiteAllocation(site) * (1 - tdLossPercent) * (revenuePerKWH - tnebChargesPerKWH)))] },
+          ];
+        } else {
+          // Without Banking - exact ordering as specified
+          return [
+            { slNo: 1, description: "Export", values: [exportValue, ...consumptionSites.map(() => '')] },
+            { slNo: 2, description: "Import", values: [importValue, ...consumptionSites.map(() => '')] },
+            { slNo: 3, description: "total Export", values: [totalExport, ...consumptionSites.map(() => '')] },
+            { slNo: 4, description: "net export", values: [netExport, ...consumptionSites.map(() => '')] },
+            { slNo: 5, description: "Total Alloted", values: [totalExport, ...consumptionSites.map(site => getSiteAllocation(site))] },
+            { slNo: 6, description: "Less: T&D loss 6.58%", values: [tdLoss, ...consumptionSites.map(site => Math.round(getSiteAllocation(site) * tdLossPercent))] },
+            { slNo: 7, description: "Net Export (after loss)", values: [netExportAfterLoss, ...consumptionSites.map(site => Math.round(getSiteAllocation(site) * (1 - tdLossPercent)))] },
+            { slNo: 8, description: "Adjusted", values: [0, ...consumptionSites.map(() => 0)] },
+            { slNo: 9, description: "Banking", values: [0, ...consumptionSites.map(() => '')] },
+            { slNo: 10, description: "Revenue @ 3.0 per KWH", values: [revenueTotal, ...consumptionSites.map(site => Math.round(getSiteAllocation(site) * (1 - tdLossPercent) * revenuePerKWH))] },
+            { slNo: 11, description: "Less: TNEB Open Access Charges", values: [tnebCharges, ...consumptionSites.map(site => Math.round(getSiteAllocation(site) * (1 - tdLossPercent) * tnebChargesPerKWH))] },
+            { slNo: 12, description: "Net Amount", values: [netAmount, ...consumptionSites.map(site => Math.round(getSiteAllocation(site) * (1 - tdLossPercent) * (revenuePerKWH - tnebChargesPerKWH)))] },
+          ];
+        }
+      };
+
       return {
-        windData: [
-          { slNo: 1, description: "Total Production (Export)", values: [exportValue, ...consumptionSites.map(() => '')] },
-          { slNo: 2, description: "Less: Import", values: [importValue, ...consumptionSites.map(() => '')] },
-          { slNo: 3, description: "Net Export (Production - Import)", values: [totalExport, ...consumptionSites.map(() => '')] },
-          { slNo: 4, description: "Total Alloted", values: [totalExport, ...consumptionSites.map(site => getSiteAllocation(site))] },
-          { slNo: 5, description: "Less: T&D loss 6.58%", values: [tdLoss, ...consumptionSites.map(site => Math.round(getSiteAllocation(site) * tdLossPercent))] },
-          { slNo: 6, description: "Net Export (after loss)", values: [netExportAfterLoss, ...consumptionSites.map(site => Math.round(getSiteAllocation(site) * (1 - tdLossPercent)))] },
-          { slNo: 7, description: "Adjusted", values: [0, ...consumptionSites.map(() => 0)] },
-          { slNo: 8, description: "Banking", values: [bankingUnits, ...consumptionSites.map(() => '')] },
-          { slNo: 9, description: "Revenue @ 3.0 per KWH", values: [revenueTotal, ...consumptionSites.map(site => Math.round(getSiteAllocation(site) * (1 - tdLossPercent) * revenuePerKWH))] },
-          { slNo: 10, description: "Less: TNEB Open Access Charges", values: [tnebCharges, ...consumptionSites.map(site => Math.round(getSiteAllocation(site) * (1 - tdLossPercent) * tnebChargesPerKWH))] },
-          { slNo: 11, description: "Net Amount", values: [netAmount, ...consumptionSites.map(site => Math.round(getSiteAllocation(site) * (1 - tdLossPercent) * (revenuePerKWH - tnebChargesPerKWH)))] },
-        ],
+        windData: createWindData(),
         chargesData: [], // To implement if needed
         windHeaders: headers,
         sites: productionSites,
